@@ -4,6 +4,11 @@ import './index.css'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import App from './App.tsx'
 import { useAppStore } from './store/useAppStore'
+import eruda from 'eruda'
+
+if (import.meta.env.MODE === 'development' || window.location.hostname.includes('vercel.app')) {
+  eruda.init();
+}
 
 const Root = () => {
   const initialize = useAppStore(state => state.initialize);
