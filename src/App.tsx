@@ -11,8 +11,7 @@ import Students from './pages/Students';
 import Courses from './pages/Courses';
 import Attendance from './pages/Attendance';
 import Archives from './pages/Archives';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
+import Auth from './pages/Auth';
 import VerifyAccess from './pages/VerifyAccess';
 import Admin from './pages/Admin';
 
@@ -57,9 +56,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
-        <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-        <Route path="/signup" element={!session ? <Signup /> : <Navigate to="/" />} />
+        {/* Unified Auth Routes */}
+        <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" />} />
+        <Route path="/signup" element={!session ? <Auth /> : <Navigate to="/" />} />
 
         {/* Protected Routes */}
         <Route path="/" element={
