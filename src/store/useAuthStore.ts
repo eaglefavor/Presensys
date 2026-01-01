@@ -26,8 +26,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   profile: null,
   loading: true,
   setSession: (session) => {
-    set({ session, user: session?.user ?? null, loading: !session });
-    if (session) get().fetchProfile();
+    set({ session, user: session?.user ?? null });
+    
+    if (session) {
+      get().fetchProfile();
+    } else {
+      set({ loading: false, profile: null });
+    }
   },
   fetchProfile: async () => {
     const { user } = get();

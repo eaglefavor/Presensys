@@ -23,6 +23,8 @@ function App() {
     // Check initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+    }).catch(() => {
+      useAuthStore.setState({ loading: false });
     });
 
     // Listen for auth changes
