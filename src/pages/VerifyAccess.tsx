@@ -9,7 +9,6 @@ export default function VerifyAccess() {
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const profile = useAuthStore(state => state.profile);
-  const fetchProfile = useAuthStore(state => state.fetchProfile);
   const signOut = useAuthStore(state => state.signOut);
 
   const handleVerify = async (e: React.FormEvent) => {
@@ -24,7 +23,8 @@ export default function VerifyAccess() {
       setIsError(true);
     } else {
       if (data.success) {
-        await fetchProfile();
+        // Force a re-fetch of the profile to update the global state
+        await useAuthStore.getState().fetchProfile();
       } else {
         setMessage(data.message);
         setIsError(true);

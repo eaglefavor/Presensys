@@ -55,8 +55,9 @@ function App() {
         {/* Protected Routes */}
         <Route path="/" element={
           !session ? <Navigate to="/login" /> : 
-          (profile?.status === 'pending' || profile?.status === 'terminated') && profile?.role !== 'admin' ? <VerifyAccess /> :
-          <Layout />
+          profile?.role === 'admin' ? <Layout /> :
+          profile?.status === 'verified' ? <Layout /> :
+          <VerifyAccess />
         }>
           <Route index element={<Dashboard />} />
           <Route path="semesters" element={<Semesters />} />
