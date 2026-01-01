@@ -10,13 +10,17 @@ import {
   ChevronLeft,
   CloudSync,
   CloudOff,
-  RefreshCw
+  RefreshCw,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { syncEngine } from '../lib/syncEngine';
 
 const Layout: React.FC = () => {
   const activeSemester = useAppStore(state => state.activeSemester);
+  const { profile, signOut } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
@@ -87,18 +91,28 @@ const Layout: React.FC = () => {
             <h1 className="h6 mb-0 fw-bold text-primary">Presensys</h1>
           </div>
           
-          <div className="active-sem-pill">
-            {activeSemester ? (
-              <Link to="/semesters" className="text-decoration-none">
-                <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
-                  {activeSemester.name.split(' ')[0]}
-                </span>
-              </Link>
-            ) : (
-              <Link to="/semesters" className="text-decoration-none">
-                <span className="badge rounded-pill bg-warning-subtle text-warning-emphasis px-3 py-2">Set Semester</span>
+          <div className="d-flex align-items-center gap-2">
+            {profile?.role === 'admin' && (
+              <Link to="/admin" className="btn btn-link text-primary p-0">
+                <ShieldCheck size={20} />
               </Link>
             )}
+            <button className="btn btn-link text-muted p-0" onClick={signOut}>
+              <LogOut size={20} />
+            </button>
+            <div className="active-sem-pill">
+              {activeSemester ? (
+                <Link to="/semesters" className="text-decoration-none">
+                  <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-2">
+                    {activeSemester.name.split(' ')[0]}
+                  </span>
+                </Link>
+              ) : (
+                <Link to="/semesters" className="text-decoration-none">
+                  <span className="badge rounded-pill bg-warning-subtle text-warning-emphasis px-3 py-2">Set Semester</span>
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </header>
