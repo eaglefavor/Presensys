@@ -45,6 +45,15 @@ function App() {
     );
   }
 
+  // Debug log to help you see your current status in the browser console
+  if (session) {
+    console.log('User Profile:', {
+      email: session.user.email,
+      role: profile?.role,
+      status: profile?.status
+    });
+  }
+
   return (
     <BrowserRouter>
       <Routes>
@@ -55,8 +64,8 @@ function App() {
         {/* Protected Routes */}
         <Route path="/" element={
           !session ? <Navigate to="/login" /> : 
-          profile?.role === 'admin' ? <Layout /> :
-          profile?.status === 'verified' ? <Layout /> :
+          profile?.role?.toLowerCase() === 'admin' ? <Layout /> :
+          profile?.status?.toLowerCase() === 'verified' ? <Layout /> :
           <VerifyAccess />
         }>
           <Route index element={<Dashboard />} />
