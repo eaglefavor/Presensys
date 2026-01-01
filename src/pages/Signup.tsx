@@ -16,12 +16,14 @@ export default function Signup() {
     setLoading(true);
     setError(null);
 
-    // Domain validation
+    // Domain validation (DISABLED FOR TESTING)
+    /*
     if (!email.endsWith('@stu.unizik.edu.ng')) {
       setError('Only UNIZIK student emails (@stu.unizik.edu.ng) are allowed.');
       setLoading(false);
       return;
     }
+    */
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -78,7 +80,7 @@ export default function Signup() {
                 <input 
                   type="email" 
                   className="form-control border-0 bg-light" 
-                  placeholder="name@stu.unizik.edu.ng"
+                  placeholder="name@email.com"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}

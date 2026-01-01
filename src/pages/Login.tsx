@@ -57,7 +57,7 @@ export default function Login() {
                 <input 
                   type="email" 
                   className="form-control border-0 bg-light" 
-                  placeholder="name@stu.unizik.edu.ng"
+                  placeholder="name@email.com"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
