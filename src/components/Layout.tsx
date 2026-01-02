@@ -20,10 +20,15 @@ import { syncEngine } from '../lib/syncEngine';
 
 const Layout: React.FC = () => {
   const activeSemester = useAppStore(state => state.activeSemester);
+  const refreshActiveSemester = useAppStore(state => state.refreshActiveSemester);
   const { profile, signOut } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
+
+  useEffect(() => {
+    refreshActiveSemester();
+  }, [refreshActiveSemester]);
 
   useEffect(() => {
     const performSync = async () => {

@@ -7,7 +7,7 @@ import { useAppStore } from '../store/useAppStore';
 export default function Semesters() {
   const semesters = useLiveQuery(() => db.semesters.orderBy('startDate').reverse().toArray());
   const activeSemester = useAppStore(state => state.activeSemester);
-  const setActiveSemester = useAppStore(state => state.setActiveSemester);
+  const refreshActiveSemester = useAppStore(state => state.refreshActiveSemester);
   
   const [showModal, setShowModal] = useState(false);
   const [newSemester, setNewSemester] = useState({
@@ -50,8 +50,7 @@ export default function Semesters() {
       // Activate selected
       await db.semesters.update(id, { isActive: true });
       
-      const active = await db.semesters.get(id);
-      if (active) setActiveSemester(active);
+      await refreshActiveSemester();
     });
   };
 
@@ -61,39 +60,30 @@ export default function Semesters() {
       if (!confirm('This is the currently active semester. Archiving it will remove it from the dashboard. Continue?')) return;
     }
     await db.semesters.update(id, { isArchived: !currentStatus });
+    await refreshActiveSemester();
   };
 
   const handleDelete = async (id: number) => {
     if (confirm('CRITICAL WARNING: This will permanently delete this semester and ALL associated Courses, Sessions, and Attendance Records. This cannot be undone.')) {
       await db.transaction('rw', [db.semesters, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {
-        // 1. Get all courses for this semester
+        // ... (delete logic) ...
         const courses = await db.courses.where('semesterId').equals(id).toArray();
         const courseIds = courses.map(c => c.id!);
-
-        // 2. Get all sessions for these courses
         const sessions = await db.attendanceSessions.where('courseId').anyOf(courseIds).toArray();
         const sessionIds = sessions.map(s => s.id!);
 
-        // 3. Delete records linked to these sessions
         if (sessionIds.length > 0) {
           await db.attendanceRecords.where('sessionId').anyOf(sessionIds).delete();
         }
 
-        // 4. Delete the sessions
         if (courseIds.length > 0) {
           await db.attendanceSessions.where('courseId').anyOf(courseIds).delete();
-          // 5. Delete enrollments
           await db.enrollments.where('courseId').anyOf(courseIds).delete();
-          // 6. Delete courses
           await db.courses.bulkDelete(courseIds);
         }
 
-        // 7. Delete the semester
         await db.semesters.delete(id);
-        
-        if (activeSemester?.id === id) {
-          setActiveSemester(null);
-        }
+        await refreshActiveSemester();
       });
     }
   };
