@@ -14,7 +14,7 @@ export const useAppStore = create<AppState>((set) => ({
   
   initialize: async () => {
     try {
-      const active = await db.semesters.where('isActive').equals(1).first();
+      const active = await db.semesters.where('isActive').equals(true as any).first();
       set({ activeSemester: active || null });
     } catch (error) {
       console.error('Failed to initialize active semester:', error);
@@ -23,7 +23,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   refreshActiveSemester: async () => {
     try {
-      const active = await db.semesters.where('isActive').equals(1).first();
+      const active = await db.semesters.where('isActive').equals(true as any).first();
       set({ activeSemester: active || null });
     } catch (error) {
       console.error('Failed to refresh active semester:', error);

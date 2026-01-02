@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
 import { useAuthStore } from './store/useAuthStore';
+import { useAppStore } from './store/useAppStore';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from './db/db';
 
 // Components
 import Layout from './components/Layout';
@@ -17,6 +20,18 @@ import Admin from './pages/Admin';
 
 function App() {
   const { session, profile, loading, setSession } = useAuthStore();
+  const setActiveSemester = useAppStore(state => state.setActiveSemester);
+
+  // Automatically sync active semester from DB to Store whenever it changes
+  const activeSemesterFromDB = useLiveQuery(
+    () => db.semesters.where('isActive').equals(true as any).first()
+  );
+
+  useEffect(() => {
+    if (activeSemesterFromDB !== undefined) {
+      setActiveSemester(activeSemesterFromDB || null);
+    }
+  }, [activeSemesterFromDB, setActiveSemester]);
 
   useEffect(() => {
     // Check initial session
