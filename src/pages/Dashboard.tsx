@@ -1,10 +1,11 @@
 import { useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Users, BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus } from 'lucide-react';
+import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2 } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
+import { motion } from 'framer-motion';
 
 export default function Dashboard() {
   const activeSemester = useAppStore(state => state.activeSemester);
@@ -12,11 +13,7 @@ export default function Dashboard() {
   useEffect(() => {
     const testSupabase = async () => {
       const { data, error } = await supabase.from('semesters').select('*').limit(1);
-      if (error) {
-        console.warn('Supabase test failed:', error.message);
-      } else {
-        console.log('Supabase connected successfully:', data);
-      }
+      if (!error) console.log('Supabase connected:', data);
     };
     testSupabase();
   }, []);
@@ -50,86 +47,103 @@ export default function Dashboard() {
   }, [attendanceStats]);
 
   return (
-    <div className="animate-in">
-      <div className="mb-4">
-        <h2 className="fw-bold">Welcome back!</h2>
-        <p className="text-muted small">Here's the summary for {activeSemester?.name || 'the semester'}</p>
-      </div>
-
-      {/* Main Stat Card */}
-      <div className="card border-0 bg-primary text-white mb-4 shadow">
-        <div className="card-body p-4">
-          <div className="d-flex justify-content-between align-items-center mb-3">
-            <span className="opacity-75 small text-uppercase fw-bold">Average Attendance</span>
-            <TrendingUp size={20} className="opacity-75" />
+    <div className="dashboard-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
+      {/* Simplistic Header */}
+      <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
+        <div className="d-flex justify-content-between align-items-center">
+          <div>
+            <h1 className="h4 fw-black mb-0 text-primary" style={{ color: 'var(--primary-blue)' }}>DASHBOARD</h1>
+            <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">{activeSemester?.name || 'Academic Overview'}</p>
           </div>
-          <div className="d-flex align-items-baseline gap-2">
-            <h1 className="display-4 fw-bold mb-0">{avgAttendance}%</h1>
-            <span className="small opacity-75">overall</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Grid Stats */}
-      <div className="row g-3 mb-4">
-        <div className="col-6">
-          <div className="card border-0 shadow-sm">
-            <div className="card-body">
-              <Users size={20} className="text-primary mb-2" />
-              <div className="h4 fw-bold mb-0">{studentCount || 0}</div>
-              <div className="text-muted small">Students</div>
-            </div>
-          </div>
-        </div>
-        <div className="col-6">
-          <div className="card border-0 shadow-sm">
-            <div className="card-body">
-              <BookOpen size={20} className="text-info mb-2" />
-              <div className="h4 fw-bold mb-0">{courseCount || 0}</div>
-              <div className="text-muted small">Courses</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Active Courses Section */}
-      <div className="d-flex justify-content-between align-items-center mb-3">
-        <h6 className="fw-bold mb-0 text-uppercase small text-muted">My Courses</h6>
-        <Link to="/courses" className="small text-decoration-none">View All</Link>
-      </div>
-
-      <div className="d-flex flex-column gap-3 mb-4">
-        {attendanceStats?.slice(0, 3).map(course => (
-          <Link key={course.id} to="/attendance" className="text-decoration-none">
-            <div className="card border-0 shadow-sm">
-              <div className="card-body d-flex align-items-center gap-3">
-                <div className={`p-2 rounded-3 ${course.percentage < 75 ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'}`}>
-                  {course.percentage < 75 ? <AlertCircle size={24} /> : <BookOpen size={24} />}
-                </div>
-                <div className="flex-grow-1">
-                  <div className="fw-bold text-dark">{course.code}</div>
-                  <div className="text-muted small text-truncate" style={{ maxWidth: '180px' }}>{course.title}</div>
-                </div>
-                <div className="text-end">
-                  <div className={`fw-bold ${course.percentage < 75 ? 'text-danger' : 'text-success'}`}>{Math.round(course.percentage)}%</div>
-                  <div className="text-muted" style={{ fontSize: '10px' }}>{course.totalSessions} sessions</div>
-                </div>
-                <ChevronRight size={18} className="text-muted" />
-              </div>
-            </div>
+          <Link to="/attendance" className="btn btn-primary rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" style={{ width: '52px', height: '52px' }}>
+            <Plus size={24} />
           </Link>
-        ))}
-        {(!attendanceStats || attendanceStats.length === 0) && (
-          <div className="text-center py-4 bg-white rounded-4 border-dashed border-2 text-muted small">
-            No courses found. Add your first course to get started.
-          </div>
-        )}
+        </div>
       </div>
 
-      {/* Quick Action Button - Floating Style in the content */}
-      <Link to="/attendance" className="btn btn-primary w-100 py-3 shadow-lg d-flex align-items-center justify-content-center gap-2">
-        <Plus size={20} /> Mark New Attendance
-      </Link>
+      <div className="px-4 container-mobile">
+        {/* Main Stats Feed */}
+        <div className="row g-3 mb-4">
+          <div className="col-12">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card border-0 bg-white p-4 shadow-sm position-relative overflow-hidden">
+              <div className="position-absolute top-0 end-0 p-4 opacity-5">
+                <TrendingUp size={100} />
+              </div>
+              <div className="position-relative z-10">
+                <div className="xx-small fw-black text-muted text-uppercase tracking-widest mb-1">Average Attendance</div>
+                <div className="d-flex align-items-baseline gap-2">
+                  <h1 className="display-5 fw-black mb-0" style={{ color: 'var(--primary-blue)' }}>{avgAttendance}%</h1>
+                  <span className="badge bg-success-subtle text-success xx-small fw-bold">HEALTHY</span>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+
+          <div className="col-6">
+            <div className="card border-0 bg-white p-3 shadow-sm">
+              <div className="xx-small fw-bold text-muted text-uppercase mb-1">Students</div>
+              <div className="h4 fw-black mb-0 text-dark">{studentCount || 0}</div>
+            </div>
+          </div>
+          <div className="col-6">
+            <div className="card border-0 bg-white p-3 shadow-sm">
+              <div className="xx-small fw-bold text-muted text-uppercase mb-1">Courses</div>
+              <div className="h4 fw-black mb-0 text-dark">{courseCount || 0}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Course List Section (Feed Style) */}
+        <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 px-1">Active Performance</h6>
+        <div className="d-flex flex-column gap-2 mb-4">
+          {attendanceStats?.map(course => (
+            <Link key={course.id} to="/attendance" className="text-decoration-none">
+              <div className="card border-0 bg-white shadow-sm overflow-hidden">
+                <div className="card-body p-3 d-flex align-items-center gap-3">
+                  <div className={`icon-box-small rounded-2 d-flex align-items-center justify-content-center ${course.percentage < 75 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-primary bg-opacity-10 text-primary'}`} style={{ width: '44px', height: '44px' }}>
+                    {course.percentage < 75 ? <AlertCircle size={20} /> : <BookOpen size={20} />}
+                  </div>
+                  <div className="flex-grow-1 overflow-hidden">
+                    <h6 className="fw-bold mb-0 text-dark text-truncate">{course.code}</h6>
+                    <div className="xx-small fw-bold text-muted">{course.totalSessions} Sessions Marked</div>
+                  </div>
+                  <div className="text-end">
+                    <div className={`fw-black ${course.percentage < 75 ? 'text-danger' : 'text-primary'}`}>{Math.round(course.percentage)}%</div>
+                    <div className="xx-small fw-bold text-muted uppercase">{course.percentage < 75 ? 'Warning' : 'Good'}</div>
+                  </div>
+                  <ChevronRight size={16} className="text-muted opacity-50" />
+                </div>
+                <div className="progress rounded-0" style={{ height: '3px' }}>
+                  <div className={`progress-bar ${course.percentage < 75 ? 'bg-danger' : 'bg-primary'}`} style={{ width: `${course.percentage}%` }}></div>
+                </div>
+              </div>
+            </Link>
+          ))}
+          {(!attendanceStats || attendanceStats.length === 0) && (
+            <div className="text-center py-5 bg-white rounded-4 border-dashed">
+              <p className="xx-small fw-bold text-muted uppercase mb-0">No course data available yet</p>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions Feed */}
+        <div className="card border-0 bg-primary text-white p-4 shadow-lg rounded-4 overflow-hidden position-relative">
+          <div className="position-absolute top-0 end-0 p-3 opacity-10"><CheckCircle2 size={80} /></div>
+          <h5 className="fw-black mb-2 letter-spacing-n1">READY TO MARK?</h5>
+          <p className="xx-small fw-bold text-uppercase tracking-wider opacity-75 mb-4">Start your next session instantly</p>
+          <Link to="/attendance" className="btn btn-light w-100 py-3 rounded-3 fw-black text-primary letter-spacing-n1 shadow-sm">
+            LAUNCH ATTENDANCE
+          </Link>
+        </div>
+      </div>
+
+      <style>{`
+        .fw-black { font-weight: 900; }
+        .letter-spacing-n1 { letter-spacing: -1px; }
+        .xx-small { font-size: 10px; }
+        .tracking-widest { letter-spacing: 2px; }
+        .dashboard-page { background-color: var(--bg-gray); }
+      `}</style>
     </div>
   );
 }

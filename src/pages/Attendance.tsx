@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, CheckCircle, XCircle, HelpCircle, ChevronRight, Calendar } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, HelpCircle, ChevronRight, Calendar, Clock, ArrowLeft, Book } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Attendance() {
   const activeSemester = useAppStore(state => state.activeSemester);
@@ -47,43 +48,36 @@ export default function Attendance() {
   const updateRecord = async (studentId: number, status: 'present' | 'absent' | 'excused') => {
     if (!activeSessionId) return;
     const existing = await db.attendanceRecords.where('[sessionId+studentId]').equals([activeSessionId, studentId]).first();
-    if (existing) {
-      await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now() });
-    } else {
-      await db.attendanceRecords.add({ sessionId: activeSessionId, studentId, status, timestamp: Date.now() });
-    }
-    // Haptic feedback if supported
+    if (existing) await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now(), synced: 0 });
+    else await db.attendanceRecords.add({ sessionId: activeSessionId, studentId, status, timestamp: Date.now(), synced: 0 });
     if (window.navigator.vibrate) window.navigator.vibrate(10);
   };
 
   if (!activeSemester) return (
-    <div className="text-center py-5">
-      <Calendar size={48} className="text-muted mb-3 opacity-25" />
-      <h5>No active semester</h5>
-      <p className="text-muted small px-4">Please set an active semester in the Semesters tab first.</p>
+    <div className="text-center py-5 mt-5 px-4 animate-in">
+      <div className="bg-light d-inline-block p-4 rounded-circle mb-4"><Calendar size={48} className="text-muted opacity-25" /></div>
+      <h4 className="fw-black text-dark">NO ACTIVE SESSION</h4>
+      <p className="text-muted small">Please set an active semester first.</p>
     </div>
   );
 
   // View 1: Select Course
   if (!selectedCourseId) {
     return (
-      <div className="animate-in">
-        <h4 className="fw-bold mb-4">Select a Course</h4>
-        <div className="d-flex flex-column gap-2">
+      <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
+        <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
+          <h1 className="h4 fw-black mb-0 text-primary uppercase" style={{ color: 'var(--primary-blue)' }}>MARK ATTENDANCE</h1>
+          <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Select a course to begin</p>
+        </div>
+        <div className="px-4 container-mobile d-flex flex-column gap-2">
           {courses?.map(course => (
-            <div 
-              key={course.id}
-              className="card border-0 shadow-sm"
-              onClick={() => setSelectedCourseId(course.id!)}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className="card-body d-flex justify-content-between align-items-center py-3">
-                <div className="d-flex align-items-center gap-3">
-                  <div className="bg-primary text-white rounded-3 px-2 py-1 small fw-bold">{course.code}</div>
-                  <div className="fw-bold text-dark">{course.title}</div>
-                </div>
-                <ChevronRight size={18} className="text-muted" />
+            <div key={course.id} className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4" onClick={() => setSelectedCourseId(course.id!)}>
+              <div className="bg-primary bg-opacity-10 text-primary p-2 rounded-2"><Book size={24} /></div>
+              <div className="flex-grow-1 overflow-hidden">
+                <h6 className="fw-black mb-0 text-dark uppercase">{course.code}</h6>
+                <p className="xx-small fw-bold text-muted mb-0">{course.title}</p>
               </div>
+              <ChevronRight size={18} className="text-muted opacity-50" />
             </div>
           ))}
         </div>
@@ -95,39 +89,33 @@ export default function Attendance() {
   if (!activeSessionId) {
     const selectedCourse = courses?.find(c => c.id === selectedCourseId);
     return (
-      <div className="animate-in">
-        <div className="d-flex align-items-center gap-2 mb-4">
-          <button className="btn btn-light btn-sm rounded-circle p-2" onClick={() => setSelectedCourseId(null)}>
-            <ChevronRight size={20} style={{ transform: 'rotate(180deg)' }} />
-          </button>
-          <h4 className="mb-0 fw-bold">{selectedCourse?.code}</h4>
-        </div>
-
-        <button className="btn btn-primary w-100 py-3 mb-4 d-flex align-items-center justify-content-center gap-2 shadow rounded-4" onClick={handleCreateSession}>
-          <Plus size={20} /> Start New Session
-        </button>
-
-        <h6 className="text-muted small text-uppercase fw-bold mb-3">Previous Sessions</h6>
-        <div className="d-flex flex-column gap-2">
-          {sessions?.map(session => (
-            <div 
-              key={session.id}
-              className="card border-0 shadow-sm"
-              onClick={() => setActiveSessionId(session.id!)}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className="card-body d-flex justify-content-between align-items-center">
-                <div className="d-flex align-items-center gap-3">
-                  <div className="bg-light p-2 rounded-3 text-primary"><Calendar size={20} /></div>
-                  <div>
-                    <div className="fw-bold">{session.title}</div>
-                    <div className="small text-muted">{session.date}</div>
-                  </div>
-                </div>
-                <ChevronRight size={18} className="text-muted" />
-              </div>
+      <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
+        <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
+          <div className="d-flex align-items-center gap-3 mb-3">
+            <button className="btn btn-light rounded-circle p-2" onClick={() => setSelectedCourseId(null)}><ArrowLeft size={20} /></button>
+            <div>
+              <h1 className="h5 fw-black mb-0 text-dark uppercase">{selectedCourse?.code}</h1>
+              <p className="xx-small fw-bold text-muted mb-0 uppercase">Attendance Sessions</p>
             </div>
-          ))}
+          </div>
+          <button className="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2" onClick={handleCreateSession}>
+            <Plus size={20} /> START NEW SESSION
+          </button>
+        </div>
+        <div className="px-4 container-mobile">
+          <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3">Previous History</h6>
+          <div className="d-flex flex-column gap-2">
+            {sessions?.map(session => (
+              <div key={session.id} className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4" onClick={() => setActiveSessionId(session.id!)}>
+                <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
+                <div className="flex-grow-1">
+                  <h6 className="fw-bold mb-0 text-dark">{session.title}</h6>
+                  <div className="xx-small fw-bold text-muted uppercase d-flex align-items-center gap-1"><Clock size={10} /> {new Date(session.date).toLocaleDateString()}</div>
+                </div>
+                <ChevronRight size={16} className="text-muted opacity-50" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     );
@@ -137,68 +125,49 @@ export default function Attendance() {
   const currentSession = sessions?.find(s => s.id === activeSessionId);
   const stats = {
     present: records?.filter(r => r.status === 'present').length || 0,
-    absent: records?.filter(r => r.status === 'absent').length || 0,
     total: enrollments?.length || 0
   };
 
   return (
-    <div className="animate-in">
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <div className="d-flex align-items-center gap-2">
-          <button className="btn btn-light btn-sm rounded-circle p-2" onClick={() => setActiveSessionId(null)}>
-            <ChevronRight size={20} style={{ transform: 'rotate(180deg)' }} />
-          </button>
-          <div>
-            <h5 className="mb-0 fw-bold text-truncate" style={{ maxWidth: '150px' }}>{currentSession?.title}</h5>
-            <div className="small text-muted">{stats.total} students</div>
+    <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
+      <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm sticky-top">
+        <div className="d-flex justify-content-between align-items-start mb-3">
+          <div className="d-flex align-items-center gap-3">
+            <button className="btn btn-light rounded-circle p-2" onClick={() => setActiveSessionId(null)}><ArrowLeft size={20} /></button>
+            <div>
+              <h1 className="h6 fw-black mb-0 text-dark uppercase truncate" style={{ maxWidth: '150px' }}>{currentSession?.title}</h1>
+              <p className="xx-small fw-bold text-muted mb-0">{stats.present} / {stats.total} Present</p>
+            </div>
           </div>
+          <div className="bg-primary text-white rounded-pill px-3 py-1 fw-black xx-small shadow-sm">{Math.round((stats.present/stats.total)*100 || 0)}%</div>
         </div>
-        <div className="d-flex gap-2">
-          <div className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3">{stats.present} P</div>
-          <div className="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3">{stats.absent} A</div>
+        <div className="progress rounded-pill" style={{ height: '6px' }}>
+          <div className="progress-bar bg-primary" style={{ width: `${(stats.present/stats.total)*100}%` }}></div>
         </div>
       </div>
 
-      <div className="d-flex flex-column gap-2">
-        {enrollments?.map(student => {
-          const record = records?.find(r => r.studentId === student.id);
-          const status = record?.status;
-          
-          return (
-            <div key={student.id} className="card border-0 shadow-sm overflow-hidden">
-              <div className="card-body p-3 d-flex align-items-center">
-                <div className="flex-grow-1 overflow-hidden me-2">
-                  <div className="fw-bold text-truncate" style={{ fontSize: '14px' }}>{student.name}</div>
-                  <div className="text-muted font-monospace" style={{ fontSize: '11px' }}>{student.regNumber}</div>
+      <div className="px-4 container-mobile d-flex flex-column gap-2">
+        <AnimatePresence mode="popLayout">
+          {enrollments?.map(student => {
+            const record = records?.find(r => r.studentId === student.id);
+            const status = record?.status;
+            return (
+              <motion.div key={student.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
+                <div className="card-body p-3 d-flex align-items-center gap-3">
+                  <div className="flex-grow-1 overflow-hidden">
+                    <h6 className="fw-bold mb-0 text-dark text-truncate small">{student.name}</h6>
+                    <div className="xx-small fw-bold text-muted font-monospace">{student.regNumber}</div>
+                  </div>
+                  <div className="d-flex gap-1">
+                    <button className={`btn btn-sm border-0 rounded-3 p-2 ${status === 'present' ? 'bg-success text-white shadow-sm' : 'bg-light text-muted opacity-50'}`} onClick={() => updateRecord(student.id!, 'present')}><CheckCircle size={20} /></button>
+                    <button className={`btn btn-sm border-0 rounded-3 p-2 ${status === 'absent' ? 'bg-danger text-white shadow-sm' : 'bg-light text-muted opacity-50'}`} onClick={() => updateRecord(student.id!, 'absent')}><XCircle size={20} /></button>
+                    <button className={`btn btn-sm border-0 rounded-3 p-2 ${status === 'excused' ? 'bg-warning text-dark shadow-sm' : 'bg-light text-muted opacity-50'}`} onClick={() => updateRecord(student.id!, 'excused')}><HelpCircle size={20} /></button>
+                  </div>
                 </div>
-                
-                <div className="d-flex gap-2">
-                  <button 
-                    className={`btn btn-sm ${status === 'present' ? 'btn-success shadow-sm' : 'btn-outline-success border-0 bg-light'}`}
-                    onClick={() => updateRecord(student.id!, 'present')}
-                    style={{ width: '42px', height: '42px', padding: 0 }}
-                  >
-                    <CheckCircle size={22} />
-                  </button>
-                  <button 
-                    className={`btn btn-sm ${status === 'absent' ? 'btn-danger shadow-sm' : 'btn-outline-danger border-0 bg-light'}`}
-                    onClick={() => updateRecord(student.id!, 'absent')}
-                    style={{ width: '42px', height: '42px', padding: 0 }}
-                  >
-                    <XCircle size={22} />
-                  </button>
-                  <button 
-                    className={`btn btn-sm ${status === 'excused' ? 'btn-warning shadow-sm' : 'btn-outline-warning border-0 bg-light text-dark'}`}
-                    onClick={() => updateRecord(student.id!, 'excused')}
-                    style={{ width: '42px', height: '42px', padding: 0 }}
-                  >
-                    <HelpCircle size={22} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
     </div>
   );
