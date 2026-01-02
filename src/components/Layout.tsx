@@ -14,7 +14,8 @@ import {
   ShieldCheck,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  CalendarDays
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -60,9 +61,10 @@ const Layout: React.FC = () => {
 
   const navItems = [
     { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { path: '/students', label: 'Students', icon: Users },
+    { path: '/semesters', label: 'Semester', icon: CalendarDays },
+    { path: '/courses', label: 'Courses', icon: BookOpen },
     { path: '/attendance', label: 'Mark Attendance', icon: CheckSquare },
-    { path: '/students', label: 'Student Database', icon: Users },
-    { path: '/courses', label: 'Course Catalog', icon: BookOpen },
     { path: '/archives', label: 'Data Archives', icon: Archive },
   ];
 
