@@ -297,28 +297,37 @@ export default function Students() {
                     </div>
                   )}
 
-                  {/* Tab Content: Paste & Preview */}
+                  {/* Tab Content: Paste & Preview (Redesigned) */}
                   {activeTab === 'paste' && !showMapper && (
-                    <div className="row h-100">
-                      <div className="col-lg-5 mb-3 mb-lg-0">
-                        <div className="card border-0 shadow-sm rounded-4 h-100">
-                          <div className="card-body d-flex flex-column">
-                            <label className="fw-bold mb-2">Paste Text</label>
-                            <textarea 
-                              className="form-control bg-light border-0 flex-grow-1 font-monospace small"
-                              placeholder="Paste names and reg numbers here...\nExamples:\nJohn Doe 2021123456\n2021987654 - Jane Smith"
-                              value={pasteData}
-                              onChange={e => setPasteData(e.target.value)}
-                            />
-                            <button className="btn btn-primary mt-3 w-100" onClick={handleParse} disabled={!pasteData.trim()}>
-                              Parse Data
-                            </button>
+                    <div className="d-flex flex-column gap-4 h-100">
+                      <div className="card border-0 shadow-sm rounded-4">
+                        <div className="card-body p-4">
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <label className="fw-bold text-muted text-uppercase small mb-0">Input Editor</label>
+                            <button className="btn btn-link text-muted p-0 small text-decoration-none" onClick={() => setPasteData('')}>Clear Editor</button>
                           </div>
+                          <textarea 
+                            className="form-control border-0 bg-light p-3 rounded-3 font-monospace" 
+                            style={{ minHeight: '300px', fontSize: '14px', lineHeight: '1.6' }}
+                            placeholder="Paste your raw student list here (WhatsApp, PDF, Word, etc.)\n\nExample:\n1. John Doe - 2021123456\n2. Jane Smith [2021987654]\n3. 2022101010  Musa Ali"
+                            value={pasteData}
+                            onChange={e => setPasteData(e.target.value)}
+                          />
+                          <button 
+                            className="btn btn-primary w-100 py-3 mt-4 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" 
+                            onClick={handleParse} 
+                            disabled={!pasteData.trim()}
+                          >
+                            <ClipboardPaste size={20} /> Run Smart Parser
+                          </button>
                         </div>
                       </div>
-                      <div className="col-lg-7">
-                        <PreviewTable data={parsedStudents} setData={setParsedStudents} existingStudents={students || []} />
-                      </div>
+
+                      {parsedStudents.length > 0 && (
+                        <div className="animate-in">
+                          <PreviewTable data={parsedStudents} setData={setParsedStudents} existingStudents={students || []} />
+                        </div>
+                      )}
                     </div>
                   )}
 
