@@ -151,6 +151,19 @@ export default function Students() {
     s.regNumber.includes(searchTerm)
   );
 
+  // Pagination Logic
+  const itemsPerPage = 7;
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Reset page when search changes
+  if (searchTerm && currentPage !== 1) setCurrentPage(1);
+
+  const totalPages = Math.ceil((filteredStudents?.length || 0) / itemsPerPage);
+  const displayedStudents = filteredStudents?.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   // Helper to get initials
   const getInitials = (name: string) => {
     return name
@@ -210,7 +223,7 @@ export default function Students() {
       {/* Student List */}
       <div className="px-3 pb-5">
         <div className="row g-3">
-          {filteredStudents?.map(s => (
+          {displayedStudents?.map(s => (
             <div key={s.id} className="col-12 col-md-6 col-lg-4">
               <div className="student-card card border-0 shadow-sm rounded-4 h-100 position-relative overflow-hidden">
                 <div className="card-body p-3 d-flex align-items-center gap-3">
@@ -241,6 +254,29 @@ export default function Students() {
             </div>
           ))}
         </div>
+
+        {/* Pagination Controls */}
+        {filteredStudents && filteredStudents.length > 0 && (
+          <div className="d-flex justify-content-between align-items-center mt-4 pt-2 border-top">
+            <button 
+              className="btn btn-light btn-sm fw-bold rounded-pill px-3"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            >
+              Previous
+            </button>
+            <span className="small text-muted fw-bold">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button 
+              className="btn btn-light btn-sm fw-bold rounded-pill px-3"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            >
+              Next
+            </button>
+          </div>
+        )}
 
         {filteredStudents?.length === 0 && (
           <div className="text-center py-5 mt-4">
