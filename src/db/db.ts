@@ -61,8 +61,8 @@ export class PresensysDB extends Dexie {
 
   constructor() {
     super('PresensysDB');
-    this.version(2).stores({
-      semesters: '++id, name, isActive, isArchived, synced',
+    this.version(3).stores({
+      semesters: '++id, name, startDate, isActive, isArchived, synced',
       students: '++id, &regNumber, name, synced',
       courses: '++id, code, semesterId, synced',
       enrollments: '++id, studentId, courseId, [studentId+courseId], synced',
