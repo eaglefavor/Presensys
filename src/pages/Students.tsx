@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X, AlertTriangle, ScanLine, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X, AlertTriangle, ScanLine, ArrowLeft, CheckCircle2, User } from 'lucide-react';
 import { db, type Student } from '../db/db';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -89,14 +89,14 @@ export default function Students() {
   const handleParse = () => {
     const results: Student[] = [];
     const lines = pasteData.split('\n');
-    const regNoRegex = /(\d{8,})/; // Corrected: escaped backslash for regex
+    const regNoRegex = /(\d{8,})/;
 
     lines.forEach(line => {
       if (!line.trim()) return;
       const match = line.match(regNoRegex);
       if (match) {
         const regNumber = match[0];
-        let name = line.replace(regNumber, '').replace(/[,	]/g, '').trim(); // Corrected: escaped backslash for regex
+        let name = line.replace(regNumber, '').replace(/[,	]/g, '').trim();
         name = name.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
         if (name.length > 2) {
           results.push({ regNumber, name });
@@ -126,7 +126,7 @@ export default function Students() {
       let updated = 0;
 
       for (const s of dataToSave) {
-        s.regNumber = s.regNumber.replace(/\s/g, ''); // Corrected: escaped backslash for regex
+        s.regNumber = s.regNumber.replace(/\s/g, '');
         const existing = await db.students.where('regNumber').equals(s.regNumber).first();
         if (!existing) {
           await db.students.add(s);
@@ -151,81 +151,126 @@ export default function Students() {
     s.regNumber.includes(searchTerm)
   );
 
+  // Helper to get initials
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+  };
+
+  // Helper to generate consistent color from name
+  const stringToColor = (str: string) => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const c = (hash & 0x00ffffff).toString(16).toUpperCase();
+    return '#' + '00000'.substring(0, 6 - c.length) + c;
+  };
+
   return (
-    <div className="container-fluid animate-in">
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-        <div>
-          <h1 className="fw-black letter-spacing-n1 mb-0">STUDENTS</h1>
-          <p className="text-muted small fw-medium text-uppercase tracking-wider mb-0">Database Management</p>
-        </div>
-        <div className="d-flex gap-2">
+    <div className="container-fluid animate-in px-0">
+      {/* Sticky Header */}
+      <div className="sticky-top bg-white bg-opacity-75 backdrop-blur border-bottom pb-3 pt-3 px-3 mb-3 z-index-10">
+        <div className="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h1 className="fw-black letter-spacing-n1 mb-0 h3">STUDENTS</h1>
+            <p className="text-muted x-small fw-bold text-uppercase tracking-wider mb-0">
+              Total: {students?.length || 0} Records
+            </p>
+          </div>
           <button 
-            className="btn btn-primary d-flex align-items-center gap-2 shadow-lg rounded-pill px-4 fw-bold"
+            className="btn btn-primary rounded-pill shadow-sm d-flex align-items-center gap-2 fw-bold px-3" 
             onClick={() => { setShowImportModal(true); resetImportState(); }}
           >
-            <Plus size={20} /> Add Students
+            <Plus size={18} /> <span className="d-none d-sm-inline">Add New</span>
           </button>
         </div>
-      </div>
 
-      <div className="card shadow-sm border-0 mb-4 rounded-4 overflow-hidden">
-        <div className="card-body p-0">
-          <div className="p-3 border-bottom bg-light">
-            <div className="input-group modern-input-unified bg-white shadow-sm">
-              <span className="input-group-text border-0 bg-transparent"><Search size={18} className="text-muted" /></span>
-              <input 
-                type="text" 
-                className="form-control border-0 bg-transparent py-2" 
-                placeholder="Search database..." 
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-              />
-            </div>
-          </div>
-          
-          <div className="table-responsive">
-            <table className="table table-hover align-middle mb-0">
-              <thead className="table-light text-muted x-small text-uppercase">
-                <tr>
-                  <th className="px-4 py-3">Student Name</th>
-                  <th>Registration Number</th>
-                  <th className="text-end px-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStudents?.map(s => (
-                  <tr key={s.id}>
-                    <td className="px-4 fw-bold text-dark">{s.name}</td>
-                    <td><span className="badge bg-light text-dark border fw-normal font-monospace">{s.regNumber}</span></td>
-                    <td className="text-end px-4">
-                      <button className="btn btn-sm btn-light text-danger rounded-circle p-2" onClick={() => db.students.delete(s.id!)}>
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {filteredStudents?.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="text-center py-5 text-muted">
-                      <div className="mb-2"><Search size={32} className="opacity-25" /></div>
-                      <p className="small">No students found. Use the "Add Students" button.</p>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        <div className="input-group modern-input-unified bg-white shadow-sm">
+          <span className="input-group-text border-0 bg-transparent ps-3"><Search size={18} className="text-muted" /></span>
+          <input 
+            type="text" 
+            className="form-control border-0 bg-transparent py-2"
+            placeholder="Search by name or Reg No..." 
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+          />
+          {searchTerm && (
+            <button className="btn btn-link text-muted pe-3" onClick={() => setSearchTerm('')}>
+              <X size={16} />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Premium Import Modal */} 
+      {/* Student List */}
+      <div className="px-3 pb-5">
+        <div className="row g-3">
+          {filteredStudents?.map(s => (
+            <div key={s.id} className="col-12 col-md-6 col-lg-4">
+              <div className="student-card card border-0 shadow-sm rounded-4 h-100 position-relative overflow-hidden">
+                <div className="card-body p-3 d-flex align-items-center gap-3">
+                  <div 
+                    className="avatar-circle flex-shrink-0 text-white fw-bold shadow-sm"
+                    style={{ backgroundColor: stringToColor(s.name) }}
+                  >
+                    {getInitials(s.name)}
+                  </div>
+                  
+                  <div className="flex-grow-1 overflow-hidden">
+                    <h6 className="fw-bold mb-1 text-truncate">{s.name}</h6>
+                    <div className="badge bg-light text-dark border fw-normal font-monospace x-small">
+                      {s.regNumber}
+                    </div>
+                  </div>
+
+                  <button 
+                    className="btn btn-light text-danger rounded-circle p-2 flex-shrink-0 hover-bg-danger-subtle"
+                    onClick={() => {
+                        if(confirm('Delete ' + s.name + '?')) db.students.delete(s.id!);
+                    }}
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {filteredStudents?.length === 0 && (
+          <div className="text-center py-5 mt-4">
+            <div className="bg-light d-inline-block p-4 rounded-circle mb-3">
+              <User size={48} className="text-muted opacity-25" />
+            </div>
+            <h5 className="fw-bold text-muted">No Students Found</h5>
+            <p className="text-muted small">
+              {searchTerm ? 'Try adjusting your search.' : 'Get started by adding students to the database.'}
+            </p>
+            {!searchTerm && (
+              <button 
+                className="btn btn-outline-primary rounded-pill px-4 fw-bold mt-2"
+                onClick={() => { setShowImportModal(true); resetImportState(); }}
+              >
+                Start Import
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Premium Import Modal */}
       {showImportModal && (
         <>
           <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)' }}>
             <div className="modal-dialog modal-fullscreen-sm-down modal-xl modal-dialog-centered modal-dialog-scrollable">
               <div className="modal-content border-0 shadow-2xl rounded-5 overflow-hidden">
                 
-                {/* Header */} 
+                {/* Header */}
                 <div className="modal-header bg-primary text-white border-bottom-0 p-4 position-relative overflow-hidden">
                   <div className="position-absolute top-0 end-0 p-3 opacity-10">
                     <Upload size={120} />
@@ -240,7 +285,7 @@ export default function Students() {
                       <h4 className="fw-black mb-0 letter-spacing-n1">IMPORT CENTER</h4>
                       <p className="mb-0 opacity-75 x-small fw-bold text-uppercase tracking-wider">
                         {importMode === 'select' ? 'Choose Import Method' : 
-                         importMode === 'manual' ? 'Manual Entry' : 
+                         importMode === 'manual' ? 'Manual Entry' :
                          importMode === 'paste' ? 'Smart Parser' : 'File Upload'}
                       </p>
                     </div>
@@ -250,7 +295,7 @@ export default function Students() {
 
                 <div className="modal-body p-0 bg-light">
                   
-                  {/* MODE: SELECT */} 
+                  {/* MODE: SELECT */}
                   {importMode === 'select' && (
                     <div className="p-4 p-md-5">
                       <div className="row g-4">
@@ -294,30 +339,45 @@ export default function Students() {
                     </div>
                   )}
 
-                  {/* MODE: MANUAL */} 
+                  {/* MODE: MANUAL */}
                   {importMode === 'manual' && (
                     <div className="p-4">
                       <div className="d-flex flex-column gap-3">
+                        <div className="d-flex justify-content-between align-items-center mb-2 px-1">
+                          <h6 className="fw-bold text-muted text-uppercase small mb-0">Adding {manualRows.length} Students</h6>
+                          <button className="btn btn-link text-danger p-0 small text-decoration-none" onClick={() => setManualRows([{name: '', regNumber: ''}])}>
+                            Reset All
+                          </button>
+                        </div>
+
                         {manualRows.map((row, idx) => (
                           <div key={idx} className="card border-0 shadow-sm rounded-4 overflow-hidden animate-in">
                             <div className="card-body p-3">
                               <div className="d-flex justify-content-between align-items-center mb-3">
-                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold rounded-pill px-3">
-                                  Entry #{idx + 1}
+                                <span className="badge bg-light text-secondary border fw-bold rounded-pill px-3">
+                                  Student #{idx + 1}
                                 </span>
                                 {manualRows.length > 1 && (
-                                  <button className="btn btn-light text-danger rounded-circle p-2" onClick={() => removeManualRow(idx)}>
+                                  <button 
+                                    className="btn btn-light text-danger rounded-circle p-2"
+                                    style={{width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+                                    onClick={() => removeManualRow(idx)}
+                                  >
                                     <X size={16} />
                                   </button>
                                 )}
                               </div>
+                              
                               <div className="row g-3">
                                 <div className="col-md-7">
                                   <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Full Name</label>
                                   <div className="input-group modern-input-unified">
                                     <input 
-                                      type="text" className="form-control" placeholder="e.g. Chukwudi Nweke"
-                                      value={row.name} onChange={e => updateManualRow(idx, 'name', e.target.value)}
+                                      type="text" 
+                                      className="form-control"
+                                      placeholder="e.g. Chukwudi Nweke"
+                                      value={row.name}
+                                      onChange={e => updateManualRow(idx, 'name', e.target.value)}
                                     />
                                   </div>
                                 </div>
@@ -325,11 +385,18 @@ export default function Students() {
                                   <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Reg Number</label>
                                   <div className="input-group modern-input-unified">
                                     <input 
-                                      type="text" className="form-control font-monospace" placeholder="2021..."
-                                      value={row.regNumber} onChange={e => updateManualRow(idx, 'regNumber', e.target.value)}
+                                      type="text" 
+                                      className="form-control font-monospace"
+                                      placeholder="2021..."
+                                      value={row.regNumber}
+                                      onChange={e => updateManualRow(idx, 'regNumber', e.target.value)}
                                     />
-                                    <button className="btn btn-light border-start" onClick={() => handleScanClick(idx)} title="Scan ID">
-                                      <ScanLine size={18} className="text-primary" />
+                                    <button 
+                                      className="btn btn-light border-start"
+                                      onClick={() => handleScanClick(idx)}
+                                      title="Scan ID Card"
+                                    >
+                                      <ScanLine size={18} className="text-dark" />
                                     </button>
                                   </div>
                                 </div>
@@ -337,33 +404,41 @@ export default function Students() {
                             </div>
                           </div>
                         ))}
-                        <button className="btn btn-outline-primary w-100 py-3 rounded-4 border-dashed fw-bold" onClick={addManualRow}>
-                          <Plus size={20} className="me-2" /> Add Another Row
+
+                        <button 
+                          className="btn btn-outline-primary w-100 py-3 rounded-4 border-dashed fw-bold mt-2"
+                          onClick={addManualRow}
+                          style={{ borderStyle: 'dashed', borderWidth: '2px' }}
+                        >
+                          <Plus size={20} className="me-2" /> Add Another Student
                         </button>
                       </div>
                     </div>
                   )}
 
-                  {/* MODE: PASTE */} 
+                  {/* MODE: PASTE */}
                   {importMode === 'paste' && !showMapper && (
                     <div className="p-4 h-100 d-flex flex-column">
                       {parsedStudents.length === 0 ? (
                         <div className="card border-0 shadow-sm rounded-4 flex-grow-1">
                           <div className="card-body p-4 d-flex flex-column">
-                            <label className="fw-bold text-muted text-uppercase x-small mb-3">Paste Raw Text</label>
+                            <div className="d-flex justify-content-between align-items-center mb-3">
+                              <label className="fw-bold text-muted text-uppercase small mb-0">Input Editor</label>
+                              <button className="btn btn-link text-muted p-0 small text-decoration-none" onClick={() => setPasteData('')}>Clear Editor</button>
+                            </div>
                             <textarea 
-                              className="form-control border-0 bg-light p-3 rounded-3 font-monospace flex-grow-1 mb-3" 
+                              className="form-control border-0 bg-light p-3 rounded-3 font-monospace flex-grow-1 mb-3"
                               style={{ minHeight: '300px', fontSize: '14px', lineHeight: '1.6', resize: 'none' }}
                               placeholder="Paste names and numbers here..."
                               value={pasteData}
                               onChange={e => setPasteData(e.target.value)}
                             />
                             <button 
-                              className="btn btn-primary w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" 
+                              className="btn btn-primary w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2"
                               onClick={handleParse} 
                               disabled={!pasteData.trim()}
                             >
-                              <ClipboardPaste size={20} /> Process Text
+                              <ClipboardPaste size={20} /> Run Smart Parser
                             </button>
                           </div>
                         </div>
@@ -385,7 +460,7 @@ export default function Students() {
                     </div>
                   )}
 
-                  {/* MODE: FILE */} 
+                  {/* MODE: FILE */}
                   {importMode === 'file' && !showMapper && (
                     <div className="p-5 h-100 d-flex flex-column justify-content-center">
                       <div className="card border-0 shadow-sm rounded-4 p-5 text-center">
@@ -412,7 +487,7 @@ export default function Students() {
                     </div>
                   )}
 
-                  {/* MAPPER */} 
+                  {/* MAPPER */}
                   {showMapper && uploadedFile && (
                     <div className="p-4 h-100">
                       <FileMapper 
@@ -424,7 +499,7 @@ export default function Students() {
                   )}
                 </div>
 
-                {/* Footer Actions */} 
+                {/* Footer Actions */}
                 {importMode !== 'select' && !showMapper && (
                   <div className="modal-footer border-top-0 bg-white p-4">
                     <button type="button" className="btn btn-link text-muted text-decoration-none fw-medium" onClick={resetImportState}>Cancel</button>
@@ -442,7 +517,7 @@ export default function Students() {
         </>
       )}
 
-      {/* Barcode Scanner Overlay */} 
+      {/* Barcode Scanner Overlay */}
       {showScanner && (
         <BarcodeScanner 
           onScanSuccess={handleScanSuccess} 
@@ -456,6 +531,9 @@ export default function Students() {
         .tracking-wider { letter-spacing: 1px; }
         .x-small { font-size: 11px; }
         
+        .backdrop-blur { backdrop-filter: blur(10px); }
+        .z-index-10 { z-index: 10; }
+
         .btn-white-glass {
           background: rgba(255,255,255,0.2);
           color: white;
@@ -483,7 +561,6 @@ export default function Students() {
           transform: scale(0.98);
         }
         
-        /* Desktop Hover Only */
         @media (min-width: 992px) {
           .hover-lift:hover {
             transform: translateY(-5px);
@@ -507,6 +584,19 @@ export default function Students() {
           padding: 0.75rem 1rem;
         }
         .modern-input-unified .form-control:focus { box-shadow: none; }
+
+        .avatar-circle {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+        }
+        
+        .student-card { transition: all 0.2s; }
+        .student-card:active { transform: scale(0.98); }
       `}</style>
     </div>
   );
@@ -516,7 +606,7 @@ export default function Students() {
 function PreviewTable({ data, setData, existingStudents }: { data: Student[], setData: (d: Student[]) => void, existingStudents: Student[] }) {
   return (
     <div className="card border-0 shadow-sm rounded-4 h-100">
-      <div className="card-header bg-white border-bottom-0 py-3">
+      <div className="card-header bg-white border-bottom-0 py-3 d-flex justify-content-between align-items-center">
         <h6 className="fw-bold mb-0 text-muted text-uppercase x-small">Data Review</h6>
       </div>
       <div className="table-responsive flex-grow-1">
@@ -530,7 +620,7 @@ function PreviewTable({ data, setData, existingStudents }: { data: Student[], se
           </thead>
           <tbody>
             {data.map((s, idx) => {
-              const isDuplicate = existingStudents.some(ex => ex.regNumber === s.regNumber.replace(/\s/g, '')); // Corrected: escaped backslash for regex
+              const isDuplicate = existingStudents.some(ex => ex.regNumber === s.regNumber.replace(/\s/g, ''));
               return (
                 <tr key={idx} className={isDuplicate ? 'table-warning' : ''}>
                   <td className="ps-4">
