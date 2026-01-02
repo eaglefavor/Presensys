@@ -229,48 +229,71 @@ export default function Students() {
                 </div>
 
                 <div className="modal-body p-4 bg-light">
-                  {/* Tab Content: Manual */}
+                  {/* Tab Content: Manual (Redesigned) */}
                   {activeTab === 'manual' && !showMapper && (
-                    <div className="card border-0 shadow-sm rounded-4">
-                      <div className="card-body">
-                        <div className="table-responsive mb-3">
-                          <table className="table table-borderless mb-0">
-                            <thead className="text-muted small text-uppercase">
-                              <tr>
-                                <th>Full Name</th>
-                                <th>Reg Number</th>
-                                <th style={{width: '50px'}}></th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {manualRows.map((row, idx) => (
-                                <tr key={idx}>
-                                  <td>
-                                    <input 
-                                      type="text" className="form-control bg-light border-0" placeholder="Student Name"
-                                      value={row.name} onChange={e => updateManualRow(idx, 'name', e.target.value)}
-                                    />
-                                  </td>
-                                  <td>
-                                    <input 
-                                      type="text" className="form-control bg-light border-0" placeholder="202XXXXXXX"
-                                      value={row.regNumber} onChange={e => updateManualRow(idx, 'regNumber', e.target.value)}
-                                    />
-                                  </td>
-                                  <td>
-                                    <button className="btn btn-light text-danger rounded-circle" onClick={() => removeManualRow(idx)}>
-                                      <X size={16} />
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <button className="btn btn-outline-primary w-100 border-dashed" onClick={addManualRow}>
-                          <Plus size={16} className="me-2" /> Add Another Row
+                    <div className="d-flex flex-column gap-3">
+                      <div className="d-flex justify-content-between align-items-center mb-2 px-1">
+                        <h6 className="fw-bold text-muted text-uppercase small mb-0">Adding {manualRows.length} Students</h6>
+                        <button className="btn btn-link text-danger p-0 small text-decoration-none" onClick={() => setManualRows([{name: '', regNumber: ''}])}>
+                          Reset All
                         </button>
                       </div>
+
+                      {manualRows.map((row, idx) => (
+                        <div key={idx} className="card border-0 shadow-sm rounded-4 overflow-hidden animate-in">
+                          <div className="card-body p-3">
+                            <div className="d-flex justify-content-between align-items-center mb-3">
+                              <span className="badge bg-light text-secondary border fw-bold rounded-pill px-3">
+                                Student #{idx + 1}
+                              </span>
+                              {manualRows.length > 1 && (
+                                <button 
+                                  className="btn btn-light text-danger rounded-circle p-2" 
+                                  style={{width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
+                                  onClick={() => removeManualRow(idx)}
+                                >
+                                  <X size={16} />
+                                </button>
+                              )}
+                            </div>
+                            
+                            <div className="row g-3">
+                              <div className="col-md-7">
+                                <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Full Name</label>
+                                <div className="input-group modern-input-unified">
+                                  <input 
+                                    type="text" 
+                                    className="form-control" 
+                                    placeholder="e.g. Chukwudi Nweke"
+                                    value={row.name}
+                                    onChange={e => updateManualRow(idx, 'name', e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                              <div className="col-md-5">
+                                <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Reg Number</label>
+                                <div className="input-group modern-input-unified">
+                                  <input 
+                                    type="text" 
+                                    className="form-control font-monospace" 
+                                    placeholder="2021..."
+                                    value={row.regNumber}
+                                    onChange={e => updateManualRow(idx, 'regNumber', e.target.value)}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+
+                      <button 
+                        className="btn btn-outline-primary w-100 py-3 rounded-4 border-dashed fw-bold mt-2" 
+                        onClick={addManualRow}
+                        style={{ borderStyle: 'dashed', borderWidth: '2px' }}
+                      >
+                        <Plus size={20} className="me-2" /> Add Another Student
+                      </button>
                     </div>
                   )}
 
