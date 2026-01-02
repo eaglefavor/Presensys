@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X, AlertTriangle, ScanLine } from 'lucide-react';
+import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X, AlertTriangle, ScanLine, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { db, type Student } from '../db/db';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -10,8 +10,8 @@ export default function Students() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   
-  // Import Modes: 'manual' | 'paste' | 'file'
-  const [activeTab, setActiveTab] = useState<'manual' | 'paste' | 'file'>('manual');
+  // Modes: 'select' | 'manual' | 'paste' | 'file'
+  const [importMode, setImportMode] = useState<'select' | 'manual' | 'paste' | 'file'>('select');
   
   // Data States
   const [pasteData, setPasteData] = useState('');
@@ -25,6 +25,16 @@ export default function Students() {
   // Scanner State
   const [showScanner, setShowScanner] = useState(false);
   const [activeScanRowIndex, setActiveScanRowIndex] = useState<number | null>(null);
+
+  // --- Reset Function ---
+  const resetImportState = () => {
+    setImportMode('select');
+    setPasteData('');
+    setParsedStudents([]);
+    setManualRows([{name: '', regNumber: ''}]);
+    setUploadedFile(null);
+    setShowMapper(false);
+  };
 
   // --- Scanner Logic ---
   const handleScanClick = (index: number) => {
@@ -53,8 +63,7 @@ export default function Students() {
     setParsedStudents(data);
     setShowMapper(false);
     setUploadedFile(null);
-    // Switch to preview view (reuse the paste tab view effectively)
-    setActiveTab('paste'); 
+    setImportMode('paste'); // Reuse preview view
   };
 
   // --- Manual Logic ---
@@ -76,22 +85,19 @@ export default function Students() {
     }
   };
 
-  // --- Smart Paste Logic V2 (Robust) ---
+  // --- Smart Paste Logic ---
   const handleParse = () => {
     const results: Student[] = [];
     const lines = pasteData.split('\n');
     const regNoRegex = /(\d{8,})/; // Corrected: escaped backslash for regex
 
     lines.forEach(line => {
-      if (!line.trim()) return; 
+      if (!line.trim()) return;
       const match = line.match(regNoRegex);
       if (match) {
         const regNumber = match[0];
-        // Remove the reg number and common separators from the line to get the name
-        let name = line.replace(regNumber, '').replace(/[,\t]/g, '').trim(); // Corrected: escaped backslash for regex
-        // Remove leading/trailing non-letters (like "1." or "-")
+        let name = line.replace(regNumber, '').replace(/[,	]/g, '').trim(); // Corrected: escaped backslash for regex
         name = name.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
-        
         if (name.length > 2) {
           results.push({ regNumber, name });
         }
@@ -105,7 +111,7 @@ export default function Students() {
     try {
       let dataToSave: Student[] = [];
       
-      if (activeTab === 'manual') {
+      if (importMode === 'manual') {
         dataToSave = manualRows.filter(r => r.name.trim() && r.regNumber.trim());
       } else {
         dataToSave = parsedStudents;
@@ -120,24 +126,19 @@ export default function Students() {
       let updated = 0;
 
       for (const s of dataToSave) {
-        // Sanitize Reg Number (remove spaces)
         s.regNumber = s.regNumber.replace(/\s/g, ''); // Corrected: escaped backslash for regex
-        
         const existing = await db.students.where('regNumber').equals(s.regNumber).first();
         if (!existing) {
           await db.students.add(s);
           added++;
         } else {
-          // Optional: Only update if name is different or empty
           await db.students.update(existing.id!, { name: s.name });
           updated++;
         }
       }
       
       setShowImportModal(false);
-      setPasteData('');
-      setParsedStudents([]);
-      setManualRows([{name: '', regNumber: ''}]);
+      resetImportState();
       alert(`Import Complete!\nAdded: ${added}\nUpdated: ${updated}`);
     } catch (error) {
       console.error(error);
@@ -153,10 +154,16 @@ export default function Students() {
   return (
     <div className="container-fluid animate-in">
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
-        <h1>Students</h1>
+        <div>
+          <h1 className="fw-black letter-spacing-n1 mb-0">STUDENTS</h1>
+          <p className="text-muted small fw-medium text-uppercase tracking-wider mb-0">Database Management</p>
+        </div>
         <div className="d-flex gap-2">
-          <button className="btn btn-primary d-flex align-items-center gap-2 shadow-sm" onClick={() => setShowImportModal(true)}>
-            <Plus size={20} /> Add / Import Students
+          <button 
+            className="btn btn-primary d-flex align-items-center gap-2 shadow-lg rounded-pill px-4 fw-bold"
+            onClick={() => { setShowImportModal(true); resetImportState(); }}
+          >
+            <Plus size={20} /> Add Students
           </button>
         </div>
       </div>
@@ -164,12 +171,12 @@ export default function Students() {
       <div className="card shadow-sm border-0 mb-4 rounded-4 overflow-hidden">
         <div className="card-body p-0">
           <div className="p-3 border-bottom bg-light">
-            <div className="input-group modern-input-unified bg-white">
+            <div className="input-group modern-input-unified bg-white shadow-sm">
               <span className="input-group-text border-0 bg-transparent"><Search size={18} className="text-muted" /></span>
               <input 
                 type="text" 
-                className="form-control border-0 bg-transparent"
-                placeholder="Search by name or reg number..." 
+                className="form-control border-0 bg-transparent py-2" 
+                placeholder="Search database..." 
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
@@ -178,7 +185,7 @@ export default function Students() {
           
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
-              <thead className="table-light text-muted small text-uppercase">
+              <thead className="table-light text-muted x-small text-uppercase">
                 <tr>
                   <th className="px-4 py-3">Student Name</th>
                   <th>Registration Number</th>
@@ -188,8 +195,8 @@ export default function Students() {
               <tbody>
                 {filteredStudents?.map(s => (
                   <tr key={s.id}>
-                    <td className="px-4 fw-medium">{s.name}</td>
-                    <td><span className="badge bg-light text-dark border fw-normal">{s.regNumber}</span></td>
+                    <td className="px-4 fw-bold text-dark">{s.name}</td>
+                    <td><span className="badge bg-light text-dark border fw-normal font-monospace">{s.regNumber}</span></td>
                     <td className="text-end px-4">
                       <button className="btn btn-sm btn-light text-danger rounded-circle p-2" onClick={() => db.students.delete(s.id!)}>
                         <Trash2 size={16} />
@@ -200,7 +207,8 @@ export default function Students() {
                 {filteredStudents?.length === 0 && (
                   <tr>
                     <td colSpan={3} className="text-center py-5 text-muted">
-                      No students found. Add some using the button above.
+                      <div className="mb-2"><Search size={32} className="opacity-25" /></div>
+                      <p className="small">No students found. Use the "Add Students" button.</p>
                     </td>
                   </tr>
                 )}
@@ -210,196 +218,221 @@ export default function Students() {
         </div>
       </div>
 
-      {/* Unified Add/Import Modal */}
+      {/* Premium Import Modal */} 
       {showImportModal && (
         <>
-          <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)' }}>
             <div className="modal-dialog modal-fullscreen-sm-down modal-xl modal-dialog-centered modal-dialog-scrollable">
-              <div className="modal-content border-0 shadow-lg rounded-4">
-                <div className="modal-header bg-white border-bottom-0 pb-0">
-                  <div className="nav nav-pills w-100 gap-2" role="tablist">
-                    <button 
-                      className={`nav-link flex-fill ${activeTab === 'manual' ? 'active shadow-sm fw-bold' : 'text-muted'}`}
-                      onClick={() => setActiveTab('manual')}
-                      disabled={showMapper}
-                    >
-                      <Plus size={16} className="me-2" /> Manual
-                    </button>
-                    <button 
-                      className={`nav-link flex-fill ${activeTab === 'paste' ? 'active shadow-sm fw-bold' : 'text-muted'}`}
-                      onClick={() => setActiveTab('paste')}
-                      disabled={showMapper}
-                    >
-                      <ClipboardPaste size={16} className="me-2" /> Smart Paste
-                    </button>
-                    <button 
-                      className={`nav-link flex-fill ${activeTab === 'file' ? 'active shadow-sm fw-bold' : 'text-muted'}`}
-                      onClick={() => setActiveTab('file')}
-                      disabled={showMapper}
-                    >
-                      <Upload size={16} className="me-2" /> Excel / CSV
-                    </button>
+              <div className="modal-content border-0 shadow-2xl rounded-5 overflow-hidden">
+                
+                {/* Header */} 
+                <div className="modal-header bg-primary text-white border-bottom-0 p-4 position-relative overflow-hidden">
+                  <div className="position-absolute top-0 end-0 p-3 opacity-10">
+                    <Upload size={120} />
                   </div>
-                  <button type="button" className="btn-close ms-2" onClick={() => setShowImportModal(false)}></button>
+                  <div className="d-flex align-items-center gap-3 position-relative" style={{ zIndex: 10 }}>
+                    {importMode !== 'select' && (
+                      <button className="btn btn-white-glass rounded-circle p-2" onClick={resetImportState}>
+                        <ArrowLeft size={20} />
+                      </button>
+                    )}
+                    <div>
+                      <h4 className="fw-black mb-0 letter-spacing-n1">IMPORT CENTER</h4>
+                      <p className="mb-0 opacity-75 x-small fw-bold text-uppercase tracking-wider">
+                        {importMode === 'select' ? 'Choose Import Method' : 
+                         importMode === 'manual' ? 'Manual Entry' : 
+                         importMode === 'paste' ? 'Smart Parser' : 'File Upload'}
+                      </p>
+                    </div>
+                  </div>
+                  <button type="button" className="btn-close btn-close-white position-absolute top-0 end-0 m-4" onClick={() => setShowImportModal(false)}></button>
                 </div>
 
-                <div className="modal-body p-4 bg-light">
-                  {/* Tab Content: Manual (Redesigned) */}
-                  {activeTab === 'manual' && !showMapper && (
-                    <div className="d-flex flex-column gap-3">
-                      <div className="d-flex justify-content-between align-items-center mb-2 px-1">
-                        <h6 className="fw-bold text-muted text-uppercase small mb-0">Adding {manualRows.length} Students</h6>
-                        <button className="btn btn-link text-danger p-0 small text-decoration-none" onClick={() => setManualRows([{name: '', regNumber: ''}])}>
-                          Reset All
-                        </button>
-                      </div>
-
-                      {manualRows.map((row, idx) => (
-                        <div key={idx} className="card border-0 shadow-sm rounded-4 overflow-hidden animate-in">
-                          <div className="card-body p-3">
-                            <div className="d-flex justify-content-between align-items-center mb-3">
-                              <span className="badge bg-light text-secondary border fw-bold rounded-pill px-3">
-                                Student #{idx + 1}
-                              </span>
-                              {manualRows.length > 1 && (
-                                <button 
-                                  className="btn btn-light text-danger rounded-circle p-2"
-                                  style={{width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
-                                  onClick={() => removeManualRow(idx)}
-                                >
-                                  <X size={16} />
-                                </button>
-                              )}
-                            </div>
-                            
-                            <div className="row g-3">
-                              <div className="col-md-7">
-                                <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Full Name</label>
-                                <div className="input-group modern-input-unified">
-                                  <input 
-                                    type="text" 
-                                    className="form-control" 
-                                    placeholder="e.g. Chukwudi Nweke"
-                                    value={row.name}
-                                    onChange={e => updateManualRow(idx, 'name', e.target.value)}
-                                  />
-                                </div>
-                              </div>
-                              <div className="col-md-5">
-                                <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Reg Number</label>
-                                <div className="input-group modern-input-unified">
-                                  <input 
-                                    type="text" 
-                                    className="form-control font-monospace"
-                                    placeholder="2021..."
-                                    value={row.regNumber}
-                                    onChange={e => updateManualRow(idx, 'regNumber', e.target.value)}
-                                  />
-                                  <button 
-                                    className="btn btn-light border-start"
-                                    onClick={() => handleScanClick(idx)}
-                                    title="Scan ID Card"
-                                  >
-                                    <ScanLine size={18} className="text-dark" />
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-
-                      <button 
-                        className="btn btn-outline-primary w-100 py-3 rounded-4 border-dashed fw-bold mt-2"
-                        onClick={addManualRow}
-                        style={{ borderStyle: 'dashed', borderWidth: '2px' }}
-                      >
-                        <Plus size={20} className="me-2" /> Add Another Student
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Tab Content: Paste & Preview */}
-                  {activeTab === 'paste' && !showMapper && (
-                    <div className="d-flex flex-column gap-4 h-100">
-                      <div className="card border-0 shadow-sm rounded-4">
-                        <div className="card-body p-4">
-                          <div className="d-flex justify-content-between align-items-center mb-3">
-                            <label className="fw-bold text-muted text-uppercase small mb-0">Input Editor</label>
-                            <button className="btn btn-link text-muted p-0 small text-decoration-none" onClick={() => setPasteData('')}>Clear Editor</button>
-                          </div>
-                          <textarea 
-                            className="form-control border-0 bg-light p-3 rounded-3 font-monospace"
-                            style={{ minHeight: '300px', fontSize: '14px', lineHeight: '1.6' }}
-                            placeholder="Paste your raw student list here (WhatsApp, PDF, Word, etc.)&#10;&#10;Example:&#10;1. John Doe - 2021123456&#10;2. Jane Smith [2021987654]&#10;3. 2022101010  Musa Ali"
-                            value={pasteData}
-                            onChange={e => setPasteData(e.target.value)}
-                          />
+                <div className="modal-body p-0 bg-light">
+                  
+                  {/* MODE: SELECT */} 
+                  {importMode === 'select' && (
+                    <div className="p-4 p-md-5">
+                      <div className="row g-4">
+                        <div className="col-md-4">
                           <button 
-                            className="btn btn-primary w-100 py-3 mt-4 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2"
-                            onClick={handleParse} 
-                            disabled={!pasteData.trim()}
+                            className="btn btn-white h-100 w-100 p-4 rounded-4 shadow-sm border-0 text-start hover-lift card-select"
+                            onClick={() => setImportMode('manual')}
                           >
-                            <ClipboardPaste size={20} /> Run Smart Parser
+                            <div className="icon-box bg-primary-subtle text-primary mb-3">
+                              <Plus size={28} />
+                            </div>
+                            <h5 className="fw-bold text-dark mb-2">Manual Entry</h5>
+                            <p className="text-muted small mb-0">Type details manually or scan ID cards individually. Best for small additions.</p>
+                          </button>
+                        </div>
+                        <div className="col-md-4">
+                          <button 
+                            className="btn btn-white h-100 w-100 p-4 rounded-4 shadow-sm border-0 text-start hover-lift card-select"
+                            onClick={() => setImportMode('paste')}
+                          >
+                            <div className="icon-box bg-warning-subtle text-warning-emphasis mb-3">
+                              <ClipboardPaste size={28} />
+                            </div>
+                            <h5 className="fw-bold text-dark mb-2">Smart Paste</h5>
+                            <p className="text-muted small mb-0">Copy text from WhatsApp, Word, or PDF. We'll automatically find names and numbers.</p>
+                          </button>
+                        </div>
+                        <div className="col-md-4">
+                          <button 
+                            className="btn btn-white h-100 w-100 p-4 rounded-4 shadow-sm border-0 text-start hover-lift card-select"
+                            onClick={() => setImportMode('file')}
+                          >
+                            <div className="icon-box bg-success-subtle text-success mb-3">
+                              <FileText size={28} />
+                            </div>
+                            <h5 className="fw-bold text-dark mb-2">Excel / CSV</h5>
+                            <p className="text-muted small mb-0">Upload a spreadsheet. We'll help you map the columns to our database format.</p>
                           </button>
                         </div>
                       </div>
+                    </div>
+                  )}
 
-                      {parsedStudents.length > 0 && (
-                        <div className="animate-in">
-                          <PreviewTable data={parsedStudents} setData={setParsedStudents} existingStudents={students || []} />
+                  {/* MODE: MANUAL */} 
+                  {importMode === 'manual' && (
+                    <div className="p-4">
+                      <div className="d-flex flex-column gap-3">
+                        {manualRows.map((row, idx) => (
+                          <div key={idx} className="card border-0 shadow-sm rounded-4 overflow-hidden animate-in">
+                            <div className="card-body p-3">
+                              <div className="d-flex justify-content-between align-items-center mb-3">
+                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle fw-bold rounded-pill px-3">
+                                  Entry #{idx + 1}
+                                </span>
+                                {manualRows.length > 1 && (
+                                  <button className="btn btn-light text-danger rounded-circle p-2" onClick={() => removeManualRow(idx)}>
+                                    <X size={16} />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="row g-3">
+                                <div className="col-md-7">
+                                  <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Full Name</label>
+                                  <div className="input-group modern-input-unified">
+                                    <input 
+                                      type="text" className="form-control" placeholder="e.g. Chukwudi Nweke"
+                                      value={row.name} onChange={e => updateManualRow(idx, 'name', e.target.value)}
+                                    />
+                                  </div>
+                                </div>
+                                <div className="col-md-5">
+                                  <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Reg Number</label>
+                                  <div className="input-group modern-input-unified">
+                                    <input 
+                                      type="text" className="form-control font-monospace" placeholder="2021..."
+                                      value={row.regNumber} onChange={e => updateManualRow(idx, 'regNumber', e.target.value)}
+                                    />
+                                    <button className="btn btn-light border-start" onClick={() => handleScanClick(idx)} title="Scan ID">
+                                      <ScanLine size={18} className="text-primary" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <button className="btn btn-outline-primary w-100 py-3 rounded-4 border-dashed fw-bold" onClick={addManualRow}>
+                          <Plus size={20} className="me-2" /> Add Another Row
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* MODE: PASTE */} 
+                  {importMode === 'paste' && !showMapper && (
+                    <div className="p-4 h-100 d-flex flex-column">
+                      {parsedStudents.length === 0 ? (
+                        <div className="card border-0 shadow-sm rounded-4 flex-grow-1">
+                          <div className="card-body p-4 d-flex flex-column">
+                            <label className="fw-bold text-muted text-uppercase x-small mb-3">Paste Raw Text</label>
+                            <textarea 
+                              className="form-control border-0 bg-light p-3 rounded-3 font-monospace flex-grow-1 mb-3" 
+                              style={{ minHeight: '300px', fontSize: '14px', lineHeight: '1.6', resize: 'none' }}
+                              placeholder="Paste names and numbers here..."
+                              value={pasteData}
+                              onChange={e => setPasteData(e.target.value)}
+                            />
+                            <button 
+                              className="btn btn-primary w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" 
+                              onClick={handleParse} 
+                              disabled={!pasteData.trim()}
+                            >
+                              <ClipboardPaste size={20} /> Process Text
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-100 d-flex flex-column">
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <h6 className="fw-bold mb-0 text-success d-flex align-items-center gap-2">
+                              <CheckCircle2 size={20} /> {parsedStudents.length} Students Found
+                            </h6>
+                            <button className="btn btn-sm btn-outline-danger" onClick={() => { setParsedStudents([]); setPasteData(''); }}>
+                              Clear & Start Over
+                            </button>
+                          </div>
+                          <div className="flex-grow-1 overflow-auto">
+                            <PreviewTable data={parsedStudents} setData={setParsedStudents} existingStudents={students || []} />
+                          </div>
                         </div>
                       )}
                     </div>
                   )}
 
-                  {/* Tab Content: File Upload */}
-                  {activeTab === 'file' && !showMapper && (
-                    <div className="row h-100">
-                      <div className="col-lg-12">
-                        <div className="card border-0 shadow-sm rounded-4 h-100">
-                          <div className="card-body text-center d-flex flex-column justify-content-center align-items-center p-5">
-                            <div className="bg-success-subtle p-4 rounded-circle mb-3 text-success">
-                              <FileText size={48} />
-                            </div>
-                            <h4 className="fw-bold">Upload Class List</h4>
-                            <p className="text-muted mb-4" style={{ maxWidth: '400px' }}>
-                              Supports <strong>Excel (.xlsx, .xls)</strong> and <strong>CSV</strong> files. We'll help you map the columns instantly.
-                            </p>
-                            <div className="position-relative">
-                              <input 
-                                type="file" 
-                                accept=".csv, .xlsx, .xls"
-                                className="form-control form-control-lg opacity-0 position-absolute top-0 start-0 w-100 h-100"
-                                style={{ cursor: 'pointer', zIndex: 10 }}
-                                onChange={handleFileUpload}
-                              />
-                              <button className="btn btn-primary btn-lg px-5 rounded-pill shadow-sm">
-                                Choose File
-                              </button>
-                            </div>
-                          </div>
+                  {/* MODE: FILE */} 
+                  {importMode === 'file' && !showMapper && (
+                    <div className="p-5 h-100 d-flex flex-column justify-content-center">
+                      <div className="card border-0 shadow-sm rounded-4 p-5 text-center">
+                        <div className="bg-primary-subtle p-4 rounded-circle mb-4 text-primary mx-auto" style={{width: 'fit-content'}}>
+                          <FileText size={48} />
+                        </div>
+                        <h3 className="fw-bold mb-2">Upload Spreadsheet</h3>
+                        <p className="text-muted mb-4 mx-auto" style={{maxWidth: '400px'}}>
+                          Select an Excel (.xlsx) or CSV file. Our intelligent mapper will help you sort the data.
+                        </p>
+                        <div className="position-relative mx-auto" style={{maxWidth: '300px'}}>
+                          <input 
+                            type="file" 
+                            accept=".csv, .xlsx, .xls"
+                            className="form-control form-control-lg opacity-0 position-absolute top-0 start-0 w-100 h-100"
+                            style={{ cursor: 'pointer', zIndex: 10 }}
+                            onChange={handleFileUpload}
+                          />
+                          <button className="btn btn-primary w-100 py-3 rounded-pill shadow fw-bold">
+                            Select File
+                          </button>
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* File Mapper View */}
+                  {/* MAPPER */} 
                   {showMapper && uploadedFile && (
-                    <FileMapper 
-                      file={uploadedFile} 
-                      onComplete={handleMapperComplete} 
-                      onCancel={() => { setShowMapper(false); setUploadedFile(null); }} 
-                    />
+                    <div className="p-4 h-100">
+                      <FileMapper 
+                        file={uploadedFile} 
+                        onComplete={handleMapperComplete} 
+                        onCancel={() => { setShowMapper(false); setUploadedFile(null); }} 
+                      />
+                    </div>
                   )}
                 </div>
 
-                {!showMapper && (
-                  <div className="modal-footer border-top-0">
-                    <button type="button" className="btn btn-link text-muted text-decoration-none" onClick={() => setShowImportModal(false)}>Cancel</button>
-                    <button type="button" className="btn btn-success px-5 rounded-pill shadow-sm fw-bold" onClick={handleSave}>
-                      Save to Database
-                    </button>
+                {/* Footer Actions */} 
+                {importMode !== 'select' && !showMapper && (
+                  <div className="modal-footer border-top-0 bg-white p-4">
+                    <button type="button" className="btn btn-link text-muted text-decoration-none fw-medium" onClick={resetImportState}>Cancel</button>
+                    {(importMode === 'manual' || parsedStudents.length > 0) && (
+                      <button type="button" className="btn btn-success px-5 py-3 rounded-pill shadow fw-bold" onClick={handleSave}>
+                        Save to Database
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -409,13 +442,72 @@ export default function Students() {
         </>
       )}
 
-      {/* Barcode Scanner Overlay */}
+      {/* Barcode Scanner Overlay */} 
       {showScanner && (
         <BarcodeScanner 
           onScanSuccess={handleScanSuccess} 
           onClose={() => setShowScanner(false)} 
         />
       )}
+
+      <style>{`
+        .fw-black { font-weight: 900; }
+        .letter-spacing-n1 { letter-spacing: -1px; }
+        .tracking-wider { letter-spacing: 1px; }
+        .x-small { font-size: 11px; }
+        
+        .btn-white-glass {
+          background: rgba(255,255,255,0.2);
+          color: white;
+          border: 1px solid rgba(255,255,255,0.3);
+          backdrop-filter: blur(4px);
+        }
+        .btn-white-glass:hover {
+          background: rgba(255,255,255,0.3);
+          color: white;
+        }
+
+        .icon-box {
+          width: 60px;
+          height: 60px;
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .hover-lift {
+          transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+        }
+        .hover-lift:active {
+          transform: scale(0.98);
+        }
+        
+        /* Desktop Hover Only */
+        @media (min-width: 992px) {
+          .hover-lift:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 1rem 3rem rgba(0,0,0,0.1) !important;
+          }
+        }
+
+        .modern-input-unified {
+          background: #fff;
+          border-radius: 12px;
+          overflow: hidden;
+          border: 1px solid #dee2e6;
+          transition: all 0.2s ease;
+        }
+        .modern-input-unified:focus-within {
+          border-color: #0d6efd;
+          box-shadow: 0 0 0 4px rgba(13,110,253,0.1);
+        }
+        .modern-input-unified .form-control {
+          border: none;
+          padding: 0.75rem 1rem;
+        }
+        .modern-input-unified .form-control:focus { box-shadow: none; }
+      `}</style>
     </div>
   );
 }
@@ -424,29 +516,26 @@ export default function Students() {
 function PreviewTable({ data, setData, existingStudents }: { data: Student[], setData: (d: Student[]) => void, existingStudents: Student[] }) {
   return (
     <div className="card border-0 shadow-sm rounded-4 h-100">
-      <div className="card-header bg-white border-bottom-0 py-3 d-flex justify-content-between align-items-center">
-        <h6 className="fw-bold mb-0">Preview Data ({data.length})</h6>
-        <button className="btn btn-link text-danger p-0 small text-decoration-none" onClick={() => setData([])}>Clear All</button>
+      <div className="card-header bg-white border-bottom-0 py-3">
+        <h6 className="fw-bold mb-0 text-muted text-uppercase x-small">Data Review</h6>
       </div>
-      <div className="table-responsive flex-grow-1" style={{ maxHeight: '400px' }}>
+      <div className="table-responsive flex-grow-1">
         <table className="table table-hover align-middle mb-0">
           <thead className="table-light small text-muted sticky-top">
             <tr>
-              <th>Name</th>
+              <th className="ps-4">Name</th>
               <th>Reg Number</th>
-              <th>Status</th>
+              <th className="pe-4 text-end">Status</th>
             </tr>
           </thead>
           <tbody>
             {data.map((s, idx) => {
-              // Check for duplicate in DB
               const isDuplicate = existingStudents.some(ex => ex.regNumber === s.regNumber.replace(/\s/g, '')); // Corrected: escaped backslash for regex
-              
               return (
                 <tr key={idx} className={isDuplicate ? 'table-warning' : ''}>
-                  <td>
+                  <td className="ps-4">
                     <input 
-                      type="text" className="form-control form-control-sm border-0 bg-transparent"
+                      type="text" className="form-control form-control-sm border-0 bg-transparent fw-bold"
                       value={s.name}
                       onChange={e => {
                         const newData = [...data];
@@ -466,9 +555,9 @@ function PreviewTable({ data, setData, existingStudents }: { data: Student[], se
                        }}
                     />
                   </td>
-                  <td>
+                  <td className="pe-4 text-end">
                     {isDuplicate ? (
-                      <span className="badge bg-warning text-dark d-flex align-items-center gap-1">
+                      <span className="badge bg-warning text-dark d-inline-flex align-items-center gap-1">
                         <AlertTriangle size={10} /> Update
                       </span>
                     ) : (
@@ -478,13 +567,6 @@ function PreviewTable({ data, setData, existingStudents }: { data: Student[], se
                 </tr>
               );
             })}
-            {data.length === 0 && (
-              <tr>
-                <td colSpan={3} className="text-center py-5 text-muted small">
-                  No data parsed yet. Paste text or upload a file.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
