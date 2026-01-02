@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X, AlertTriangle } from 'lucide-react';
+import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X, AlertTriangle, ScanLine } from 'lucide-react';
 import { db, type Student } from '../db/db';
 import FileMapper from '../components/FileMapper';
+import BarcodeScanner from '../components/BarcodeScanner';
 
 export default function Students() {
   const students = useLiveQuery(() => db.students.orderBy('name').toArray());
@@ -15,11 +16,29 @@ export default function Students() {
   // Data States
   const [pasteData, setPasteData] = useState('');
   const [parsedStudents, setParsedStudents] = useState<Student[]>([]);
-  const [manualRows, setManualRows] = useState<{name: string, regNumber: string}[]>([{name: '', regNumber: ''}, {name: '', regNumber: ''}, {name: '', regNumber: ''}]);
+  const [manualRows, setManualRows] = useState<{name: string, regNumber: string}[]>([{name: '', regNumber: ''}]);
   
   // File Upload State
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [showMapper, setShowMapper] = useState(false);
+  
+  // Scanner State
+  const [showScanner, setShowScanner] = useState(false);
+  const [activeScanRowIndex, setActiveScanRowIndex] = useState<number | null>(null);
+
+  // --- Scanner Logic ---
+  const handleScanClick = (index: number) => {
+    setActiveScanRowIndex(index);
+    setShowScanner(true);
+  };
+
+  const handleScanSuccess = (decodedText: string) => {
+    if (activeScanRowIndex !== null) {
+        updateManualRow(activeScanRowIndex, 'regNumber', decodedText);
+    }
+    setShowScanner(false);
+    setActiveScanRowIndex(null);
+  };
 
   // --- File Upload Logic ---
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,19 +80,15 @@ export default function Students() {
   const handleParse = () => {
     const results: Student[] = [];
     const lines = pasteData.split('\n');
-
-    // V2 Regex: Looks for 8+ digits (Reg No) anywhere in the line
-    // Capture groups: (Prefix)(RegNo)(Suffix) or (RegNo)(Suffix)
     const regNoRegex = /(\d{8,})/; // Corrected: escaped backslash for regex
 
     lines.forEach(line => {
-      if (!line.trim()) return;
-      
+      if (!line.trim()) return; 
       const match = line.match(regNoRegex);
       if (match) {
         const regNumber = match[0];
         // Remove the reg number and common separators from the line to get the name
-        let name = line.replace(regNumber, '').replace(/[,,\t]/g, '').trim(); // Corrected: escaped backslash for regex
+        let name = line.replace(regNumber, '').replace(/[,\t]/g, '').trim(); // Corrected: escaped backslash for regex
         // Remove leading/trailing non-letters (like "1." or "-")
         name = name.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
         
@@ -122,7 +137,7 @@ export default function Students() {
       setShowImportModal(false);
       setPasteData('');
       setParsedStudents([]);
-      setManualRows([{name: '', regNumber: ''}, {name: '', regNumber: ''}, {name: '', regNumber: ''}]);
+      setManualRows([{name: '', regNumber: ''}]);
       alert(`Import Complete!\nAdded: ${added}\nUpdated: ${updated}`);
     } catch (error) {
       console.error(error);
@@ -153,8 +168,8 @@ export default function Students() {
               <span className="input-group-text border-0 bg-transparent"><Search size={18} className="text-muted" /></span>
               <input 
                 type="text" 
-                className="form-control border-0 bg-transparent" 
-                placeholder="Search by name or reg number..."
+                className="form-control border-0 bg-transparent"
+                placeholder="Search by name or reg number..." 
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
@@ -248,7 +263,7 @@ export default function Students() {
                               </span>
                               {manualRows.length > 1 && (
                                 <button 
-                                  className="btn btn-light text-danger rounded-circle p-2" 
+                                  className="btn btn-light text-danger rounded-circle p-2"
                                   style={{width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center'}}
                                   onClick={() => removeManualRow(idx)}
                                 >
@@ -275,11 +290,18 @@ export default function Students() {
                                 <div className="input-group modern-input-unified">
                                   <input 
                                     type="text" 
-                                    className="form-control font-monospace" 
+                                    className="form-control font-monospace"
                                     placeholder="2021..."
                                     value={row.regNumber}
                                     onChange={e => updateManualRow(idx, 'regNumber', e.target.value)}
                                   />
+                                  <button 
+                                    className="btn btn-light border-start"
+                                    onClick={() => handleScanClick(idx)}
+                                    title="Scan ID Card"
+                                  >
+                                    <ScanLine size={18} className="text-dark" />
+                                  </button>
                                 </div>
                               </div>
                             </div>
@@ -288,7 +310,7 @@ export default function Students() {
                       ))}
 
                       <button 
-                        className="btn btn-outline-primary w-100 py-3 rounded-4 border-dashed fw-bold mt-2" 
+                        className="btn btn-outline-primary w-100 py-3 rounded-4 border-dashed fw-bold mt-2"
                         onClick={addManualRow}
                         style={{ borderStyle: 'dashed', borderWidth: '2px' }}
                       >
@@ -297,7 +319,7 @@ export default function Students() {
                     </div>
                   )}
 
-                  {/* Tab Content: Paste & Preview (Redesigned) */}
+                  {/* Tab Content: Paste & Preview */}
                   {activeTab === 'paste' && !showMapper && (
                     <div className="d-flex flex-column gap-4 h-100">
                       <div className="card border-0 shadow-sm rounded-4">
@@ -307,14 +329,14 @@ export default function Students() {
                             <button className="btn btn-link text-muted p-0 small text-decoration-none" onClick={() => setPasteData('')}>Clear Editor</button>
                           </div>
                           <textarea 
-                            className="form-control border-0 bg-light p-3 rounded-3 font-monospace" 
+                            className="form-control border-0 bg-light p-3 rounded-3 font-monospace"
                             style={{ minHeight: '300px', fontSize: '14px', lineHeight: '1.6' }}
-                            placeholder="Paste your raw student list here (WhatsApp, PDF, Word, etc.)\n\nExample:\n1. John Doe - 2021123456\n2. Jane Smith [2021987654]\n3. 2022101010  Musa Ali"
+                            placeholder="Paste your raw student list here (WhatsApp, PDF, Word, etc.)&#10;&#10;Example:&#10;1. John Doe - 2021123456&#10;2. Jane Smith [2021987654]&#10;3. 2022101010  Musa Ali"
                             value={pasteData}
                             onChange={e => setPasteData(e.target.value)}
                           />
                           <button 
-                            className="btn btn-primary w-100 py-3 mt-4 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" 
+                            className="btn btn-primary w-100 py-3 mt-4 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2"
                             onClick={handleParse} 
                             disabled={!pasteData.trim()}
                           >
@@ -385,6 +407,14 @@ export default function Students() {
           </div>
           <div className="modal-backdrop fade show"></div>
         </>
+      )}
+
+      {/* Barcode Scanner Overlay */}
+      {showScanner && (
+        <BarcodeScanner 
+          onScanSuccess={handleScanSuccess} 
+          onClose={() => setShowScanner(false)} 
+        />
       )}
     </div>
   );
