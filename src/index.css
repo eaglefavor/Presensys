@@ -1,99 +1,104 @@
 :root {
-  --primary-color: #0d6efd;
-  --bg-color: #fcfcfd;
+  --primary-blue: #006994; /* Sea Blue */
+  --soft-white: #ffffff;
+  --bg-gray: #f0f2f5; /* Facebook-like light gray bg */
+  --border-color: #e4e6eb;
+  --text-dark: #1c1e21;
+  --text-muted: #65676b;
 }
 
 body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
-  background-color: #f0f2f5; /* Desktop backdrop color */
+  background-color: var(--bg-gray);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text-dark);
   margin: 0;
   padding: 0;
 }
 
-/* Allow selection in specific inputs */
-input, textarea, .selectable {
+/* App Container */
+.app-container {
+  background-color: var(--soft-white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inputs & Forms (Simplistic & Professional) */
+input, textarea {
   user-select: text;
 }
 
-/* App Container (The Frame) */
-.app-container {
-  background-color: var(--bg-color);
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none; /* Firefox */
-}
-.app-container::-webkit-scrollbar {
-  display: none; /* Chrome/Safari */
+.modern-input-unified {
+  background: var(--bg-gray) !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-color) !important;
+  transition: all 0.2s ease;
 }
 
-/* Modern Card Styling */
+.modern-input-unified:focus-within {
+  border-color: var(--primary-blue) !important;
+  background: var(--soft-white) !important;
+  box-shadow: 0 0 0 2px rgba(0, 105, 148, 0.1) !important;
+}
+
+/* Social Media Style Cards */
 .card {
-  border-radius: 16px;
-  border: 1px solid rgba(0,0,0,0.05);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.02);
-  transition: transform 0.1s ease;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s;
 }
 
 .card:active {
-  transform: scale(0.98);
+  background-color: #f5f6f7;
 }
 
-/* List Item Styling */
-.list-group-item {
-  border-left: none;
-  border-right: none;
-  padding: 1rem;
-}
-
-/* Buttons */
-.btn {
-  border-radius: 12px;
-  padding: 0.6rem 1.2rem;
+/* Navigation Drawer Elements */
+.nav-item-premium {
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: var(--text-muted);
   font-weight: 600;
-  transition: all 0.2s;
 }
 
+.nav-item-premium.active {
+  color: var(--primary-blue);
+  background-color: rgba(0, 105, 148, 0.05);
+}
+
+/* Floating Action Button Style */
 .btn-primary {
-  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.2);
+  background-color: var(--primary-blue);
+  border: none;
+  font-weight: 700;
+  border-radius: 8px;
 }
 
-/* Page Transitions (simulated) */
-.app-content {
-  animation: fadeIn 0.3s ease-out;
+.btn-primary:hover {
+  background-color: #005a84;
 }
 
-@keyframes fadeIn {
+/* Animations */
+.animate-in {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* Floating Action Button (FAB) Simulation */
-.fab-style {
-  position: fixed;
-  bottom: 85px; /* Above bottom nav */
-  right: 20px;
-  z-index: 1020;
-}
-
+/* Desktop Framing */
 @media (min-width: 501px) {
-  .fab-style {
-    position: absolute;
-    bottom: 85px;
-    right: 20px;
+  .app-container {
+    margin: 20px auto;
+    max-width: 500px;
+    height: calc(100vh - 40px);
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    position: relative;
   }
-}
-
-/* Form Controls */
-.form-control {
-  border-radius: 10px;
-  padding: 0.75rem;
-  border-color: #eee;
-  background-color: #f8f9fa;
-}
-
-.form-control:focus {
-  background-color: #fff;
-  box-shadow: 0 0 0 4px rgba(13, 110, 253, 0.1);
 }

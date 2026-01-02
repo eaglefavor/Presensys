@@ -89,13 +89,13 @@ const Layout: React.FC = () => {
               </button>
             )}
             
-            <h1 className="h6 mb-0 fw-black text-primary letter-spacing-n1">PRESENSYS</h1>
+            <h1 className="h6 mb-0 fw-black text-primary letter-spacing-n1" style={{ color: 'var(--primary-blue) !important' }}>PRESENSYS</h1>
           </div>
           
           <div className="d-flex align-items-center gap-2">
             <div className="sync-indicator me-1">
               {syncStatus === 'syncing' && <RefreshCw size={18} className="text-primary spin" />}
-              {syncStatus === 'synced' && <CloudSync size={18} className="text-success" />}
+              {syncStatus === 'synced' && <CloudSync size={18} style={{ color: 'var(--primary-blue)' }} />}
               {syncStatus === 'offline' && <CloudOff size={18} className="text-muted" />}
               {syncStatus === 'error' && <CloudOff size={18} className="text-danger" />}
             </div>
@@ -103,13 +103,13 @@ const Layout: React.FC = () => {
             <div className="active-sem-pill">
               {activeSemester ? (
                 <Link to="/semesters" className="text-decoration-none">
-                  <span className="badge rounded-pill bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fw-bold xx-small">
+                  <span className="badge rounded-pill bg-light text-primary border px-3 py-2 fw-bold xx-small" style={{ color: 'var(--primary-blue)', borderColor: 'var(--border-color)' }}>
                     {activeSemester.name.split(' ')[0]}
                   </span>
                 </Link>
               ) : (
                 <Link to="/semesters" className="text-decoration-none">
-                  <span className="badge rounded-pill bg-warning-subtle text-warning-emphasis px-3 py-2 fw-bold xx-small">Set Session</span>
+                  <span className="badge rounded-pill bg-light text-muted border px-3 py-2 fw-bold xx-small">Set Session</span>
                 </Link>
               )}
             </div>
@@ -140,20 +140,17 @@ const Layout: React.FC = () => {
             >
               <div className="d-flex flex-column h-100">
                 {/* Menu Header */}
-                <div className="p-4 bg-primary text-white position-relative overflow-hidden">
-                  <div className="position-absolute top-0 end-0 p-3 opacity-10">
-                    <ShieldCheck size={100} />
-                  </div>
+                <div className="p-4 bg-white border-bottom position-relative overflow-hidden">
                   <div className="d-flex justify-content-between align-items-start position-relative z-10">
-                    <div className="brand-icon-small bg-white bg-opacity-20 rounded-3 p-2 mb-3">
-                      <ShieldCheck size={28} className="text-warning" />
+                    <div className="brand-icon-small bg-primary bg-opacity-10 rounded-3 p-2 mb-3">
+                      <ShieldCheck size={28} style={{ color: 'var(--primary-blue)' }} />
                     </div>
-                    <button className="btn btn-white-glass rounded-circle p-1" onClick={() => setIsMenuOpen(false)}>
+                    <button className="btn btn-light rounded-circle p-1" onClick={() => setIsMenuOpen(false)}>
                       <X size={20} />
                     </button>
                   </div>
-                  <h5 className="fw-black mb-0 letter-spacing-n1">PRESENSYS</h5>
-                  <p className="xx-small fw-bold text-uppercase tracking-widest opacity-75 mb-0">Management Portal</p>
+                  <h5 className="fw-black mb-0 letter-spacing-n1 text-primary" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h5>
+                  <p className="xx-small fw-bold text-uppercase tracking-widest text-muted opacity-75 mb-0">Management Portal</p>
                 </div>
 
                 {/* User Profile Summary */}
