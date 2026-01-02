@@ -1,52 +1,41 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X } from 'lucide-react';
+import { Plus, ClipboardPaste, Trash2, Search, FileText, Upload, X, AlertTriangle } from 'lucide-react';
 import { db, type Student } from '../db/db';
+import FileMapper from '../components/FileMapper';
 
 export default function Students() {
   const students = useLiveQuery(() => db.students.orderBy('name').toArray());
   const [searchTerm, setSearchTerm] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   
-  // Import Modes: 'manual' | 'paste' | 'csv'
-  const [activeTab, setActiveTab] = useState<'manual' | 'paste' | 'csv'>('manual');
+  // Import Modes: 'manual' | 'paste' | 'file'
+  const [activeTab, setActiveTab] = useState<'manual' | 'paste' | 'file'>('manual');
   
   // Data States
   const [pasteData, setPasteData] = useState('');
   const [parsedStudents, setParsedStudents] = useState<Student[]>([]);
   const [manualRows, setManualRows] = useState<{name: string, regNumber: string}[]>([{name: '', regNumber: ''}, {name: '', regNumber: ''}, {name: '', regNumber: ''}]);
+  
+  // File Upload State
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [showMapper, setShowMapper] = useState(false);
 
-  // --- CSV Logic ---
+  // --- File Upload Logic ---
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (file) {
+      setUploadedFile(file);
+      setShowMapper(true);
+    }
+  };
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      const lines = text.split('\n');
-      const results: Student[] = [];
-      
-      // Simple CSV parser: assumes "Name, RegNumber" or "RegNumber, Name"
-      lines.forEach(line => {
-        if (!line.trim()) return;
-        const parts = line.split(',');
-        if (parts.length >= 2) {
-          // Check which part looks like a reg number (digits)
-          const p1 = parts[0].trim();
-          const p2 = parts[1].trim();
-          const regRegex = /\d{8,}/;
-          
-          if (regRegex.test(p2)) {
-             results.push({ name: p1, regNumber: p2 });
-          } else if (regRegex.test(p1)) {
-             results.push({ name: p2, regNumber: p1 });
-          }
-        }
-      });
-      setParsedStudents(results);
-    };
-    reader.readAsText(file);
+  const handleMapperComplete = (data: { name: string; regNumber: string }[]) => {
+    setParsedStudents(data);
+    setShowMapper(false);
+    setUploadedFile(null);
+    // Switch to preview view (reuse the paste tab view effectively)
+    setActiveTab('paste'); 
   };
 
   // --- Manual Logic ---
@@ -68,21 +57,29 @@ export default function Students() {
     }
   };
 
-  // --- Smart Paste Logic ---
+  // --- Smart Paste Logic V2 (Robust) ---
   const handleParse = () => {
-    const regNoRegex = /\b\d{10}\b/g;
-    const matches = Array.from(pasteData.matchAll(regNoRegex));
     const results: Student[] = [];
     const lines = pasteData.split('\n');
 
-    matches.forEach(match => {
-      const regNumber = match[0];
-      const line = lines.find(l => l.includes(regNumber)) || '';
-      const name = line.replace(regNumber, '').replace(/[,,\t\d]/g, '').trim();
-      if (name.length > 2) {
-        results.push({ regNumber, name });
-      } else {
-        results.push({ regNumber, name: 'Unknown Student' });
+    // V2 Regex: Looks for 8+ digits (Reg No) anywhere in the line
+    // Capture groups: (Prefix)(RegNo)(Suffix) or (RegNo)(Suffix)
+    const regNoRegex = /(\d{8,})/; // Corrected: escaped backslash for regex
+
+    lines.forEach(line => {
+      if (!line.trim()) return;
+      
+      const match = line.match(regNoRegex);
+      if (match) {
+        const regNumber = match[0];
+        // Remove the reg number and common separators from the line to get the name
+        let name = line.replace(regNumber, '').replace(/[,,\t]/g, '').trim(); // Corrected: escaped backslash for regex
+        // Remove leading/trailing non-letters (like "1." or "-")
+        name = name.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+        
+        if (name.length > 2) {
+          results.push({ regNumber, name });
+        }
       }
     });
     setParsedStudents(results);
@@ -104,12 +101,21 @@ export default function Students() {
         return;
       }
 
+      let added = 0;
+      let updated = 0;
+
       for (const s of dataToSave) {
+        // Sanitize Reg Number (remove spaces)
+        s.regNumber = s.regNumber.replace(/\s/g, ''); // Corrected: escaped backslash for regex
+        
         const existing = await db.students.where('regNumber').equals(s.regNumber).first();
         if (!existing) {
           await db.students.add(s);
+          added++;
         } else {
+          // Optional: Only update if name is different or empty
           await db.students.update(existing.id!, { name: s.name });
+          updated++;
         }
       }
       
@@ -117,7 +123,7 @@ export default function Students() {
       setPasteData('');
       setParsedStudents([]);
       setManualRows([{name: '', regNumber: ''}, {name: '', regNumber: ''}, {name: '', regNumber: ''}]);
-      alert(`${dataToSave.length} students saved successfully!`);
+      alert(`Import Complete!\nAdded: ${added}\nUpdated: ${updated}`);
     } catch (error) {
       console.error(error);
       alert('Save failed. Check console.');
@@ -147,7 +153,7 @@ export default function Students() {
               <span className="input-group-text border-0 bg-transparent"><Search size={18} className="text-muted" /></span>
               <input 
                 type="text" 
-                className="form-control border-0 bg-transparent"
+                className="form-control border-0 bg-transparent" 
                 placeholder="Search by name or reg number..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -189,7 +195,7 @@ export default function Students() {
         </div>
       </div>
 
-      {/* Unified Add/Import Modal */} 
+      {/* Unified Add/Import Modal */}
       {showImportModal && (
         <>
           <div className="modal fade show" style={{ display: 'block', backgroundColor: 'rgba(0,0,0,0.5)' }}>
@@ -200,28 +206,31 @@ export default function Students() {
                     <button 
                       className={`nav-link flex-fill ${activeTab === 'manual' ? 'active shadow-sm fw-bold' : 'text-muted'}`}
                       onClick={() => setActiveTab('manual')}
+                      disabled={showMapper}
                     >
                       <Plus size={16} className="me-2" /> Manual
                     </button>
                     <button 
                       className={`nav-link flex-fill ${activeTab === 'paste' ? 'active shadow-sm fw-bold' : 'text-muted'}`}
                       onClick={() => setActiveTab('paste')}
+                      disabled={showMapper}
                     >
                       <ClipboardPaste size={16} className="me-2" /> Smart Paste
                     </button>
                     <button 
-                      className={`nav-link flex-fill ${activeTab === 'csv' ? 'active shadow-sm fw-bold' : 'text-muted'}`}
-                      onClick={() => setActiveTab('csv')}
+                      className={`nav-link flex-fill ${activeTab === 'file' ? 'active shadow-sm fw-bold' : 'text-muted'}`}
+                      onClick={() => setActiveTab('file')}
+                      disabled={showMapper}
                     >
-                      <FileText size={16} className="me-2" /> CSV Import
+                      <Upload size={16} className="me-2" /> Excel / CSV
                     </button>
                   </div>
                   <button type="button" className="btn-close ms-2" onClick={() => setShowImportModal(false)}></button>
                 </div>
 
                 <div className="modal-body p-4 bg-light">
-                  {/* Tab Content: Manual */} 
-                  {activeTab === 'manual' && (
+                  {/* Tab Content: Manual */}
+                  {activeTab === 'manual' && !showMapper && (
                     <div className="card border-0 shadow-sm rounded-4">
                       <div className="card-body">
                         <div className="table-responsive mb-3">
@@ -265,16 +274,16 @@ export default function Students() {
                     </div>
                   )}
 
-                  {/* Tab Content: Paste */} 
-                  {activeTab === 'paste' && (
+                  {/* Tab Content: Paste & Preview */}
+                  {activeTab === 'paste' && !showMapper && (
                     <div className="row h-100">
                       <div className="col-lg-5 mb-3 mb-lg-0">
                         <div className="card border-0 shadow-sm rounded-4 h-100">
                           <div className="card-body d-flex flex-column">
                             <label className="fw-bold mb-2">Paste Text</label>
                             <textarea 
-                              className="form-control bg-light border-0 flex-grow-1 font-monospace small" 
-                              placeholder="Paste names and reg numbers here..."
+                              className="form-control bg-light border-0 flex-grow-1 font-monospace small"
+                              placeholder="Paste names and reg numbers here...\nExamples:\nJohn Doe 2021123456\n2021987654 - Jane Smith"
                               value={pasteData}
                               onChange={e => setPasteData(e.target.value)}
                             />
@@ -285,46 +294,60 @@ export default function Students() {
                         </div>
                       </div>
                       <div className="col-lg-7">
-                        <PreviewTable data={parsedStudents} setData={setParsedStudents} />
+                        <PreviewTable data={parsedStudents} setData={setParsedStudents} existingStudents={students || []} />
                       </div>
                     </div>
                   )}
 
-                  {/* Tab Content: CSV */} 
-                  {activeTab === 'csv' && (
+                  {/* Tab Content: File Upload */}
+                  {activeTab === 'file' && !showMapper && (
                     <div className="row h-100">
-                      <div className="col-lg-5 mb-3 mb-lg-0">
+                      <div className="col-lg-12">
                         <div className="card border-0 shadow-sm rounded-4 h-100">
                           <div className="card-body text-center d-flex flex-column justify-content-center align-items-center p-5">
-                            <div className="bg-primary-subtle p-4 rounded-circle mb-3 text-primary">
-                              <Upload size={32} />
+                            <div className="bg-success-subtle p-4 rounded-circle mb-3 text-success">
+                              <FileText size={48} />
                             </div>
-                            <h5 className="fw-bold">Upload CSV File</h5>
-                            <p className="text-muted small mb-4">
-                              File should contain columns for <strong>Name</strong> and <strong>Reg Number</strong>.
+                            <h4 className="fw-bold">Upload Class List</h4>
+                            <p className="text-muted mb-4" style={{ maxWidth: '400px' }}>
+                              Supports <strong>Excel (.xlsx, .xls)</strong> and <strong>CSV</strong> files. We'll help you map the columns instantly.
                             </p>
-                            <input 
-                              type="file" 
-                              accept=".csv"
-                              className="form-control"
-                              onChange={handleFileUpload}
-                            />
+                            <div className="position-relative">
+                              <input 
+                                type="file" 
+                                accept=".csv, .xlsx, .xls"
+                                className="form-control form-control-lg opacity-0 position-absolute top-0 start-0 w-100 h-100"
+                                style={{ cursor: 'pointer', zIndex: 10 }}
+                                onChange={handleFileUpload}
+                              />
+                              <button className="btn btn-primary btn-lg px-5 rounded-pill shadow-sm">
+                                Choose File
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
-                      <div className="col-lg-7">
-                        <PreviewTable data={parsedStudents} setData={setParsedStudents} />
-                      </div>
                     </div>
+                  )}
+
+                  {/* File Mapper View */}
+                  {showMapper && uploadedFile && (
+                    <FileMapper 
+                      file={uploadedFile} 
+                      onComplete={handleMapperComplete} 
+                      onCancel={() => { setShowMapper(false); setUploadedFile(null); }} 
+                    />
                   )}
                 </div>
 
-                <div className="modal-footer border-top-0">
-                  <button type="button" className="btn btn-link text-muted text-decoration-none" onClick={() => setShowImportModal(false)}>Cancel</button>
-                  <button type="button" className="btn btn-success px-5 rounded-pill shadow-sm fw-bold" onClick={handleSave}>
-                    Save to Database
-                  </button>
-                </div>
+                {!showMapper && (
+                  <div className="modal-footer border-top-0">
+                    <button type="button" className="btn btn-link text-muted text-decoration-none" onClick={() => setShowImportModal(false)}>Cancel</button>
+                    <button type="button" className="btn btn-success px-5 rounded-pill shadow-sm fw-bold" onClick={handleSave}>
+                      Save to Database
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -336,11 +359,12 @@ export default function Students() {
 }
 
 // Helper Component for Preview Table
-function PreviewTable({ data, setData }: { data: Student[], setData: (d: Student[]) => void }) {
+function PreviewTable({ data, setData, existingStudents }: { data: Student[], setData: (d: Student[]) => void, existingStudents: Student[] }) {
   return (
     <div className="card border-0 shadow-sm rounded-4 h-100">
-      <div className="card-header bg-white border-bottom-0 py-3">
+      <div className="card-header bg-white border-bottom-0 py-3 d-flex justify-content-between align-items-center">
         <h6 className="fw-bold mb-0">Preview Data ({data.length})</h6>
+        <button className="btn btn-link text-danger p-0 small text-decoration-none" onClick={() => setData([])}>Clear All</button>
       </div>
       <div className="table-responsive flex-grow-1" style={{ maxHeight: '400px' }}>
         <table className="table table-hover align-middle mb-0">
@@ -348,29 +372,54 @@ function PreviewTable({ data, setData }: { data: Student[], setData: (d: Student
             <tr>
               <th>Name</th>
               <th>Reg Number</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
-            {data.map((s, idx) => (
-              <tr key={idx}>
-                <td>
-                  <input 
-                    type="text" className="form-control form-control-sm border-0 bg-transparent"
-                    value={s.name}
-                    onChange={e => {
-                      const newData = [...data];
-                      newData[idx].name = e.target.value;
-                      setData(newData);
-                    }}
-                  />
-                </td>
-                <td>{s.regNumber}</td>
-              </tr>
-            ))}
+            {data.map((s, idx) => {
+              // Check for duplicate in DB
+              const isDuplicate = existingStudents.some(ex => ex.regNumber === s.regNumber.replace(/\s/g, '')); // Corrected: escaped backslash for regex
+              
+              return (
+                <tr key={idx} className={isDuplicate ? 'table-warning' : ''}>
+                  <td>
+                    <input 
+                      type="text" className="form-control form-control-sm border-0 bg-transparent"
+                      value={s.name}
+                      onChange={e => {
+                        const newData = [...data];
+                        newData[idx].name = e.target.value;
+                        setData(newData);
+                      }}
+                    />
+                  </td>
+                  <td>
+                    <input 
+                       type="text" className="form-control form-control-sm border-0 bg-transparent font-monospace"
+                       value={s.regNumber}
+                       onChange={e => {
+                         const newData = [...data];
+                         newData[idx].regNumber = e.target.value;
+                         setData(newData);
+                       }}
+                    />
+                  </td>
+                  <td>
+                    {isDuplicate ? (
+                      <span className="badge bg-warning text-dark d-flex align-items-center gap-1">
+                        <AlertTriangle size={10} /> Update
+                      </span>
+                    ) : (
+                      <span className="badge bg-success-subtle text-success border border-success-subtle">New</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
             {data.length === 0 && (
               <tr>
-                <td colSpan={2} className="text-center py-5 text-muted small">
-                  No data parsed yet.
+                <td colSpan={3} className="text-center py-5 text-muted small">
+                  No data parsed yet. Paste text or upload a file.
                 </td>
               </tr>
             )}
