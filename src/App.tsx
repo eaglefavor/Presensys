@@ -24,7 +24,7 @@ function App() {
 
   // Automatically sync active semester from DB to Store whenever it changes
   const activeSemesterFromDB = useLiveQuery(
-    () => db.semesters.where('isActive').equals(true as any).first()
+    () => db.semesters.filter(s => s.isActive).first()
   );
 
   useEffect(() => {
