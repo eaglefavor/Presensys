@@ -7,7 +7,8 @@ export interface Semester {
   endDate: string;
   isActive: boolean;
   isArchived: boolean;
-  synced?: number; // 0 for no, 1 for yes
+  synced?: number;
+  userId?: string;
 }
 
 export interface Student {
@@ -17,6 +18,7 @@ export interface Student {
   email?: string;
   phone?: string;
   synced?: number;
+  userId?: string;
 }
 
 export interface Course {
@@ -25,6 +27,7 @@ export interface Course {
   title: string;
   semesterId: number;
   synced?: number;
+  userId?: string;
 }
 
 export interface Enrollment {
@@ -32,6 +35,7 @@ export interface Enrollment {
   studentId: number;
   courseId: number;
   synced?: number;
+  userId?: string;
 }
 
 export interface AttendanceSession {
@@ -40,6 +44,7 @@ export interface AttendanceSession {
   date: string;
   title: string;
   synced?: number;
+  userId?: string;
 }
 
 export interface AttendanceRecord {
@@ -49,6 +54,7 @@ export interface AttendanceRecord {
   status: 'present' | 'absent' | 'excused';
   timestamp: number;
   synced?: number;
+  userId?: string;
 }
 
 export class PresensysDB extends Dexie {
@@ -61,13 +67,13 @@ export class PresensysDB extends Dexie {
 
   constructor() {
     super('PresensysDB');
-    this.version(4).stores({
-      semesters: '++id, name, startDate, synced',
-      students: '++id, &regNumber, name, synced',
-      courses: '++id, code, semesterId, synced',
-      enrollments: '++id, studentId, courseId, [studentId+courseId], synced',
-      attendanceSessions: '++id, courseId, date, synced',
-      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced'
+    this.version(5).stores({
+      semesters: '++id, name, startDate, synced, userId',
+      students: '++id, &regNumber, name, synced, userId',
+      courses: '++id, code, semesterId, synced, userId',
+      enrollments: '++id, studentId, courseId, [studentId+courseId], synced, userId',
+      attendanceSessions: '++id, courseId, date, synced, userId',
+      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced, userId'
     });
   }
 }

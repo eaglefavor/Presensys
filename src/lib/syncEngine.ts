@@ -1,17 +1,16 @@
-import { db, type Student } from '../db/db';
+import { db } from '../db/db';
 import { supabase } from './supabase';
 
 export const syncEngine = {
   async syncAll() {
     if (!navigator.onLine) return { success: false, message: 'Offline' };
 
-    try {
-      // 1. Push Local Changes to Cloud
-      await this.pushToCloud();
-      
-      // 2. Pull Cloud Data to Local (if needed)
-      await this.pullFromCloud();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, message: 'No User' };
 
+    try {
+      await this.pushToCloud(user.id);
+      await this.pullFromCloud(user.id);
       return { success: true };
     } catch (error) {
       console.error('Sync failed:', error);
@@ -19,230 +18,116 @@ export const syncEngine = {
     }
   },
 
-  async pushToCloud() {
-    await this.syncStudents();
-    await this.syncSemesters();
-    await this.syncCourses();
-    await this.syncEnrollments();
-    await this.syncSessions();
-    await this.syncRecords();
+  async pushToCloud(userId: string) {
+    await this.pushStudents(userId);
+    await this.pushSemesters(userId);
+    await this.pushCourses(userId);
+    await this.pushEnrollments(userId);
+    await this.pushSessions(userId);
+    await this.pushRecords(userId);
   },
 
-  async pullFromCloud() {
-    // Only pull if we are online
-    if (!navigator.onLine) return;
-
-    // A. Pull Students
-    const { data: students, error: sErr } = await supabase.from('students').select('*');
-    if (!sErr && students) {
-      await db.transaction('rw', db.students, async () => {
-        for (const s of students) {
-          const exists = await db.students.where('regNumber').equals(s.reg_number).first();
-          if (!exists) {
-            await db.students.add({
-              regNumber: s.reg_number,
-              name: s.name,
-              email: s.email,
-              phone: s.phone,
-              synced: 1
-            });
-          }
-        }
-      });
+  async pullFromCloud(userId: string) {
+    // 1. Students
+    const { data: students } = await supabase.from('students').select('*').eq('user_id', userId);
+    if (students) {
+      for (const s of students) {
+        const exists = await db.students.where('regNumber').equals(s.reg_number).first();
+        if (!exists) await db.students.add({ regNumber: s.reg_number, name: s.name, email: s.email, phone: s.phone, synced: 1, userId });
+      }
     }
 
-    // B. Pull Semesters
-    const { data: semesters, error: semErr } = await supabase.from('semesters').select('*');
-    if (!semErr && semesters) {
-      await db.transaction('rw', db.semesters, async () => {
-        for (const s of semesters) {
-          const exists = await db.semesters.get(s.id);
-          if (!exists) {
-            await db.semesters.add({
-              id: s.id,
-              name: s.name,
-              startDate: s.start_date,
-              endDate: s.end_date,
-              isActive: s.is_active,
-              isArchived: s.is_archived,
-              synced: 1
-            });
-          }
-        }
-      });
+    // 2. Semesters
+    const { data: semesters } = await supabase.from('semesters').select('*').eq('user_id', userId);
+    if (semesters) {
+      for (const s of semesters) {
+        const exists = await db.semesters.get(s.id);
+        if (!exists) await db.semesters.add({ id: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date, isActive: s.is_active, isArchived: s.is_archived, synced: 1, userId });
+      }
     }
 
-    // C. Pull Courses
-    const { data: courses, error: cErr } = await supabase.from('courses').select('*');
-    if (!cErr && courses) {
-      await db.transaction('rw', db.courses, async () => {
-        for (const c of courses) {
-          const exists = await db.courses.get(c.id);
-          if (!exists) {
-            await db.courses.add({
-              id: c.id,
-              semesterId: c.semester_id,
-              code: c.code,
-              title: c.title,
-              synced: 1
-            });
-          }
-        }
-      });
+    // 3. Courses
+    const { data: courses } = await supabase.from('courses').select('*').eq('user_id', userId);
+    if (courses) {
+      for (const c of courses) {
+        const exists = await db.courses.get(c.id);
+        if (!exists) await db.courses.add({ id: c.id, semesterId: c.semester_id, code: c.code, title: c.title, synced: 1, userId });
+      }
     }
 
-    // D. Pull Enrollments
-    const { data: enrollments, error: eErr } = await supabase.from('enrollments').select('*');
-    if (!eErr && enrollments) {
-      await db.transaction('rw', db.enrollments, async () => {
-        for (const e of enrollments) {
-          const exists = await db.enrollments.get(e.id);
-          if (!exists) {
-            await db.enrollments.add({
-              id: e.id,
-              studentId: e.student_id,
-              courseId: e.course_id,
-              synced: 1
-            });
-          }
-        }
-      });
+    // 4. Enrollments
+    const { data: enrollments } = await supabase.from('enrollments').select('*').eq('user_id', userId);
+    if (enrollments) {
+      for (const e of enrollments) {
+        const exists = await db.enrollments.get(e.id);
+        if (!exists) await db.enrollments.add({ id: e.id, studentId: e.student_id, courseId: e.course_id, synced: 1, userId });
+      }
     }
 
-    // E. Pull Sessions
-    const { data: sessions, error: sessErr } = await supabase.from('attendance_sessions').select('*');
-    if (!sessErr && sessions) {
-      await db.transaction('rw', db.attendanceSessions, async () => {
-        for (const s of sessions) {
-          const exists = await db.attendanceSessions.get(s.id);
-          if (!exists) {
-            await db.attendanceSessions.add({
-              id: s.id,
-              courseId: s.course_id,
-              date: s.date,
-              title: s.title,
-              synced: 1
-            });
-          }
-        }
-      });
+    // 5. Sessions
+    const { data: sessions } = await supabase.from('attendance_sessions').select('*').eq('user_id', userId);
+    if (sessions) {
+      for (const s of sessions) {
+        const exists = await db.attendanceSessions.get(s.id);
+        if (!exists) await db.attendanceSessions.add({ id: s.id, courseId: s.course_id, date: s.date, title: s.title, synced: 1, userId });
+      }
     }
 
-    // F. Pull Records
-    const { data: records, error: rErr } = await supabase.from('attendance_records').select('*');
-    if (!rErr && records) {
-      await db.transaction('rw', db.attendanceRecords, async () => {
-        for (const r of records) {
-          const exists = await db.attendanceRecords.get(r.id);
-          if (!exists) {
-            await db.attendanceRecords.add({
-              id: r.id,
-              sessionId: r.session_id,
-              studentId: r.student_id,
-              status: r.status,
-              timestamp: r.marked_at,
-              synced: 1
-            });
-          }
-        }
-      });
+    // 6. Records
+    const { data: records } = await supabase.from('attendance_records').select('*').eq('user_id', userId);
+    if (records) {
+      for (const r of records) {
+        const exists = await db.attendanceRecords.get(r.id);
+        if (!exists) await db.attendanceRecords.add({ id: r.id, sessionId: r.session_id, studentId: r.student_id, status: r.status, timestamp: r.marked_at, synced: 1, userId });
+      }
     }
   },
 
-  // --- Push Functions (Existing) ---
-  async syncStudents() {
-    const unsynced = await db.students.filter((s: Student) => s.synced !== 1).toArray();
+  async pushStudents(userId: string) {
+    const unsynced = await db.students.filter((s: any) => s.synced !== 1).toArray();
     if (unsynced.length === 0) return;
-
-    const toSync = unsynced.map((s: Student) => ({
-      reg_number: s.regNumber,
-      name: s.name,
-      email: s.email,
-      phone: s.phone
-    }));
-
+    const toSync = unsynced.map(s => ({ reg_number: s.regNumber, name: s.name, email: s.email, phone: s.phone, user_id: userId }));
     const { error } = await supabase.from('students').upsert(toSync, { onConflict: 'reg_number' });
-    if (!error) {
-      const ids = unsynced.map((s: Student) => s.id!);
-      await db.students.bulkUpdate(ids.map((id: number) => ({ key: id, changes: { synced: 1 } })));
-    }
+    if (!error) await db.students.bulkUpdate(unsynced.map(s => ({ key: s.id!, changes: { synced: 1, userId } })));
   },
 
-  async syncSemesters() {
-    const unsynced = await db.semesters.filter(s => s.synced !== 1).toArray();
-    if (unsynced.length === 0) return;
-
+  async pushSemesters(userId: string) {
+    const unsynced = await db.semesters.filter((s: any) => s.synced !== 1).toArray();
     for (const sem of unsynced) {
-      const { error } = await supabase.from("semesters").upsert({
-        id: sem.id, // Keep ID consistent
-        name: sem.name,
-        start_date: sem.startDate,
-        end_date: sem.endDate,
-        is_active: sem.isActive,
-        is_archived: sem.isArchived
-      }).select();
-
-      if (!error) await db.semesters.update(sem.id!, { synced: 1 });
+      const { error } = await supabase.from('semesters').upsert({ id: sem.id, name: sem.name, start_date: sem.startDate, end_date: sem.endDate, is_active: sem.isActive, is_archived: sem.isArchived, user_id: userId });
+      if (!error) await db.semesters.update(sem.id!, { synced: 1, userId });
     }
   },
 
-  async syncCourses() {
-    const unsynced = await db.courses.filter(c => c.synced !== 1).toArray();
-    if (unsynced.length === 0) return;
-
-    for (const course of unsynced) {
-      const { error } = await supabase.from('courses').upsert({
-        id: course.id,
-        semester_id: course.semesterId,
-        code: course.code,
-        title: course.title
-      });
-      if (!error) await db.courses.update(course.id!, { synced: 1 });
+  async pushCourses(userId: string) {
+    const unsynced = await db.courses.filter((c: any) => c.synced !== 1).toArray();
+    for (const c of unsynced) {
+      const { error } = await supabase.from('courses').upsert({ id: c.id, semester_id: c.semesterId, code: c.code, title: c.title, user_id: userId });
+      if (!error) await db.courses.update(c.id!, { synced: 1, userId });
     }
   },
 
-  async syncEnrollments() {
-    const unsynced = await db.enrollments.filter(e => e.synced !== 1).toArray();
-    if (unsynced.length === 0) return;
-
-    for (const enr of unsynced) {
-      const { error } = await supabase.from('enrollments').upsert({
-        id: enr.id,
-        student_id: enr.studentId,
-        course_id: enr.courseId
-      });
-      if (!error) await db.enrollments.update(enr.id!, { synced: 1 });
+  async pushEnrollments(userId: string) {
+    const unsynced = await db.enrollments.filter((e: any) => e.synced !== 1).toArray();
+    for (const e of unsynced) {
+      const { error } = await supabase.from('enrollments').upsert({ id: e.id, student_id: e.studentId, course_id: e.courseId, user_id: userId });
+      if (!error) await db.enrollments.update(e.id!, { synced: 1, userId });
     }
   },
 
-  async syncSessions() {
-    const unsynced = await db.attendanceSessions.filter(s => s.synced !== 1).toArray();
-    if (unsynced.length === 0) return;
-
+  async pushSessions(userId: string) {
+    const unsynced = await db.attendanceSessions.filter((s: any) => s.synced !== 1).toArray();
     for (const sess of unsynced) {
-      const { error } = await supabase.from('attendance_sessions').upsert({
-        id: sess.id,
-        course_id: sess.courseId,
-        date: sess.date,
-        title: sess.title
-      });
-      if (!error) await db.attendanceSessions.update(sess.id!, { synced: 1 });
+      const { error } = await supabase.from('attendance_sessions').upsert({ id: sess.id, course_id: sess.courseId, date: sess.date, title: sess.title, user_id: userId });
+      if (!error) await db.attendanceSessions.update(sess.id!, { synced: 1, userId });
     }
   },
 
-  async syncRecords() {
-    const unsynced = await db.attendanceRecords.filter(r => r.synced !== 1).toArray();
-    if (unsynced.length === 0) return;
-
+  async pushRecords(userId: string) {
+    const unsynced = await db.attendanceRecords.filter((r: any) => r.synced !== 1).toArray();
     for (const rec of unsynced) {
-      const { error } = await supabase.from('attendance_records').upsert({
-        id: rec.id,
-        session_id: rec.sessionId,
-        student_id: rec.studentId,
-        status: rec.status,
-        marked_at: rec.timestamp
-      });
-      if (!error) await db.attendanceRecords.update(rec.id!, { synced: 1 });
+      const { error } = await supabase.from('attendance_records').upsert({ id: rec.id, session_id: rec.sessionId, student_id: rec.studentId, status: rec.status, marked_at: rec.timestamp, user_id: userId });
+      if (!error) await db.attendanceRecords.update(rec.id!, { synced: 1, userId });
     }
   }
 };
