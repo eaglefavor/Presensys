@@ -3,9 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Book, Users, Trash2, Search, X, BookOpen } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Courses() {
+  const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
     () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.id!).toArray() : [],
@@ -26,17 +28,17 @@ export default function Courses() {
 
   const handleAddCourse = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeSemester) return;
-    await db.courses.add({ ...newCourse, semesterId: activeSemester.id! });
+    if (!activeSemester || !user) return;
+    await db.courses.add({ ...newCourse, semesterId: activeSemester.id!, userId: user.id, synced: 0 });
     setShowAddModal(false);
     setNewCourse({ code: '', title: '' });
   };
 
   const handleToggleEnroll = async (studentId: number) => {
-    if (!showEnrollModal.courseId) return;
+    if (!showEnrollModal.courseId || !user) return;
     const existing = currentEnrollments?.find(e => e.studentId === studentId);
     if (existing) await db.enrollments.delete(existing.id!);
-    else await db.enrollments.add({ studentId, courseId: showEnrollModal.courseId });
+    else await db.enrollments.add({ studentId, courseId: showEnrollModal.courseId, userId: user.id, synced: 0 });
   };
 
   const handleDeleteCourse = async (id: number) => {

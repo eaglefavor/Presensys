@@ -3,9 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Calendar, ArrowRight, BookOpen, Clock, Globe, LayoutDashboard, ChevronRight } from 'lucide-react';
 import { db, type Semester } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Semesters() {
+  const { user } = useAuthStore();
   const semesters = useLiveQuery(() => db.semesters.orderBy('startDate').reverse().toArray());
   const refreshActiveSemester = useAppStore(state => state.refreshActiveSemester);
   
@@ -26,8 +28,9 @@ export default function Semesters() {
 
   const handleAddSemester = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     if (newSemester.startDate > newSemester.endDate) { alert('Start date cannot be after end date.'); return; }
-    await db.semesters.add({ ...newSemester, isActive: false, isArchived: false, synced: 0 });
+    await db.semesters.add({ ...newSemester, isActive: false, isArchived: false, synced: 0, userId: user.id });
     setShowModal(false);
     setNewSemester({ name: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0] });
   };

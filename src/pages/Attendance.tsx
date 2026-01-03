@@ -3,9 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, CheckCircle, XCircle, HelpCircle, ChevronRight, Calendar, Clock, ArrowLeft, Book } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Attendance() {
+  const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
     () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.id!).toArray() : [],
@@ -36,20 +38,22 @@ export default function Attendance() {
   );
 
   const handleCreateSession = async () => {
-    if (!selectedCourseId) return;
+    if (!selectedCourseId || !user) return;
     const id = await db.attendanceSessions.add({
       courseId: selectedCourseId,
       date: new Date().toISOString().split('T')[0],
-      title: `Session ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+      title: `Session ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+      userId: user.id,
+      synced: 0
     });
     setActiveSessionId(id as number);
   };
 
   const updateRecord = async (studentId: number, status: 'present' | 'absent' | 'excused') => {
-    if (!activeSessionId) return;
+    if (!activeSessionId || !user) return;
     const existing = await db.attendanceRecords.where('[sessionId+studentId]').equals([activeSessionId, studentId]).first();
     if (existing) await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now(), synced: 0 });
-    else await db.attendanceRecords.add({ sessionId: activeSessionId, studentId, status, timestamp: Date.now(), synced: 0 });
+    else await db.attendanceRecords.add({ sessionId: activeSessionId, studentId, status, timestamp: Date.now(), synced: 0, userId: user.id });
     if (window.navigator.vibrate) window.navigator.vibrate(10);
   };
 
