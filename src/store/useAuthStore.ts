@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
-import { type Session, type User } from '@supabase/supabase-js';
+import { db } from '../db/db';
+import type { Session, User } from '@supabase/supabase-js';
 
 interface Profile {
   id: string;
@@ -15,7 +16,7 @@ interface AuthState {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
-  setSession: (session: Session | null) => void;
+  setSession: (session: Session | null) => Promise<void>;
   fetchProfile: () => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -25,6 +26,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   profile: null,
   loading: true,
+  
   setSession: async (session) => {
     set({ session, user: session?.user ?? null });
     
@@ -34,6 +36,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ loading: false, profile: null });
     }
   },
+
   fetchProfile: async () => {
     const { user } = get();
     if (!user) {
@@ -56,8 +59,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ profile: data as Profile, loading: false });
     }
   },
+
   signOut: async () => {
     await supabase.auth.signOut();
+    
+    // CRITICAL: Wipe local data to prevent cross-account leakage and force re-sync on next login
+    await db.transaction('rw', [db.semesters, db.students, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {
+      await db.semesters.clear();
+      await db.students.clear();
+      await db.courses.clear();
+      await db.enrollments.clear();
+      await db.attendanceSessions.clear();
+      await db.attendanceRecords.clear();
+    });
+
     set({ session: null, user: null, profile: null });
+    window.location.href = '/login'; // Force full reload to reset all states
   }
 }));
