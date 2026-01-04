@@ -119,7 +119,16 @@ export default function Courses() {
   };
 
   const handleSaveChanges = async () => {
-    if (!user || !showEnrollModal.courseId) return;
+    console.log('handleSaveChanges: Triggered');
+    if (!user) {
+      console.error('handleSaveChanges: No user found');
+      return;
+    }
+    if (!showEnrollModal.courseId) {
+      console.error('handleSaveChanges: No course ID');
+      return;
+    }
+    
     setIsSaving(true);
     
     try {
@@ -134,13 +143,21 @@ export default function Courses() {
         if (!localEnrollments.has(id)) toRemove.push(id);
       }
 
+      console.log('handleSaveChanges: Diff Calculated', { toAdd: toAdd.length, toRemove: toRemove.length });
+
       await db.transaction('rw', db.enrollments, async () => {
         // Remove Deleted
         if (toRemove.length > 0) {
-           // We need to find the specific enrollment IDs to delete
-           // This is slightly less efficient than bulk delete by ID, but correct for compound keys
            for (const studentId of toRemove) {
-             await db.enrollments.where({ courseId: showEnrollModal.courseId, studentId }).delete();
+             // Find specific enrollment using compound index for speed
+             const existing = await db.enrollments.where('[studentId+courseId]').equals([studentId, showEnrollModal.courseId!]).first();
+             if (existing && existing.id) {
+               await db.enrollments.delete(existing.id);
+             } else {
+                // Fallback: Query by simple index if compound fails for some reason
+                const fallback = await db.enrollments.where({ courseId: showEnrollModal.courseId!, studentId }).first();
+                if (fallback && fallback.id) await db.enrollments.delete(fallback.id);
+             }
            }
         }
         
@@ -155,11 +172,13 @@ export default function Courses() {
         }
       });
 
+      console.log('handleSaveChanges: Transaction Complete');
+
       // Update baseline
       setOriginalEnrollments(new Set(localEnrollments));
       alert('Changes saved successfully!');
     } catch (err) {
-      console.error(err);
+      console.error('handleSaveChanges: Error', err);
       alert('Failed to save changes. Please try again.');
     } finally {
       setIsSaving(false);
