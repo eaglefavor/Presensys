@@ -34,7 +34,10 @@ export default defineConfig({
         ]
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024 // Increase limit to 4MB
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true
       }
     })
   ],

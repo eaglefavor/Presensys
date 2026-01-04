@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Book, Users, Trash2, Search, X, BookOpen, CheckSquare, Square, Edit2, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Plus, Book, Users, Trash2, Search, X, BookOpen, Edit2, ArrowLeft, CheckCircle2, UserMinus, UserPlus, Filter, Circle } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -20,6 +20,7 @@ export default function Courses() {
   
   const [showEnrollModal, setShowEnrollModal] = useState<{show: boolean, courseId?: number, courseName?: string}>({ show: false });
   const [enrollSearch, setEnrollSearch] = useState('');
+  const [enrollFilter, setEnrollFilter] = useState<'all' | 'enrolled' | 'not_enrolled'>('all');
   
   // Pagination
   const itemsPerPage = 5;
@@ -31,13 +32,30 @@ export default function Courses() {
     [showEnrollModal.courseId]
   );
 
-  // Filtered students for enrollment
-  const filteredStudents = allStudents?.filter(s => 
-    s.name.toLowerCase().includes(enrollSearch.toLowerCase()) || 
-    s.regNumber.includes(enrollSearch)
-  ) || [];
+  // Derived lists
+  const enrolledStudentIds = new Set(currentEnrollments?.map(e => e.studentId));
+  
+  const studentsWithStatus = allStudents?.map(s => ({
+    ...s,
+    isEnrolled: enrolledStudentIds.has(s.id!)
+  })) || [];
 
-  const areAllSelected = filteredStudents.length > 0 && filteredStudents.every(s => currentEnrollments?.some(e => e.studentId === s.id));
+  const filteredStudents = studentsWithStatus.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(enrollSearch.toLowerCase()) || s.regNumber.includes(enrollSearch);
+    const matchesFilter = 
+      enrollFilter === 'all' ? true :
+      enrollFilter === 'enrolled' ? s.isEnrolled :
+      !s.isEnrolled; // not_enrolled
+    return matchesSearch && matchesFilter;
+  });
+
+  const stats = {
+    all: allStudents?.length || 0,
+    enrolled: currentEnrollments?.length || 0,
+    notEnrolled: (allStudents?.length || 0) - (currentEnrollments?.length || 0)
+  };
+
+  const areAllVisibleSelected = filteredStudents.length > 0 && filteredStudents.every(s => s.isEnrolled);
 
   // Pagination Logic
   const totalPages = Math.ceil((courses?.length || 0) / itemsPerPage);
@@ -69,27 +87,26 @@ export default function Courses() {
     else await db.enrollments.add({ studentId, courseId: showEnrollModal.courseId, userId: user.id, synced: 0 });
   };
 
-  const handleBulkEnroll = async (selectAll: boolean) => {
+  const handleBulkAction = async () => {
     if (!showEnrollModal.courseId || !user) return;
+    
+    // If filtering "Not Enrolled", action is to Enroll All Visible
+    // If filtering "Enrolled", action is to Unenroll All Visible
+    // If "All", we toggle based on areAllVisibleSelected state
+    
+    const targetState = !areAllVisibleSelected; // true = enroll, false = unenroll
+
     await db.transaction('rw', db.enrollments, async () => {
-      if (selectAll) {
-        for (const s of filteredStudents) {
-          const isEnrolled = currentEnrollments?.some(e => e.studentId === s.id);
-          if (!isEnrolled) await db.enrollments.add({ studentId: s.id!, courseId: showEnrollModal.courseId!, userId: user.id, synced: 0 });
-        }
-      } else {
-        for (const s of filteredStudents) {
-          const enrollment = currentEnrollments?.find(e => e.studentId === s.id);
-          if (enrollment) await db.enrollments.delete(enrollment.id!);
+      for (const s of filteredStudents) {
+        const isEnrolled = enrolledStudentIds.has(s.id!);
+        if (targetState && !isEnrolled) {
+           await db.enrollments.add({ studentId: s.id!, courseId: showEnrollModal.courseId!, userId: user.id, synced: 0 });
+        } else if (!targetState && isEnrolled) {
+           const enrollment = currentEnrollments?.find(e => e.studentId === s.id!);
+           if (enrollment) await db.enrollments.delete(enrollment.id!);
         }
       }
     });
-  };
-
-  const handleFinishEnrollment = () => {
-    const count = currentEnrollments?.length || 0;
-    alert(`Success! ${count} students are now enrolled in ${showEnrollModal.courseName}.`);
-    setShowEnrollModal({ show: false });
   };
 
   const handleDeleteCourse = async (id: number) => {
@@ -223,58 +240,116 @@ export default function Courses() {
         </div>
       )}
 
-      {/* Enroll Modal (Full Screen) */}
+      {/* Enroll Modal (Revamped) */}
       {showEnrollModal.show && (
         <div className="modal fade show d-block" style={{ backgroundColor: '#fff', zIndex: 1050 }}>
           <div className="container-fluid h-100 p-0 d-flex flex-column">
+            {/* Header */}
             <div className="p-4 border-bottom d-flex align-items-center justify-content-between bg-white sticky-top">
               <div className="d-flex align-items-center gap-3">
                 <button className="btn btn-light rounded-circle p-2" onClick={() => setShowEnrollModal({ show: false })}><ArrowLeft size={20} /></button>
                 <div>
-                  <h5 className="fw-black mb-0 text-primary">ENROLL STUDENTS</h5>
+                  <h5 className="fw-black mb-0 text-primary uppercase">MANAGE STUDENTS</h5>
                   <p className="xx-small fw-bold text-muted mb-0">{showEnrollModal.courseName}</p>
                 </div>
               </div>
               <button className="btn btn-light rounded-circle p-2" onClick={() => setShowEnrollModal({ show: false })}><X size={24} /></button>
             </div>
 
-            <div className="p-3 bg-light border-bottom sticky-top" style={{top: '80px'}}>
-              <div className="modern-input-unified p-1 d-flex align-items-center bg-white shadow-inner mb-2">
+            {/* Stats Bar */}
+            <div className="bg-light px-4 py-3 d-flex justify-content-between align-items-center border-bottom">
+              <div className="text-center">
+                <h6 className="fw-black mb-0 text-dark">{stats.all}</h6>
+                <div className="xx-small fw-bold text-muted uppercase">Total</div>
+              </div>
+              <div className="vr opacity-25"></div>
+              <div className="text-center">
+                <h6 className="fw-black mb-0 text-success">{stats.enrolled}</h6>
+                <div className="xx-small fw-bold text-muted uppercase">Enrolled</div>
+              </div>
+              <div className="vr opacity-25"></div>
+              <div className="text-center">
+                <h6 className="fw-black mb-0 text-danger">{stats.notEnrolled}</h6>
+                <div className="xx-small fw-bold text-muted uppercase">Missing</div>
+              </div>
+            </div>
+
+            {/* Controls */}
+            <div className="p-3 bg-white border-bottom sticky-top" style={{top: '80px', zIndex: 1020}}>
+              {/* Tabs */}
+              <div className="d-flex p-1 bg-light rounded-3 mb-3">
+                <button className={`btn btn-sm flex-grow-1 fw-bold rounded-2 py-2 small ${enrollFilter === 'all' ? 'bg-white shadow-sm text-primary' : 'text-muted'}`} onClick={() => setEnrollFilter('all')}>All</button>
+                <button className={`btn btn-sm flex-grow-1 fw-bold rounded-2 py-2 small ${enrollFilter === 'enrolled' ? 'bg-white shadow-sm text-success' : 'text-muted'}`} onClick={() => setEnrollFilter('enrolled')}>Enrolled</button>
+                <button className={`btn btn-sm flex-grow-1 fw-bold rounded-2 py-2 small ${enrollFilter === 'not_enrolled' ? 'bg-white shadow-sm text-danger' : 'text-muted'}`} onClick={() => setEnrollFilter('not_enrolled')}>Not Enrolled</button>
+              </div>
+
+              {/* Search */}
+              <div className="modern-input-unified p-1 d-flex align-items-center bg-white shadow-inner">
                 <Search size={18} className="text-muted ms-2" />
-                <input type="text" className="form-control border-0 bg-transparent py-2 small fw-bold" placeholder="Search to enroll..." value={enrollSearch} onChange={e => setEnrollSearch(e.target.value)} />
-              </div>
-              <div className="d-flex justify-content-between align-items-center px-1">
-                <span className="xx-small fw-bold text-muted uppercase">{filteredStudents.length} Students Found</span>
-                <button 
-                  className={`btn btn-sm fw-bold rounded-pill px-3 d-flex align-items-center gap-2 ${areAllSelected ? 'btn-danger-subtle text-danger' : 'btn-primary-subtle text-primary'}`}
-                  onClick={() => handleBulkEnroll(!areAllSelected)}
-                >
-                  {areAllSelected ? <><Square size={14} /> Unselect All</> : <><CheckSquare size={14} /> Select All</>}
-                </button>
+                <input type="text" className="form-control border-0 bg-transparent py-2 small fw-bold" placeholder="Search students..." value={enrollSearch} onChange={e => setEnrollSearch(e.target.value)} />
               </div>
             </div>
 
+            {/* List */}
             <div className="flex-grow-1 overflow-auto bg-white">
-              <div className="list-group list-group-flush">
-                {filteredStudents.map(student => {
-                  const isEnrolled = currentEnrollments?.some(e => e.studentId === student.id);
-                  return (
-                    <div key={student.id} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: isEnrolled ? 'rgba(0,105,148,0.03)' : 'transparent' }}>
-                      <div className="overflow-hidden">
-                        <div className="fw-bold small text-dark text-truncate">{student.name}</div>
-                        <div className="xx-small fw-bold text-muted font-monospace">{student.regNumber}</div>
+              {filteredStudents.length === 0 ? (
+                <div className="h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center opacity-50">
+                  {enrollFilter === 'not_enrolled' && stats.notEnrolled === 0 ? (
+                    <>
+                      <CheckCircle2 size={48} className="text-success mb-3" />
+                      <h6 className="fw-black">ALL STUDENTS ENROLLED!</h6>
+                      <p className="small text-muted">Great job, everyone is in.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Filter size={48} className="text-muted mb-3" />
+                      <h6 className="fw-black">NO STUDENTS FOUND</h6>
+                      <p className="small text-muted">Try adjusting your search or filters.</p>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="list-group list-group-flush">
+                  {filteredStudents.map(student => (
+                    <div key={student.id} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: student.isEnrolled ? 'rgba(0,105,148,0.03)' : 'transparent' }}>
+                      <div className="d-flex align-items-center gap-3 overflow-hidden">
+                        <div className={`p-1 rounded-circle ${student.isEnrolled ? 'text-success' : 'text-muted opacity-25'}`}>
+                          {student.isEnrolled ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+                        </div>
+                        <div className="overflow-hidden">
+                          <div className="fw-bold small text-dark text-truncate">{student.name}</div>
+                          <div className="xx-small fw-bold text-muted font-monospace">{student.regNumber}</div>
+                        </div>
                       </div>
-                      <div className="form-check form-switch"><input className="form-check-input" type="checkbox" checked={isEnrolled || false} onChange={() => handleToggleEnroll(student.id!)} style={{ width: '40px', height: '20px' }} /></div>
+                      <button 
+                        className={`btn btn-sm fw-bold rounded-pill px-3 py-1 d-flex align-items-center gap-1 ${student.isEnrolled ? 'btn-outline-danger border-0 bg-danger-subtle text-danger' : 'btn-outline-primary border-0 bg-primary-subtle text-primary'}`}
+                        onClick={() => handleToggleEnroll(student.id!)}
+                      >
+                        {student.isEnrolled ? <><UserMinus size={14} /> Remove</> : <><UserPlus size={14} /> Enroll</>}
+                      </button>
                     </div>
-                  );
-                })}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
 
+            {/* Bulk Action Footer */}
             <div className="p-4 bg-white border-top shadow-lg sticky-bottom">
-              <button className="btn btn-success w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleFinishEnrollment}>
-                <CheckCircle2 size={20} /> FINISH ENROLLMENT
-              </button>
+              {enrollFilter === 'not_enrolled' && stats.notEnrolled > 0 && (
+                <button className="btn btn-primary w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleBulkAction}>
+                  <CheckCircle2 size={20} /> ENROLL ALL SHOWN ({filteredStudents.length})
+                </button>
+              )}
+              {enrollFilter === 'enrolled' && stats.enrolled > 0 && (
+                <button className="btn btn-outline-danger w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleBulkAction}>
+                  <UserMinus size={20} /> REMOVE ALL SHOWN ({filteredStudents.length})
+                </button>
+              )}
+              {enrollFilter === 'all' && (
+                <button className={`btn w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2 ${areAllVisibleSelected ? 'btn-outline-danger' : 'btn-primary'}`} onClick={handleBulkAction}>
+                  {areAllVisibleSelected ? <><UserMinus size={20} /> REMOVE ALL SHOWN</> : <><CheckCircle2 size={20} /> ENROLL ALL SHOWN</>}
+                </button>
+              )}
             </div>
           </div>
         </div>
