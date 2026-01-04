@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Book, Users, Trash2, Search, X, BookOpen, Edit2, ArrowLeft, CheckCircle2, UserMinus, UserPlus, Filter, Circle } from 'lucide-react';
+import { Plus, Book, Users, Trash2, Search, X, BookOpen, Edit2, ArrowLeft, CheckCircle2, UserMinus, UserPlus, Filter, Circle, Save, AlertCircle } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -22,22 +22,44 @@ export default function Courses() {
   const [enrollSearch, setEnrollSearch] = useState('');
   const [enrollFilter, setEnrollFilter] = useState<'all' | 'enrolled' | 'not_enrolled'>('all');
   
+  // Local Enrollment State (Pending Changes)
+  const [localEnrollments, setLocalEnrollments] = useState<Set<number>>(new Set());
+  const [originalEnrollments, setOriginalEnrollments] = useState<Set<number>>(new Set());
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Load Enrollments when Modal Opens
+  useEffect(() => {
+    if (showEnrollModal.show && showEnrollModal.courseId) {
+      db.enrollments.where('courseId').equals(showEnrollModal.courseId).toArray().then(records => {
+        const ids = new Set(records.map(e => e.studentId));
+        setLocalEnrollments(ids);
+        setOriginalEnrollments(new Set(ids)); // Create a copy
+      });
+    } else {
+      setLocalEnrollments(new Set());
+      setOriginalEnrollments(new Set());
+    }
+  }, [showEnrollModal.show, showEnrollModal.courseId]);
+
+  // Derived Dirty State
+  const isDirty = useMemo(() => {
+    if (localEnrollments.size !== originalEnrollments.size) return true;
+    for (const id of localEnrollments) {
+      if (!originalEnrollments.has(id)) return true;
+    }
+    return false;
+  }, [localEnrollments, originalEnrollments]);
+  
   // Pagination
   const itemsPerPage = 5;
   const [currentPage, setCurrentPage] = useState(1);
 
   const allStudents = useLiveQuery(() => db.students.orderBy('name').toArray());
-  const currentEnrollments = useLiveQuery(
-    () => showEnrollModal.courseId ? db.enrollments.where('courseId').equals(showEnrollModal.courseId).toArray() : [],
-    [showEnrollModal.courseId]
-  );
 
-  // Derived lists
-  const enrolledStudentIds = new Set(currentEnrollments?.map(e => e.studentId));
-  
+  // Filter Logic based on Local State
   const studentsWithStatus = allStudents?.map(s => ({
     ...s,
-    isEnrolled: enrolledStudentIds.has(s.id!)
+    isEnrolled: localEnrollments.has(s.id!)
   })) || [];
 
   const filteredStudents = studentsWithStatus.filter(s => {
@@ -51,8 +73,8 @@ export default function Courses() {
 
   const stats = {
     all: allStudents?.length || 0,
-    enrolled: currentEnrollments?.length || 0,
-    notEnrolled: (allStudents?.length || 0) - (currentEnrollments?.length || 0)
+    enrolled: localEnrollments.size,
+    notEnrolled: (allStudents?.length || 0) - localEnrollments.size
   };
 
   const areAllVisibleSelected = filteredStudents.length > 0 && filteredStudents.every(s => s.isEnrolled);
@@ -80,33 +102,75 @@ export default function Courses() {
     setShowAddModal(true);
   };
 
-  const handleToggleEnroll = async (studentId: number) => {
-    if (!showEnrollModal.courseId || !user) return;
-    const existing = currentEnrollments?.find(e => e.studentId === studentId);
-    if (existing) await db.enrollments.delete(existing.id!);
-    else await db.enrollments.add({ studentId, courseId: showEnrollModal.courseId, userId: user.id, synced: 0 });
+  const handleToggleLocal = (studentId: number) => {
+    const newSet = new Set(localEnrollments);
+    if (newSet.has(studentId)) newSet.delete(studentId);
+    else newSet.add(studentId);
+    setLocalEnrollments(newSet);
   };
 
-  const handleBulkAction = async () => {
-    if (!showEnrollModal.courseId || !user) return;
-    
-    // If filtering "Not Enrolled", action is to Enroll All Visible
-    // If filtering "Enrolled", action is to Unenroll All Visible
-    // If "All", we toggle based on areAllVisibleSelected state
-    
-    const targetState = !areAllVisibleSelected; // true = enroll, false = unenroll
-
-    await db.transaction('rw', db.enrollments, async () => {
-      for (const s of filteredStudents) {
-        const isEnrolled = enrolledStudentIds.has(s.id!);
-        if (targetState && !isEnrolled) {
-           await db.enrollments.add({ studentId: s.id!, courseId: showEnrollModal.courseId!, userId: user.id, synced: 0 });
-        } else if (!targetState && isEnrolled) {
-           const enrollment = currentEnrollments?.find(e => e.studentId === s.id!);
-           if (enrollment) await db.enrollments.delete(enrollment.id!);
-        }
-      }
+  const handleBulkLocal = (targetState: boolean) => {
+    const newSet = new Set(localEnrollments);
+    filteredStudents.forEach(s => {
+      if (targetState) newSet.add(s.id!);
+      else newSet.delete(s.id!);
     });
+    setLocalEnrollments(newSet);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!user || !showEnrollModal.courseId) return;
+    setIsSaving(true);
+    
+    try {
+      const toAdd: number[] = [];
+      const toRemove: number[] = [];
+
+      // Calculate diff
+      for (const id of localEnrollments) {
+        if (!originalEnrollments.has(id)) toAdd.push(id);
+      }
+      for (const id of originalEnrollments) {
+        if (!localEnrollments.has(id)) toRemove.push(id);
+      }
+
+      await db.transaction('rw', db.enrollments, async () => {
+        // Remove Deleted
+        if (toRemove.length > 0) {
+           // We need to find the specific enrollment IDs to delete
+           // This is slightly less efficient than bulk delete by ID, but correct for compound keys
+           for (const studentId of toRemove) {
+             await db.enrollments.where({ courseId: showEnrollModal.courseId, studentId }).delete();
+           }
+        }
+        
+        // Add New
+        for (const studentId of toAdd) {
+          await db.enrollments.add({
+            studentId,
+            courseId: showEnrollModal.courseId!,
+            userId: user.id,
+            synced: 0
+          });
+        }
+      });
+
+      // Update baseline
+      setOriginalEnrollments(new Set(localEnrollments));
+      alert('Changes saved successfully!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCloseModal = () => {
+    if (isDirty) {
+      if (!confirm('You have unsaved changes. Are you sure you want to close?')) return;
+    }
+    setShowEnrollModal({ show: false });
   };
 
   const handleDeleteCourse = async (id: number) => {
@@ -240,20 +304,20 @@ export default function Courses() {
         </div>
       )}
 
-      {/* Enroll Modal (Revamped) */}
+      {/* Enroll Modal (Revamped with Local State) */}
       {showEnrollModal.show && (
         <div className="modal fade show d-block" style={{ backgroundColor: '#fff', zIndex: 1050 }}>
           <div className="container-fluid h-100 p-0 d-flex flex-column">
             {/* Header */}
             <div className="p-4 border-bottom d-flex align-items-center justify-content-between bg-white sticky-top">
               <div className="d-flex align-items-center gap-3">
-                <button className="btn btn-light rounded-circle p-2" onClick={() => setShowEnrollModal({ show: false })}><ArrowLeft size={20} /></button>
+                <button className="btn btn-light rounded-circle p-2" onClick={handleCloseModal}><ArrowLeft size={20} /></button>
                 <div>
                   <h5 className="fw-black mb-0 text-primary uppercase">MANAGE STUDENTS</h5>
                   <p className="xx-small fw-bold text-muted mb-0">{showEnrollModal.courseName}</p>
                 </div>
               </div>
-              <button className="btn btn-light rounded-circle p-2" onClick={() => setShowEnrollModal({ show: false })}><X size={24} /></button>
+              <button className="btn btn-light rounded-circle p-2" onClick={handleCloseModal}><X size={24} /></button>
             </div>
 
             {/* Stats Bar */}
@@ -323,7 +387,7 @@ export default function Courses() {
                       </div>
                       <button 
                         className={`btn btn-sm fw-bold rounded-pill px-3 py-1 d-flex align-items-center gap-1 ${student.isEnrolled ? 'btn-outline-danger border-0 bg-danger-subtle text-danger' : 'btn-outline-primary border-0 bg-primary-subtle text-primary'}`}
-                        onClick={() => handleToggleEnroll(student.id!)}
+                        onClick={() => handleToggleLocal(student.id!)}
                       >
                         {student.isEnrolled ? <><UserMinus size={14} /> Remove</> : <><UserPlus size={14} /> Enroll</>}
                       </button>
@@ -333,22 +397,41 @@ export default function Courses() {
               )}
             </div>
 
-            {/* Bulk Action Footer */}
+            {/* Sticky Action Footer */}
             <div className="p-4 bg-white border-top shadow-lg sticky-bottom">
-              {enrollFilter === 'not_enrolled' && stats.notEnrolled > 0 && (
-                <button className="btn btn-primary w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleBulkAction}>
-                  <CheckCircle2 size={20} /> ENROLL ALL SHOWN ({filteredStudents.length})
-                </button>
-              )}
-              {enrollFilter === 'enrolled' && stats.enrolled > 0 && (
-                <button className="btn btn-outline-danger w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleBulkAction}>
-                  <UserMinus size={20} /> REMOVE ALL SHOWN ({filteredStudents.length})
-                </button>
-              )}
-              {enrollFilter === 'all' && (
-                <button className={`btn w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2 ${areAllVisibleSelected ? 'btn-outline-danger' : 'btn-primary'}`} onClick={handleBulkAction}>
-                  {areAllVisibleSelected ? <><UserMinus size={20} /> REMOVE ALL SHOWN</> : <><CheckCircle2 size={20} /> ENROLL ALL SHOWN</>}
-                </button>
+              {isDirty ? (
+                <div className="d-flex flex-column gap-2 animate-in">
+                  <div className="d-flex align-items-center gap-2 text-warning mb-1">
+                    <AlertCircle size={16} />
+                    <span className="xx-small fw-bold">You have unsaved changes</span>
+                  </div>
+                  <button 
+                    className="btn btn-success w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" 
+                    onClick={handleSaveChanges}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? <div className="spinner-border spinner-border-sm" /> : <><Save size={20} /> SAVE CHANGES</>}
+                  </button>
+                </div>
+              ) : (
+                <div className="d-flex flex-column gap-2">
+                   {/* Contextual Bulk Actions */}
+                   {enrollFilter === 'not_enrolled' && stats.notEnrolled > 0 && (
+                      <button className="btn btn-primary w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={() => handleBulkLocal(true)}>
+                        <CheckCircle2 size={20} /> ENROLL ALL SHOWN ({filteredStudents.length})
+                      </button>
+                    )}
+                    {enrollFilter === 'enrolled' && stats.enrolled > 0 && (
+                      <button className="btn btn-outline-danger w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={() => handleBulkLocal(false)}>
+                        <UserMinus size={20} /> REMOVE ALL SHOWN ({filteredStudents.length})
+                      </button>
+                    )}
+                    {enrollFilter === 'all' && (
+                      <button className={`btn w-100 py-3 rounded-4 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2 ${areAllVisibleSelected ? 'btn-outline-danger' : 'btn-primary'}`} onClick={() => handleBulkLocal(!areAllVisibleSelected)}>
+                        {areAllVisibleSelected ? <><UserMinus size={20} /> REMOVE ALL SHOWN</> : <><CheckCircle2 size={20} /> ENROLL ALL SHOWN</>}
+                      </button>
+                    )}
+                </div>
               )}
             </div>
           </div>
