@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Book, Users, Trash2, Search, X, BookOpen } from 'lucide-react';
+import { Plus, Book, Users, Trash2, Search, X, BookOpen, CheckSquare, Square } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -26,6 +26,19 @@ export default function Courses() {
     [showEnrollModal.courseId]
   );
 
+  // Filtered students for enrollment
+  const filteredStudents = useMemo(() => {
+    return allStudents?.filter(s => 
+      s.name.toLowerCase().includes(enrollSearch.toLowerCase()) || 
+      s.regNumber.includes(enrollSearch)
+    ) || [];
+  }, [allStudents, enrollSearch]);
+
+  const areAllSelected = useMemo(() => {
+    if (filteredStudents.length === 0) return false;
+    return filteredStudents.every(s => currentEnrollments?.some(e => e.studentId === s.id));
+  }, [filteredStudents, currentEnrollments]);
+
   const handleAddCourse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeSemester || !user) return;
@@ -39,6 +52,30 @@ export default function Courses() {
     const existing = currentEnrollments?.find(e => e.studentId === studentId);
     if (existing) await db.enrollments.delete(existing.id!);
     else await db.enrollments.add({ studentId, courseId: showEnrollModal.courseId, userId: user.id, synced: 0 });
+  };
+
+  const handleBulkEnroll = async (selectAll: boolean) => {
+    if (!showEnrollModal.courseId || !user) return;
+    
+    await db.transaction('rw', db.enrollments, async () => {
+      if (selectAll) {
+        // Enroll all filtered students who aren't already enrolled
+        for (const s of filteredStudents) {
+          const isEnrolled = currentEnrollments?.some(e => e.studentId === s.id);
+          if (!isEnrolled) {
+            await db.enrollments.add({ studentId: s.id!, courseId: showEnrollModal.courseId!, userId: user.id, synced: 0 });
+          }
+        }
+      } else {
+        // Unenroll all filtered students
+        for (const s of filteredStudents) {
+          const enrollment = currentEnrollments?.find(e => e.studentId === s.id);
+          if (enrollment) {
+            await db.enrollments.delete(enrollment.id!);
+          }
+        }
+      }
+    });
   };
 
   const handleDeleteCourse = async (id: number) => {
@@ -63,7 +100,7 @@ export default function Courses() {
 
   return (
     <div className="courses-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
-      {/* Simplistic Header */}
+      {/* Header */}
       <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
         <div className="d-flex justify-content-between align-items-center">
           <div>
@@ -138,7 +175,7 @@ export default function Courses() {
         </div>
       )}
 
-      {/* Enroll Modal (Bottom Sheet Style) */}
+      {/* Enroll Modal */}
       <AnimatePresence>
         {showEnrollModal.show && (
           <>
@@ -154,14 +191,24 @@ export default function Courses() {
                     <button className="btn btn-light rounded-circle p-2" onClick={() => setShowEnrollModal({ show: false })}><X size={20} /></button>
                   </div>
                   <div className="p-3 bg-light border-bottom">
-                    <div className="modern-input-unified p-1 d-flex align-items-center bg-white shadow-inner">
+                    <div className="modern-input-unified p-1 d-flex align-items-center bg-white shadow-inner mb-2">
                       <Search size={18} className="text-muted ms-2" />
                       <input type="text" className="form-control border-0 bg-transparent py-2 small fw-bold" placeholder="Search to enroll..." value={enrollSearch} onChange={e => setEnrollSearch(e.target.value)} />
+                    </div>
+                    {/* Bulk Action Bar */}
+                    <div className="d-flex justify-content-between align-items-center px-1">
+                      <span className="xx-small fw-bold text-muted uppercase">{filteredStudents.length} Students Found</span>
+                      <button 
+                        className={`btn btn-sm fw-bold rounded-pill px-3 d-flex align-items-center gap-2 ${areAllSelected ? 'btn-danger-subtle text-danger' : 'btn-primary-subtle text-primary'}`}
+                        onClick={() => handleBulkEnroll(!areAllSelected)}
+                      >
+                        {areAllSelected ? <><Square size={14} /> Unselect All</> : <><CheckSquare size={14} /> Select All</>}
+                      </button>
                     </div>
                   </div>
                   <div className="modal-body p-0 overflow-auto">
                     <div className="list-group list-group-flush">
-                      {allStudents?.filter(s => s.name.toLowerCase().includes(enrollSearch.toLowerCase()) || s.regNumber.includes(enrollSearch)).map(student => {
+                      {filteredStudents.map(student => {
                         const isEnrolled = currentEnrollments?.some(e => e.studentId === student.id);
                         return (
                           <div key={student.id} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: isEnrolled ? 'rgba(0,105,148,0.03)' : 'transparent' }}>
