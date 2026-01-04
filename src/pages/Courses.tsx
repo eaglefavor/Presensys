@@ -154,22 +154,22 @@ export default function Courses() {
                   </div>
                   <div className="p-2 border-top bg-light d-flex gap-2">
                     <button 
-                      className="btn btn-white border flex-grow-1 py-2 rounded-3 fw-bold xx-small text-primary d-flex align-items-center justify-content-center gap-2"
+                      className="btn btn-white border flex-grow-1 py-1 px-2 rounded-3 fw-bold xx-small text-primary d-flex align-items-center justify-content-center gap-1"
                       onClick={() => setShowEnrollModal({ show: true, courseId: course.id, courseName: course.title })}
                     >
-                      <Users size={14} /> ENROLL STUDENTS
+                      <Users size={12} /> ENROLL
                     </button>
                     <button 
-                      className="btn btn-white border py-2 px-3 rounded-3 fw-bold xx-small text-dark d-flex align-items-center justify-content-center gap-2"
+                      className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-dark d-flex align-items-center justify-content-center gap-1"
                       onClick={() => handleEditClick(course)}
                     >
-                      <Edit2 size={14} /> EDIT
+                      <Edit2 size={12} /> EDIT
                     </button>
                     <button 
-                      className="btn btn-white border py-2 px-3 rounded-3 fw-bold xx-small text-danger d-flex align-items-center justify-content-center gap-2"
+                      className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-danger d-flex align-items-center justify-content-center gap-1"
                       onClick={() => handleDeleteCourse(course.id!)}
                     >
-                      <Trash2 size={14} /> DELETE
+                      <Trash2 size={12} /> DELETE
                     </button>
                   </div>
                 </div>

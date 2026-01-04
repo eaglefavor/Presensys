@@ -256,12 +256,12 @@ export default function Students() {
             <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Database Management</p>
           </div>
           <div className="d-flex gap-2">
-            <button className="btn btn-light rounded-pill px-3 py-2 shadow-sm border d-flex align-items-center gap-2" onClick={handleExportPDF}>
-              <Download size={18} className="text-muted" />
-              <span className="small fw-bold text-muted">Export Student List</span>
+            <button className="btn btn-light rounded-pill px-2 py-1 shadow-sm border d-flex align-items-center gap-1" onClick={handleExportPDF}>
+              <Download size={14} className="text-muted" />
+              <span className="xx-small fw-bold text-muted">Export</span>
             </button>
-            <button className="btn btn-primary rounded-pill px-4 fw-bold shadow-sm py-2 d-flex align-items-center gap-2" onClick={() => { setShowImportModal(true); resetImportState(); }}>
-              <Plus size={18} /> <span className="small">Add New</span>
+            <button className="btn btn-primary rounded-pill px-3 fw-bold shadow-sm py-1 d-flex align-items-center gap-1" onClick={() => { setShowImportModal(true); resetImportState(); }}>
+              <Plus size={16} /> <span className="xx-small">Add New</span>
             </button>
           </div>
         </div>
