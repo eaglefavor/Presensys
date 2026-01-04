@@ -17,6 +17,8 @@
     "eruda": "^3.4.3",
     "framer-motion": "^12.23.26",
     "html5-qrcode": "^2.3.8",
+    "jspdf": "^3.0.4",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.562.0",
     "papaparse": "^5.5.3",
     "react": "^19.2.0",

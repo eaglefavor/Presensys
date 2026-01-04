@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, ArrowRight as AlertTriangle, Info, Edit2, Save } from 'lucide-react';
+import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle } from 'lucide-react';
 import { db, type Student } from '../db/db';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function Students() {
   const { user } = useAuthStore();
@@ -16,6 +18,11 @@ export default function Students() {
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', regNumber: '' });
   
+  // Selection Mode State
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+
+  // Import States
   const [importMode, setImportMode] = useState<'select' | 'manual' | 'paste' | 'file'>('select');
   const [pasteData, setPasteData] = useState('');
   const [parsedStudents, setParsedStudents] = useState<Student[]>([]);
@@ -24,13 +31,59 @@ export default function Students() {
   const [showMapper, setShowMapper] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [activeScanRowIndex, setActiveScanRowIndex] = useState<number | null>(null);
-  
   const [isSaving, setIsSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
   const itemsPerPage = 7;
   const [currentPage, setCurrentPage] = useState(1);
 
+  // --- Bulk Selection Logic ---
+  const toggleSelection = (id: number) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+    if (newSet.size === 0 && !isSelectionMode) setIsSelectionMode(false);
+  };
+
+  const handleLongPress = (id: number) => {
+    if (!isSelectionMode) {
+      setIsSelectionMode(true);
+      setSelectedIds(new Set([id]));
+      if (window.navigator.vibrate) window.navigator.vibrate(50);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (confirm(`Permanently delete ${selectedIds.size} students?`)) {
+      await db.students.bulkDelete(Array.from(selectedIds));
+      setIsSelectionMode(false);
+      setSelectedIds(new Set());
+    }
+  };
+
+  // --- Export Logic ---
+  const handleExportPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text('Student List', 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Generated on ${new Date().toLocaleDateString()}`, 14, 30);
+
+    const tableData = (students || []).map(s => [s.name, s.regNumber]);
+
+    autoTable(doc, {
+      startY: 36,
+      head: [['Full Name', 'Reg Number']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [13, 110, 253] }
+    });
+
+    doc.save('presensys_student_list.pdf');
+  };
+
+  // --- Standard Logic (Reset, Scan, Upload, Parse, Save) ---
   const resetImportState = () => {
     setImportMode('select');
     setPasteData('');
@@ -42,7 +95,6 @@ export default function Students() {
     setParseError(null);
   };
 
-  // --- Edit Logic ---
   const handleEditClick = () => {
     if (selectedStudent) {
       setEditForm({ name: selectedStudent.name, regNumber: selectedStudent.regNumber });
@@ -56,13 +108,11 @@ export default function Students() {
       alert('Reg Number must be exactly 10 digits.');
       return;
     }
-    
-    await db.students.update(selectedStudent.id!, { name: editForm.name, regNumber: editForm.regNumber });
+    await db.students.update(selectedStudent.id!, { name: editForm.name, regNumber: editForm.regNumber, userId: user?.id, synced: 0 });
     setIsEditing(false);
     setSelectedStudent(null);
   };
 
-  // --- Scanner Logic ---
   const handleScanClick = (index: number) => {
     setActiveScanRowIndex(index);
     setShowScanner(true);
@@ -93,10 +143,8 @@ export default function Students() {
   const updateManualRow = (index: number, field: 'name' | 'regNumber', value: string) => {
     const newRows = [...manualRows];
     newRows[index][field] = value;
-    
-    // Instant Validation
     if (field === 'regNumber') {
-      if (value.length > 0 && !/^\d*$/.test(value)) return; // Only numbers
+      if (value.length > 0 && !/^\d*$/.test(value)) return;
       if (value.length === 10) newRows[index].error = undefined;
       else if (value.length > 0) newRows[index].error = "Must be 10 digits";
     }
@@ -116,18 +164,16 @@ export default function Students() {
     const results: Student[] = [];
     const lines = pasteData.split('\n');
     const regNoRegex = /(\d{10})/; // Strict 10 digit check
-    
     lines.forEach(line => {
       const match = line.match(regNoRegex);
       if (match) {
         const regNumber = match[0];
-        let name = line.replace(regNumber, '').replace(/[,,\t]/g, '').trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+        let name = line.replace(regNumber, '').replace(/[,	]/g, '').trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
         if (name.length > 2) results.push({ regNumber, name });
       }
     });
-
     if (results.length === 0 && pasteData.trim().length > 0) {
-      setParseError("Could not find any valid 10-digit Registration Numbers. Please check your text format.");
+      setParseError("Could not find any valid 10-digit Registration Numbers.");
     } else {
       setParsedStudents(results);
     }
@@ -138,8 +184,6 @@ export default function Students() {
     setIsSaving(true);
     try {
       let dataToSave = importMode === 'manual' ? manualRows.filter(r => r.name.trim() && r.regNumber.trim()) : parsedStudents;
-      
-      // Strict Validation Loop
       const validData: Student[] = [];
       const seenRegs = new Set();
       let hasErrors = false;
@@ -148,21 +192,18 @@ export default function Students() {
         s.regNumber = s.regNumber.replace(/\s/g, '');
         if (!/^\d{10}$/.test(s.regNumber)) {
           alert(`Invalid Reg Number: ${s.regNumber}. Must be exactly 10 digits.`);
-          hasErrors = true;
-          break;
+          hasErrors = true; break;
         }
         if (seenRegs.has(s.regNumber)) {
           alert(`Duplicate in list: ${s.regNumber} appears twice.`);
-          hasErrors = true;
-          break;
+          hasErrors = true; break;
         }
         seenRegs.add(s.regNumber);
         validData.push(s);
       }
 
       if (hasErrors || validData.length === 0) {
-        setIsSaving(false);
-        return;
+        setIsSaving(false); return;
       }
       
       await db.transaction('rw', db.students, async () => {
@@ -172,12 +213,11 @@ export default function Students() {
           else await db.students.update(existing.id!, { name: s.name, userId: user.id, synced: 0 });
         }
       });
-      
       setShowImportModal(false);
       resetImportState();
     } catch (error) { 
       console.error(error); 
-      alert('Save failed. Please check your data.');
+      alert('Save failed.');
     } finally {
       setIsSaving(false);
     }
@@ -204,9 +244,14 @@ export default function Students() {
             <h1 className="h4 fw-black mb-0" style={{ color: 'var(--primary-blue)' }}>STUDENT RECORDS</h1>
             <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Database Management</p>
           </div>
-          <button className="btn btn-primary rounded-pill px-4 fw-bold shadow-sm py-2 d-flex align-items-center gap-2" onClick={() => { setShowImportModal(true); resetImportState(); }}>
-            <Plus size={18} /> <span className="small">Add New</span>
-          </button>
+          <div className="d-flex gap-2">
+            <button className="btn btn-light rounded-circle p-2 shadow-sm border" onClick={handleExportPDF} title="Export PDF">
+              <Download size={20} className="text-muted" />
+            </button>
+            <button className="btn btn-primary rounded-pill px-4 fw-bold shadow-sm py-2 d-flex align-items-center gap-2" onClick={() => { setShowImportModal(true); resetImportState(); }}>
+              <Plus size={18} /> <span className="small">Add New</span>
+            </button>
+          </div>
         </div>
         <div className="modern-input-unified p-1 d-flex align-items-center bg-light shadow-inner">
           <Search size={18} className="text-muted ms-2" />
@@ -216,20 +261,49 @@ export default function Students() {
 
       {/* List */}
       <div className="px-4 container-mobile">
+        {/* Bulk Action Header */}
+        {isSelectionMode && (
+          <div className="mb-3 d-flex justify-content-between align-items-center animate-in">
+            <span className="fw-bold text-primary small">{selectedIds.size} Selected</span>
+            <button className="btn btn-link text-muted p-0 small text-decoration-none" onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}>Cancel</button>
+          </div>
+        )}
+
         <div className="d-flex flex-column gap-2">
           <AnimatePresence mode="popLayout">
-            {displayedStudents?.map(s => (
-              <motion.div key={s.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }} className="card border-0 bg-white cursor-pointer shadow-sm rounded-3" onClick={() => setSelectedStudent(s)}>
-                <div className="card-body p-3 d-flex align-items-center gap-3">
-                  <div className="avatar-circle flex-shrink-0 text-white fw-bold shadow-sm" style={{ backgroundColor: stringToColor(s.name) }}>{getInitials(s.name)}</div>
-                  <div className="flex-grow-1 overflow-hidden">
-                    <h6 className="fw-bold mb-0 text-dark text-truncate">{s.name}</h6>
-                    <div className="xx-small fw-bold text-muted font-monospace">{s.regNumber}</div>
+            {displayedStudents?.map(s => {
+              const isSelected = selectedIds.has(s.id!);
+              return (
+                <motion.div 
+                  key={s.id} 
+                  layout 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.98 }}
+                  className={`card border-0 shadow-sm rounded-3 cursor-pointer ${isSelected ? 'bg-primary-subtle ring-2 ring-primary' : 'bg-white'}`}
+                  onContextMenu={(e) => { e.preventDefault(); handleLongPress(s.id!); }}
+                  onClick={() => {
+                    if (isSelectionMode) toggleSelection(s.id!);
+                    else setSelectedStudent(s);
+                  }}
+                >
+                  <div className="card-body p-3 d-flex align-items-center gap-3">
+                    {isSelectionMode ? (
+                      <div className={`rounded-circle p-1 ${isSelected ? 'bg-primary text-white' : 'bg-light text-muted'}`}>
+                        {isSelected ? <CheckCircle2 size={24} /> : <div style={{width: 24, height: 24, border: '2px solid #dee2e6', borderRadius: '50%'}}></div>}
+                      </div>
+                    ) : (
+                      <div className="avatar-circle flex-shrink-0 text-white fw-bold shadow-sm" style={{ backgroundColor: stringToColor(s.name) }}>{getInitials(s.name)}</div>
+                    )}
+                    <div className="flex-grow-1 overflow-hidden">
+                      <h6 className="fw-bold mb-0 text-dark text-truncate">{s.name}</h6>
+                      <div className="xx-small fw-bold text-muted font-monospace">{s.regNumber}</div>
+                    </div>
+                    {!isSelectionMode && <ChevronRight size={16} className="text-muted opacity-50" />}
                   </div>
-                  <ChevronRight size={16} className="text-muted opacity-50" />
-                </div>
-              </motion.div>
-            ))}
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         </div>
 
@@ -242,9 +316,29 @@ export default function Students() {
         )}
       </div>
 
+      {/* Floating Action Bar (Bulk Mode) */}
+      <AnimatePresence>
+        {isSelectionMode && (
+          <motion.div 
+            initial={{ y: 100 }}
+            animate={{ y: 0 }}
+            exit={{ y: 100 }}
+            className="fixed-bottom p-4 bg-white border-top shadow-lg z-index-20"
+            style={{ zIndex: 2000 }}
+          >
+            <div className="container-mobile d-flex gap-3">
+              <button className="btn btn-light flex-grow-1 fw-bold" onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}>Cancel</button>
+              <button className="btn btn-danger flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleBulkDelete}>
+                <Trash2 size={18} /> Delete ({selectedIds.size})
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Details Bottom Sheet (Editable) */}
       <AnimatePresence>
-        {selectedStudent && (
+        {selectedStudent && !isSelectionMode && (
           <>
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-backdrop fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 2000 }} onClick={() => { setSelectedStudent(null); setIsEditing(false); }} />
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="modal fade show d-block" style={{ zIndex: 2001, top: 'auto', bottom: 0 }}>
@@ -295,7 +389,7 @@ export default function Students() {
         )}
       </AnimatePresence>
 
-      {/* Import Modal (Full Screen) */}
+      {/* Import Modal */}
       {showImportModal && (
         <div className="modal fade show d-block" style={{ backgroundColor: '#fff', zIndex: 1050 }}>
           <div className="container-fluid h-100 p-0 d-flex flex-column">
@@ -307,7 +401,7 @@ export default function Students() {
                   <p className="xx-small fw-bold text-muted mb-0">Add multiple students</p>
                 </div>
               </div>
-              <button type="button" className="btn btn-light rounded-circle p-2" onClick={() => setShowImportModal(false)}><X size={24} /></button>
+              <button type="button" className="btn-light rounded-circle p-2" onClick={() => setShowImportModal(false)}><X size={24} /></button>
             </div>
 
             <div className="flex-grow-1 overflow-auto bg-light">
@@ -414,7 +508,7 @@ function PreviewTable({ data, setData, existingStudents }: { data: Student[], se
               <input type="text" className="form-control form-control-sm border-0 bg-transparent fw-bold flex-grow-1 p-0" value={s.name} onChange={e => { const n = [...data]; n[idx].name = e.target.value; setData(n); }} />
               <div className="d-flex align-items-center gap-2">
                 <input type="text" className="form-control form-control-sm border-0 bg-transparent font-monospace text-muted xx-small p-0 text-end" style={{ width: '100px' }} value={s.regNumber} onChange={e => { const n = [...data]; n[idx].regNumber = e.target.value; setData(n); }} />
-                {isInvalid ? <span className="badge bg-danger text-white xx-small">INVALID</span> : isDup ? <span className="badge bg-warning text-dark xx-small">DUP</span> : <span className="badge bg-success-subtle text-success xx-small">NEW</span>}
+                {isInvalid ? <span className="badge bg-danger text-white xx-small">INVALID</span> : isDup ? <span className="badge bg-warning text-dark xx-small">UPD</span> : <span className="badge bg-success-subtle text-success xx-small">NEW</span>}
               </div>
             </div>
           </div>
