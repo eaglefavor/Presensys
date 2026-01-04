@@ -17,6 +17,7 @@ import Archives from './pages/Archives';
 import Auth from './pages/Auth';
 import VerifyAccess from './pages/VerifyAccess';
 import Admin from './pages/Admin';
+import ReloadPrompt from './components/ReloadPrompt';
 
 function App() {
   const { session, profile, loading, setSession } = useAuthStore();
@@ -70,8 +71,9 @@ function App() {
 
   return (
     <BrowserRouter>
+      <ReloadPrompt />
       <Routes>
-        {/* Unified Auth Routes */}
+        {/* Public Routes */}
         <Route path="/login" element={!session ? <Auth /> : <Navigate to="/" />} />
         <Route path="/signup" element={!session ? <Auth /> : <Navigate to="/" />} />
 

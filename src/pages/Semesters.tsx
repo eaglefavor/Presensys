@@ -78,7 +78,13 @@ export default function Semesters() {
             <h1 className="h4 fw-black mb-0 uppercase" style={{ color: 'var(--primary-blue)' }}>ACADEMIC CYCLES</h1>
             <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Cycle Management</p>
           </div>
-          <button className="btn btn-primary rounded-circle p-3 shadow-lg" onClick={() => setShowModal(true)} style={{ width: '52px', height: '52px' }}><Plus size={24} /></button>
+          <button 
+            className="btn btn-primary rounded-circle p-0 shadow-lg d-flex align-items-center justify-content-center" 
+            onClick={() => setShowModal(true)} 
+            style={{ width: '52px', height: '52px' }}
+          >
+            <Plus size={24} />
+          </button>
         </div>
       </div>
 
