@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Calendar, ArrowRight, BookOpen, Clock, Globe, LayoutDashboard, ChevronRight } from 'lucide-react';
+import { Plus, Calendar, ArrowRight, BookOpen, LayoutDashboard, ChevronRight, Clock, Globe, } from 'lucide-react';
 import { db, type Semester } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
