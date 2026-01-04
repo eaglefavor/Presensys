@@ -90,7 +90,9 @@ export default function Courses() {
       await db.courses.update(courseForm.id, { code: courseForm.code, title: courseForm.title, synced: 0 });
       setIsEditing(false);
     } else {
-      await db.courses.add({ ...courseForm, semesterId: activeSemester.id!, userId: user.id, synced: 0 });
+      // Exclude 'id' so Dexie generates a new one
+      const { id, ...newCourseData } = courseForm;
+      await db.courses.add({ ...newCourseData, semesterId: activeSemester.id!, userId: user.id, synced: 0 });
     }
     setShowAddModal(false);
     setCourseForm({ id: 0, code: '', title: '' });
@@ -124,8 +126,9 @@ export default function Courses() {
       console.error('handleSaveChanges: No user found');
       return;
     }
-    if (!showEnrollModal.courseId) {
-      console.error('handleSaveChanges: No course ID');
+    // Check strict undefined/null to allow ID 0 if it exists
+    if (showEnrollModal.courseId === undefined || showEnrollModal.courseId === null) {
+      console.error('handleSaveChanges: No course ID', showEnrollModal);
       return;
     }
     
