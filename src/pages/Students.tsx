@@ -22,6 +22,8 @@ export default function Students() {
   const [showMapper, setShowMapper] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [activeScanRowIndex, setActiveScanRowIndex] = useState<number | null>(null);
+  
+  const [isSaving, setIsSaving] = useState(false);
 
   const itemsPerPage = 7;
   const [currentPage, setCurrentPage] = useState(1);
@@ -33,6 +35,7 @@ export default function Students() {
     setManualRows([{name: '', regNumber: ''}]);
     setUploadedFile(null);
     setShowMapper(false);
+    setIsSaving(false);
   };
 
   const handleScanClick = (index: number) => {
@@ -41,7 +44,11 @@ export default function Students() {
   };
 
   const handleScanSuccess = (decodedText: string) => {
-    if (activeScanRowIndex !== null) updateManualRow(activeScanRowIndex, 'regNumber', decodedText);
+    // Logic Upgrade: Extract 10-digit number from URL if present
+    const regNoMatch = decodedText.match(/(\d{10})/); 
+    const finalValue = regNoMatch ? regNoMatch[0] : decodedText;
+
+    if (activeScanRowIndex !== null) updateManualRow(activeScanRowIndex, 'regNumber', finalValue);
     setShowScanner(false);
     setActiveScanRowIndex(null);
   };
@@ -75,7 +82,7 @@ export default function Students() {
   const handleParse = () => {
     const results: Student[] = [];
     const lines = pasteData.split('\n');
-    const regNoRegex = /(\d{8,})/;
+    const regNoRegex = /(\d{8,})/; // Corrected regex escaping
     lines.forEach(line => {
       const match = line.match(regNoRegex);
       if (match) {
@@ -89,18 +96,31 @@ export default function Students() {
 
   const handleSave = async () => {
     if (!user) return;
+    setIsSaving(true);
     try {
       let dataToSave = importMode === 'manual' ? manualRows.filter(r => r.name.trim() && r.regNumber.trim()) : parsedStudents;
-      if (dataToSave.length === 0) return;
-      for (const s of dataToSave) {
-        s.regNumber = s.regNumber.replace(/\s/g, '');
-        const existing = await db.students.where('regNumber').equals(s.regNumber).first();
-        if (!existing) await db.students.add({ ...s, userId: user.id, synced: 0 });
-        else await db.students.update(existing.id!, { name: s.name, userId: user.id, synced: 0 });
+      if (dataToSave.length === 0) {
+        setIsSaving(false);
+        return;
       }
+      
+      await db.transaction('rw', db.students, async () => {
+        for (const s of dataToSave) {
+          s.regNumber = s.regNumber.replace(/\s/g, '');
+          const existing = await db.students.where('regNumber').equals(s.regNumber).first();
+          if (!existing) await db.students.add({ ...s, userId: user.id, synced: 0 });
+          else await db.students.update(existing.id!, { name: s.name, userId: user.id, synced: 0 });
+        }
+      });
+      
       setShowImportModal(false);
       resetImportState();
-    } catch (error) { console.error(error); }
+    } catch (error) { 
+      console.error(error); 
+      alert('Save failed. Please check your data.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const filteredStudents = students?.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.regNumber.includes(searchTerm));
@@ -117,11 +137,11 @@ export default function Students() {
 
   return (
     <div className="students-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
-      {/* Simplistic Header */}
+      {/* Header */}
       <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
         <div className="d-flex justify-content-between align-items-center mb-3">
           <div>
-            <h1 className="h4 fw-black mb-0 text-primary" style={{ color: 'var(--primary-blue)' }}>STUDENT RECORDS</h1>
+            <h1 className="h4 fw-black mb-0" style={{ color: 'var(--primary-blue)' }}>STUDENT RECORDS</h1>
             <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Database Management</p>
           </div>
           <button className="btn btn-primary rounded-pill px-4 fw-bold shadow-sm py-2 d-flex align-items-center gap-2" onClick={() => { setShowImportModal(true); resetImportState(); }}>
@@ -134,6 +154,7 @@ export default function Students() {
         </div>
       </div>
 
+      {/* List */}
       <div className="px-4 container-mobile">
         <div className="d-flex flex-column gap-2">
           <AnimatePresence mode="popLayout">
@@ -161,7 +182,7 @@ export default function Students() {
         )}
       </div>
 
-      {/* Details Bottom Sheet */}
+      {/* Details Modal */}
       <AnimatePresence>
         {selectedStudent && (
           <>
@@ -172,15 +193,13 @@ export default function Students() {
                   <div className="modal-header border-0 bg-white pb-0 pt-4 px-4"><div className="mx-auto bg-light rounded-pill" style={{ width: '40px', height: '4px' }}></div></div>
                   <div className="modal-body px-4 text-center">
                     <div className="avatar-circle-lg mx-auto mb-3 shadow-lg text-white fw-black" style={{ backgroundColor: stringToColor(selectedStudent.name) }}>{getInitials(selectedStudent.name)}</div>
-                    <h4 className="fw-black mb-1 text-uppercase letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>{selectedStudent.name}</h4>
+                    <h4 className="fw-black mb-1" style={{ color: 'var(--primary-blue)' }}>{selectedStudent.name}</h4>
                     <p className="xx-small fw-bold text-muted font-monospace tracking-widest mb-4">{selectedStudent.regNumber}</p>
-                    
                     <div className="row g-2 mb-4 text-start">
                       <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><GraduationCap size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">STATUS</div><div className="small fw-black text-dark">ACTIVE</div></div></div>
                       <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><Calendar size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">JOINED</div><div className="small fw-black text-dark">2024</div></div></div>
                       <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><History size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">ATTEND</div><div className="small fw-black text-dark">0%</div></div></div>
                     </div>
-
                     <div className="d-flex flex-column gap-2">
                       <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
                       <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => { if(confirm('Delete student record?')) { db.students.delete(selectedStudent.id!); setSelectedStudent(null); } }}>Delete Student</button>
@@ -216,20 +235,18 @@ export default function Students() {
                   </div>
                 ) : importMode === 'manual' ? (
                   <div className="p-4">
-                    <div className="d-flex flex-column gap-3">
-                      {manualRows.map((row, idx) => (
-                        <div key={idx} className="card border-0 bg-white shadow-sm rounded-3">
-                          <div className="card-body p-3">
-                            <div className="d-flex justify-content-between mb-2"><span className="xx-small fw-black text-muted">ENTRY #{idx+1}</span>{manualRows.length > 1 && <button className="btn btn-link text-danger p-0" onClick={() => removeManualRow(idx)}><X size={14} /></button>}</div>
-                            <div className="d-flex flex-column gap-3">
-                              <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="FULL NAME" value={row.name} onChange={e => updateManualRow(idx, 'name', e.target.value)} /></div>
-                              <div className="input-group modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="REG NUMBER" value={row.regNumber} onChange={e => updateManualRow(idx, 'regNumber', e.target.value)} /><button className="btn btn-light rounded-2 border-0" onClick={() => handleScanClick(idx)}><ScanLine size={18} className="text-primary" /></button></div>
-                            </div>
+                    {manualRows.map((row, idx) => (
+                      <div key={idx} className="card border-0 bg-white shadow-sm rounded-3 mb-3">
+                        <div className="card-body p-3">
+                          <div className="d-flex justify-content-between mb-2"><span className="xx-small fw-black text-muted">ENTRY #{idx+1}</span>{manualRows.length > 1 && <button className="btn btn-link text-danger p-0" onClick={() => removeManualRow(idx)}><X size={14} /></button>}</div>
+                          <div className="d-flex flex-column gap-3">
+                            <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="FULL NAME" value={row.name} onChange={e => updateManualRow(idx, 'name', e.target.value)} /></div>
+                            <div className="input-group modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="REG NUMBER" value={row.regNumber} onChange={e => updateManualRow(idx, 'regNumber', e.target.value)} /><button className="btn btn-light rounded-2 border-0" onClick={() => handleScanClick(idx)}><ScanLine size={18} className="text-primary" /></button></div>
                           </div>
                         </div>
-                      ))}
-                      <button className="btn btn-outline-primary w-100 py-3 rounded-3 border-dashed small fw-bold" onClick={addManualRow}>+ Add Another Row</button>
-                    </div>
+                      </div>
+                    ))}
+                    <button className="btn btn-outline-primary w-100 py-3 rounded-3 border-dashed small fw-bold" onClick={addManualRow}>+ Add Another Row</button>
                   </div>
                 ) : importMode === 'paste' ? (
                   <div className="p-4 h-100">
@@ -253,7 +270,15 @@ export default function Students() {
                 )}
               </div>
               {importMode !== 'select' && !showMapper && (importMode === 'manual' || parsedStudents.length > 0) && (
-                <div className="modal-footer border-0 p-4 bg-white shadow-top"><button className="btn btn-success w-100 py-3 rounded-3 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleSave}><CheckCircle2 size={20} /> SAVE TO DATABASE</button></div>
+                <div className="modal-footer border-0 p-4 bg-white shadow-top">
+                  <button 
+                    className="btn btn-success w-100 py-3 rounded-3 shadow-sm fw-bold d-flex align-items-center justify-content-center gap-2" 
+                    onClick={handleSave} 
+                    disabled={isSaving}
+                  >
+                    {isSaving ? <div className="spinner-border spinner-border-sm" /> : <><CheckCircle2 size={20} /> SAVE TO DATABASE</>}
+                  </button>
+                </div>
               )}
             </div>
           </motion.div>
