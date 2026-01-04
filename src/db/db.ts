@@ -73,13 +73,31 @@ export class PresensysDB extends Dexie {
 
   constructor() {
     super('PresensysDB');
-    this.version(6).stores({
-      semesters: '++id, name, startDate, synced, isDeleted, userId',
-      students: '++id, &regNumber, name, synced, isDeleted, userId',
-      courses: '++id, code, semesterId, synced, isDeleted, userId',
-      enrollments: '++id, studentId, courseId, [studentId+courseId], synced, isDeleted, userId',
-      attendanceSessions: '++id, courseId, date, synced, isDeleted, userId',
-      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId'
+    this.version(7).stores({
+      semesters: '++id, name, startDate, synced, isDeleted, userId, lastModified',
+      students: '++id, &regNumber, name, synced, isDeleted, userId, lastModified',
+      courses: '++id, code, semesterId, synced, isDeleted, userId, lastModified',
+      enrollments: '++id, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, lastModified',
+      attendanceSessions: '++id, courseId, date, synced, isDeleted, userId, lastModified',
+      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, lastModified'
+    });
+
+    // Add hooks for automatic timestamping and sync status
+    this.tables.forEach(table => {
+      table.hook('creating', (_primKey, obj, _transaction) => {
+        obj.lastModified = Date.now();
+        obj.synced = 0;
+      });
+      table.hook('updating', (mods, _primKey, _obj, _transaction) => {
+        if (typeof mods === 'object' && mods !== null) {
+          // If we are specifically setting 'synced' (e.g. from syncEngine), don't reset it to 0
+          if (!('synced' in mods)) {
+             return { lastModified: Date.now(), synced: 0 };
+          }
+        } else {
+           return { lastModified: Date.now(), synced: 0 };
+        }
+      });
     });
   }
 }
