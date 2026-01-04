@@ -31,7 +31,9 @@ export default function Courses() {
   useEffect(() => {
     if (showEnrollModal.show && showEnrollModal.courseId) {
       db.enrollments.where('courseId').equals(showEnrollModal.courseId).toArray().then(records => {
-        const ids = new Set(records.map(e => e.studentId));
+        // Filter out soft-deleted records so they don't appear in the UI
+        const activeRecords = records.filter(r => r.isDeleted !== 1);
+        const ids = new Set(activeRecords.map(e => e.studentId));
         setLocalEnrollments(ids);
         setOriginalEnrollments(new Set(ids)); // Create a copy
       });
@@ -149,40 +151,48 @@ export default function Courses() {
       console.log('handleSaveChanges: Diff', { toAdd, toRemove });
 
       await db.transaction('rw', db.enrollments, async () => {
-        // Remove Deleted - Using collection delete for robustness
+        // Remove Deleted - SOFT DELETE
         if (toRemove.length > 0) {
            for (const studentId of toRemove) {
-             await db.enrollments
+             const records = await db.enrollments
                .where('courseId').equals(showEnrollModal.courseId!)
                .filter(e => e.studentId === studentId)
-               .delete();
+               .toArray();
+             
+             for (const r of records) {
+                await db.enrollments.update(r.id!, { isDeleted: 1, synced: 0 });
+             }
            }
         }
         
-        // Add New
+        // Add New - CHECK FOR EXISTING (TOMBSTONE) FIRST
         for (const studentId of toAdd) {
-          // Safety check to avoid duplicates
-          const count = await db.enrollments
+          const existing = await db.enrollments
             .where('courseId').equals(showEnrollModal.courseId!)
             .filter(e => e.studentId === studentId)
-            .count();
+            .first();
             
-          if (count === 0) {
-            await db.enrollments.add({
-              studentId,
-              courseId: showEnrollModal.courseId!,
-              userId: user.id,
-              synced: 0
-            });
+          if (existing) {
+             // Resurrect if deleted, or just ensure it's active
+             await db.enrollments.update(existing.id!, { isDeleted: 0, synced: 0 });
+          } else {
+             // Create new
+             await db.enrollments.add({
+               studentId,
+               courseId: showEnrollModal.courseId!,
+               userId: user.id,
+               synced: 0
+             });
           }
         }
       });
 
       console.log('handleSaveChanges: Transaction Complete');
 
-      // Verify and Reload from DB to ensure state matches persistence
+      // Verify and Reload from DB (Filter out deleted)
       const updatedRecords = await db.enrollments.where('courseId').equals(showEnrollModal.courseId!).toArray();
-      const newIds = new Set(updatedRecords.map(e => e.studentId));
+      const activeRecords = updatedRecords.filter(r => r.isDeleted !== 1);
+      const newIds = new Set(activeRecords.map(e => e.studentId));
       
       setLocalEnrollments(newIds);
       setOriginalEnrollments(new Set(newIds)); // Update baseline to new DB state
