@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Book, Users, Trash2, Search, X, ChevronRight, BookOpen, CheckSquare, Square, Edit2, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Plus, Book, Users, Trash2, Search, X, BookOpen, CheckSquare, Square, Edit2, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -151,17 +151,27 @@ export default function Courses() {
                       <h6 className="fw-black mb-0 text-dark text-truncate text-uppercase letter-spacing-n1">{course.code}</h6>
                       <p className="xx-small fw-bold text-muted mb-0 text-truncate text-uppercase">{course.title}</p>
                     </div>
-                    <div className="d-flex gap-1">
-                      <button className="btn btn-link text-primary p-2" onClick={() => handleEditClick(course)}><Edit2 size={18} /></button>
-                      <button className="btn btn-link text-danger p-2" onClick={() => handleDeleteCourse(course.id!)}><Trash2 size={18} /></button>
-                    </div>
                   </div>
-                  <button 
-                    className="btn btn-light w-100 rounded-0 border-top fw-bold text-muted small py-2 d-flex align-items-center justify-content-center gap-2"
-                    onClick={() => setShowEnrollModal({ show: true, courseId: course.id, courseName: course.title })}
-                  >
-                    <Users size={16} /> Manage Students <ChevronRight size={14} />
-                  </button>
+                  <div className="p-2 border-top bg-light d-flex gap-2">
+                    <button 
+                      className="btn btn-white border flex-grow-1 py-2 rounded-3 fw-bold xx-small text-primary d-flex align-items-center justify-content-center gap-2"
+                      onClick={() => setShowEnrollModal({ show: true, courseId: course.id, courseName: course.title })}
+                    >
+                      <Users size={14} /> ENROLL STUDENTS
+                    </button>
+                    <button 
+                      className="btn btn-white border py-2 px-3 rounded-3 fw-bold xx-small text-dark d-flex align-items-center justify-content-center gap-2"
+                      onClick={() => handleEditClick(course)}
+                    >
+                      <Edit2 size={14} /> EDIT
+                    </button>
+                    <button 
+                      className="btn btn-white border py-2 px-3 rounded-3 fw-bold xx-small text-danger d-flex align-items-center justify-content-center gap-2"
+                      onClick={() => handleDeleteCourse(course.id!)}
+                    >
+                      <Trash2 size={14} /> DELETE
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))}

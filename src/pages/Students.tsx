@@ -256,8 +256,9 @@ export default function Students() {
             <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Database Management</p>
           </div>
           <div className="d-flex gap-2">
-            <button className="btn btn-light rounded-circle p-2 shadow-sm border" onClick={handleExportPDF} title="Export PDF">
-              <Download size={20} className="text-muted" />
+            <button className="btn btn-light rounded-pill px-3 py-2 shadow-sm border d-flex align-items-center gap-2" onClick={handleExportPDF}>
+              <Download size={18} className="text-muted" />
+              <span className="small fw-bold text-muted">Export Student List</span>
             </button>
             <button className="btn btn-primary rounded-pill px-4 fw-bold shadow-sm py-2 d-flex align-items-center gap-2" onClick={() => { setShowImportModal(true); resetImportState(); }}>
               <Plus size={18} /> <span className="small">Add New</span>

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Calendar, ArrowRight, BookOpen, LayoutDashboard, ChevronRight, Clock, Globe, } from 'lucide-react';
+import { Plus, Calendar, ArrowRight, BookOpen, LayoutDashboard, Clock, Globe, } from 'lucide-react';
 import { db, type Semester } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -115,7 +115,16 @@ export default function Semesters() {
                       <BookOpen size={10} className="text-primary" /> {courseCounts?.[s.id!] || 0} Courses
                     </div>
                   </div>
-                  <ChevronRight size={16} className="text-muted opacity-50" />
+                  {s.isActive ? (
+                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill xx-small fw-bold px-2 py-1">ACTIVE</span>
+                  ) : (
+                    <button 
+                      className="btn btn-outline-primary btn-sm rounded-pill xx-small fw-bold px-3"
+                      onClick={(e) => { e.stopPropagation(); handleSetActive(s.id!); }}
+                    >
+                      ACTIVATE
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))}
