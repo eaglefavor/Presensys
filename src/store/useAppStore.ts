@@ -14,7 +14,26 @@ export const useAppStore = create<AppState>((set) => ({
   
   initialize: async () => {
     try {
-      const active = await db.semesters.filter(s => s.isActive).first();
+      // 1. Check for manually set active semester
+      let active = await db.semesters.filter(s => s.isActive).first();
+      
+      // 2. Intelligent Auto-Switch logic
+      if (!active) {
+        const today = new Date().toISOString().split('T')[0];
+        const currentSemester = await db.semesters
+          .filter(s => s.startDate <= today && s.endDate >= today)
+          .first();
+
+        if (currentSemester) {
+          console.log('Auto-Activating Semester:', currentSemester.name);
+          await db.transaction('rw', db.semesters, async () => {
+            await db.semesters.toCollection().modify({ isActive: false });
+            await db.semesters.update(currentSemester.id!, { isActive: true, synced: 0 });
+          });
+          active = currentSemester;
+        }
+      }
+
       set({ activeSemester: active || null });
     } catch (error) {
       console.error('Failed to initialize active semester:', error);
