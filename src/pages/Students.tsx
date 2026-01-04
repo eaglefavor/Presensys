@@ -55,8 +55,19 @@ export default function Students() {
   };
 
   const handleBulkDelete = async () => {
-    if (confirm(`Permanently delete ${selectedIds.size} students?`)) {
-      await db.students.bulkDelete(Array.from(selectedIds));
+    if (confirm(`Delete ${selectedIds.size} students?`)) {
+      await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
+        const ids = Array.from(selectedIds);
+        
+        // Mark students as deleted
+        await db.students.where('id').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
+
+        // Mark associated enrollments as deleted
+        await db.enrollments.where('studentId').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
+
+        // Mark associated attendance records as deleted
+        await db.attendanceRecords.where('studentId').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
+      });
       setIsSelectionMode(false);
       setSelectedIds(new Set());
     }
@@ -361,7 +372,19 @@ export default function Students() {
                         <div className="d-flex flex-column gap-2">
                           <button className="btn btn-primary-unified w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={handleEditClick}><Edit2 size={18} className="me-2" /> Edit Student</button>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
-                          <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => { if(confirm('Delete student record?')) { db.students.delete(selectedStudent.id!); setSelectedStudent(null); } }}>Delete Student</button>
+                          <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={async () => { 
+                            if(confirm('Delete student record?')) { 
+                              await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
+                                // Mark student as deleted
+                                await db.students.update(selectedStudent.id!, { isDeleted: 1, synced: 0 });
+                                // Mark enrollments as deleted
+                                await db.enrollments.where('studentId').equals(selectedStudent.id!).modify({ isDeleted: 1, synced: 0 });
+                                // Mark attendance records as deleted
+                                await db.attendanceRecords.where('studentId').equals(selectedStudent.id!).modify({ isDeleted: 1, synced: 0 });
+                              });
+                              setSelectedStudent(null); 
+                            } 
+                          }}>Delete Student</button>
                         </div>
                       </>
                     ) : (

@@ -55,15 +55,25 @@ export default function Semesters() {
       await db.transaction('rw', [db.semesters, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {
         const courses = await db.courses.where('semesterId').equals(id).toArray();
         const courseIds = courses.map(c => c.id!);
+        
         if (courseIds.length > 0) {
           const sessions = await db.attendanceSessions.where('courseId').anyOf(courseIds).toArray();
           const sessionIds = sessions.map(s => s.id!);
-          if (sessionIds.length > 0) await db.attendanceRecords.where('sessionId').anyOf(sessionIds).delete();
-          await db.attendanceSessions.where('courseId').anyOf(courseIds).delete();
-          await db.enrollments.where('courseId').anyOf(courseIds).delete();
-          await db.courses.bulkDelete(courseIds);
+          
+          if (sessionIds.length > 0) {
+            // Mark attendance records as deleted
+            await db.attendanceRecords.where('sessionId').anyOf(sessionIds).modify({ isDeleted: 1, synced: 0 });
+          }
+          // Mark attendance sessions as deleted
+          await db.attendanceSessions.where('courseId').anyOf(courseIds).modify({ isDeleted: 1, synced: 0 });
+          // Mark enrollments as deleted
+          await db.enrollments.where('courseId').anyOf(courseIds).modify({ isDeleted: 1, synced: 0 });
+          // Mark courses as deleted
+          await db.courses.where('semesterId').equals(id).modify({ isDeleted: 1, synced: 0 });
         }
-        await db.semesters.delete(id);
+        
+        // Mark semester as deleted
+        await db.semesters.update(id, { isDeleted: 1, synced: 0 });
         await refreshActiveSemester();
       });
       setSelectedSemester(null);

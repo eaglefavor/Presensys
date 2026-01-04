@@ -8,6 +8,7 @@ export interface Semester {
   isActive: boolean;
   isArchived: boolean;
   synced?: number;
+  isDeleted?: number;
   userId?: string;
 }
 
@@ -18,6 +19,7 @@ export interface Student {
   email?: string;
   phone?: string;
   synced?: number;
+  isDeleted?: number;
   userId?: string;
 }
 
@@ -27,6 +29,7 @@ export interface Course {
   title: string;
   semesterId: number;
   synced?: number;
+  isDeleted?: number;
   userId?: string;
 }
 
@@ -35,6 +38,7 @@ export interface Enrollment {
   studentId: number;
   courseId: number;
   synced?: number;
+  isDeleted?: number;
   userId?: string;
 }
 
@@ -44,6 +48,7 @@ export interface AttendanceSession {
   date: string;
   title: string;
   synced?: number;
+  isDeleted?: number;
   userId?: string;
 }
 
@@ -54,6 +59,7 @@ export interface AttendanceRecord {
   status: 'present' | 'absent' | 'excused';
   timestamp: number;
   synced?: number;
+  isDeleted?: number;
   userId?: string;
 }
 
@@ -67,13 +73,13 @@ export class PresensysDB extends Dexie {
 
   constructor() {
     super('PresensysDB');
-    this.version(5).stores({
-      semesters: '++id, name, startDate, synced, userId',
-      students: '++id, &regNumber, name, synced, userId',
-      courses: '++id, code, semesterId, synced, userId',
-      enrollments: '++id, studentId, courseId, [studentId+courseId], synced, userId',
-      attendanceSessions: '++id, courseId, date, synced, userId',
-      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced, userId'
+    this.version(6).stores({
+      semesters: '++id, name, startDate, synced, isDeleted, userId',
+      students: '++id, &regNumber, name, synced, isDeleted, userId',
+      courses: '++id, code, semesterId, synced, isDeleted, userId',
+      enrollments: '++id, studentId, courseId, [studentId+courseId], synced, isDeleted, userId',
+      attendanceSessions: '++id, courseId, date, synced, isDeleted, userId',
+      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId'
     });
   }
 }

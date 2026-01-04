@@ -95,8 +95,14 @@ export default function Courses() {
   const handleDeleteCourse = async (id: number) => {
     if (confirm('Delete this course and all its enrollments?')) {
       await db.transaction('rw', [db.courses, db.enrollments], async () => {
-        await db.enrollments.where('courseId').equals(id).delete();
-        await db.courses.delete(id);
+        // Mark course as deleted
+        await db.courses.update(id, { isDeleted: 1, synced: 0 });
+        
+        // Mark associated enrollments as deleted
+        const enrollments = await db.enrollments.where('courseId').equals(id).toArray();
+        for (const enrollment of enrollments) {
+          await db.enrollments.update(enrollment.id!, { isDeleted: 1, synced: 0 });
+        }
       });
     }
   };
@@ -265,13 +271,7 @@ export default function Courses() {
       )}
 
       <style>{`
-        .fw-black { font-weight: 900; }
-        .letter-spacing-n1 { letter-spacing: -1.2px; }
-        .xx-small { font-size: 10px; }
-        .tracking-widest { letter-spacing: 2px; }
-        .courses-page { background-color: var(--bg-gray); }
-        .rounded-top-5 { border-top-left-radius: 32px !important; border-top-right-radius: 32px !important; }
-        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        /* Styles moved to index.css */
       `}</style>
     </div>
   );
