@@ -146,39 +146,47 @@ export default function Courses() {
         if (!localEnrollments.has(id)) toRemove.push(id);
       }
 
-      console.log('handleSaveChanges: Diff Calculated', { toAdd: toAdd.length, toRemove: toRemove.length });
+      console.log('handleSaveChanges: Diff', { toAdd, toRemove });
 
       await db.transaction('rw', db.enrollments, async () => {
-        // Remove Deleted
+        // Remove Deleted - Using collection delete for robustness
         if (toRemove.length > 0) {
            for (const studentId of toRemove) {
-             // Find specific enrollment using compound index for speed
-             const existing = await db.enrollments.where('[studentId+courseId]').equals([studentId, showEnrollModal.courseId!]).first();
-             if (existing && existing.id) {
-               await db.enrollments.delete(existing.id);
-             } else {
-                // Fallback: Query by simple index if compound fails for some reason
-                const fallback = await db.enrollments.where({ courseId: showEnrollModal.courseId!, studentId }).first();
-                if (fallback && fallback.id) await db.enrollments.delete(fallback.id);
-             }
+             await db.enrollments
+               .where('courseId').equals(showEnrollModal.courseId!)
+               .filter(e => e.studentId === studentId)
+               .delete();
            }
         }
         
         // Add New
         for (const studentId of toAdd) {
-          await db.enrollments.add({
-            studentId,
-            courseId: showEnrollModal.courseId!,
-            userId: user.id,
-            synced: 0
-          });
+          // Safety check to avoid duplicates
+          const count = await db.enrollments
+            .where('courseId').equals(showEnrollModal.courseId!)
+            .filter(e => e.studentId === studentId)
+            .count();
+            
+          if (count === 0) {
+            await db.enrollments.add({
+              studentId,
+              courseId: showEnrollModal.courseId!,
+              userId: user.id,
+              synced: 0
+            });
+          }
         }
       });
 
       console.log('handleSaveChanges: Transaction Complete');
 
-      // Update baseline
-      setOriginalEnrollments(new Set(localEnrollments));
+      // Verify and Reload from DB to ensure state matches persistence
+      const updatedRecords = await db.enrollments.where('courseId').equals(showEnrollModal.courseId!).toArray();
+      const newIds = new Set(updatedRecords.map(e => e.studentId));
+      
+      setLocalEnrollments(newIds);
+      setOriginalEnrollments(new Set(newIds)); // Update baseline to new DB state
+      
       alert('Changes saved successfully!');
     } catch (err) {
       console.error('handleSaveChanges: Error', err);
