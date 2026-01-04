@@ -28,14 +28,30 @@ export const syncEngine = {
   },
 
   async pullFromCloud(userId: string) {
-    // 1. Students
-    const { data: students } = await supabase.from('students').select('*').eq('user_id', userId);
-    if (students) {
-      for (const s of students) {
-        const exists = await db.students.where('regNumber').equals(s.reg_number).first();
-        if (!exists) await db.students.add({ regNumber: s.reg_number, name: s.name, email: s.email, phone: s.phone, synced: 1, userId });
-      }
+    if (!navigator.onLine) {
+        console.log('Sync: Offline, skipping pull.');
+        return;
     }
+    console.log('Sync: Starting Pull for User:', userId);
+
+    // 1. Students
+    const { data: students, error: sErr } = await supabase.from('students').select('*').eq('user_id', userId);
+    if (sErr) console.error('Sync: Error pulling students:', sErr);
+    else console.log(`Sync: Pulled ${students?.length || 0} students from cloud.`);
+
+    if (students) {
+      await db.transaction('rw', db.students, async () => {
+        for (const s of students) {
+          const exists = await db.students.where('regNumber').equals(s.reg_number).first();
+          if (!exists) {
+             console.log('Sync: Hydrating student:', s.name);
+             await db.students.add({ regNumber: s.reg_number, name: s.name, email: s.email, phone: s.phone, synced: 1, userId });
+          }
+        }
+      });
+    }
+    
+    // ... (rest of the function remains similar, but logging helps)
 
     // 2. Semesters
     const { data: semesters } = await supabase.from('semesters').select('*').eq('user_id', userId);

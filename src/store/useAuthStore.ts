@@ -44,6 +44,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
     
+    // 1. Try to get profile from local storage first (Offline Support)
+    const cachedProfile = localStorage.getItem('user_profile');
+    if (cachedProfile) {
+      set({ profile: JSON.parse(cachedProfile), loading: false });
+    }
+
     console.log('fetchProfile: Fetching profile for UUID:', user.id);
     const { data, error } = await supabase
       .from('profiles')
@@ -52,16 +58,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
     
     if (error) {
-      console.error('fetchProfile: Error fetching profile:', error.message, error.details);
-      set({ loading: false, profile: null });
+      console.error('fetchProfile: Error fetching profile:', error.message);
+      // If offline and we have cache, keep it. If online and error, show error.
+      if (navigator.onLine && !cachedProfile) {
+         set({ loading: false, profile: null });
+      }
     } else {
       console.log('fetchProfile: Success! Data received:', data);
+      localStorage.setItem('user_profile', JSON.stringify(data)); // Update cache
       set({ profile: data as Profile, loading: false });
     }
   },
 
   signOut: async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('user_profile'); // Clear cache on logout
     
     // CRITICAL: Wipe local data to prevent cross-account leakage and force re-sync on next login
     await db.transaction('rw', [db.semesters, db.students, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {

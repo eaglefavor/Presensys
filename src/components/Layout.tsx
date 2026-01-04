@@ -67,6 +67,21 @@ const Layout: React.FC = () => {
 
   const isRootPath = location.pathname === '/' || navItems.some(item => item.path === location.pathname);
 
+  const handleManualSync = async () => {
+    if (!navigator.onLine || !user) {
+        alert('Cannot sync: Device is offline.');
+        return;
+    }
+    if (confirm('Force download data from cloud? This may fix missing items.')) {
+        setSyncStatus('syncing');
+        await syncEngine.pullFromCloud(user.id); // Force pull specifically
+        const result = await syncEngine.syncAll();
+        if (result.success) setSyncStatus('synced');
+        else setSyncStatus('error');
+        window.location.reload(); // Refresh to show new data
+    }
+  };
+
   return (
     <div className="app-container">
       <header className="app-header bg-white border-bottom sticky-top shadow-sm">
@@ -78,7 +93,7 @@ const Layout: React.FC = () => {
           </div>
           
           <div className="d-flex align-items-center gap-2">
-            <div className="sync-indicator">
+            <div className="sync-indicator" onClick={handleManualSync} style={{ cursor: 'pointer' }}>
               {syncStatus === 'syncing' && <RefreshCw size={18} className="text-primary spin" />}
               {syncStatus === 'synced' && <CloudSync size={18} style={{ color: 'var(--primary-blue)' }} />}
               {syncStatus === 'offline' && <CloudOff size={18} className="text-muted" />}
