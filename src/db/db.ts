@@ -13,7 +13,7 @@ export interface LocalSemester {
   createdAt?: string;
   updatedAt?: string;
   isDeleted: number; // 0 or 1
-  synced: number; // 0 = dirty, 1 = synced (Changed back from syncedAt to match existing code)
+  synced: number; // 0 = dirty, 1 = synced
 }
 
 export interface LocalStudent {
@@ -74,7 +74,7 @@ export interface LocalAttendanceRecord {
   sessionId: string;
   studentId: string;
   status: 'present' | 'absent' | 'excused';
-  timestamp: number; // Changed back from markedAt to match existing code
+  timestamp: number;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -92,8 +92,8 @@ export class PresensysDB extends Dexie {
 
   constructor() {
     super('PresensysDB');
-    this.version(10).stores({
-      semesters: '++id, &serverId, name, isActive, synced, isDeleted, userId, updatedAt',
+    this.version(11).stores({
+      semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
       students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
       courses: '++id, &serverId, semesterId, code, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',

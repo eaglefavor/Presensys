@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { realtimeSync } from '../lib/RealtimeSyncEngine';
-import BottomNav from './BottomNav';
 
 const Layout: React.FC = () => {
   const { profile, signOut, user } = useAuthStore();
@@ -46,12 +45,12 @@ const Layout: React.FC = () => {
   }, [user]);
 
   const navItems = [
-    { path: '/', label: 'Feed' },
-    { path: '/students', label: 'Students' },
-    { path: '/semesters', label: 'Cycles' },
+    { path: '/', label: 'Dashboard' },
+    { path: '/students', label: 'Student' },
+    { path: '/semesters', label: 'Semester' },
     { path: '/courses', label: 'Courses' },
     { path: '/attendance', label: 'Mark Attendance' },
-    { path: '/archives', label: 'Archives' },
+    { path: '/archives', label: 'Data Archive' },
   ];
 
   const isRootPath = location.pathname === '/' || ['/students', '/semesters', '/courses', '/attendance', '/archives'].includes(location.pathname);
@@ -140,13 +139,11 @@ const Layout: React.FC = () => {
         </div>
       </aside>
 
-      <main className="app-content flex-grow-1 overflow-auto" style={{ paddingBottom: '80px' }}>
+      <main className="app-content flex-grow-1 overflow-auto">
         <div className="container-mobile">
           <Outlet />
         </div>
       </main>
-
-      <BottomNav />
 
       <style>{`
         .menu-overlay {
