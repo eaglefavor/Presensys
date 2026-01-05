@@ -4,7 +4,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 type TableName = 'semesters' | 'students' | 'courses' | 'enrollments' | 'attendance_sessions' | 'attendance_records';
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class RealtimeSyncEngine {
   private userId: string | null = null;
@@ -37,6 +37,7 @@ export class RealtimeSyncEngine {
       console.log('Sync: Starting...');
       await this.pushChanges();
       await this.pullChanges();
+      await this.meticulousPurge(); // Clean up local data after sync
       console.log('Sync: Completed.');
     } catch (error) {
       console.error('Sync: Failed', error);
@@ -48,6 +49,52 @@ export class RealtimeSyncEngine {
   private isValidUUID(uuid: any) {
     if (!uuid || typeof uuid !== 'string') return false;
     return UUID_REGEX.test(uuid);
+  }
+
+  private async meticulousPurge() {
+    console.log('Sync: Starting meticulous purge...');
+    // 1. Purge records marked as isDeleted AND synced
+    const tableMapping: Record<TableName, string> = {
+        semesters: 'semesters',
+        students: 'students',
+        courses: 'courses',
+        enrollments: 'enrollments',
+        attendance_sessions: 'attendanceSessions',
+        attendance_records: 'attendanceRecords'
+    };
+
+    for (const [_apiName, dexieName] of Object.entries(tableMapping)) {
+        const table = (db as any)[dexieName];
+        const toPurge = await table.filter((r: any) => r.isDeleted === 1 && r.synced === 1).primaryKeys();
+        if (toPurge.length > 0) {
+            console.log(`Sync: Purging ${toPurge.length} deleted records from ${dexieName}`);
+            await table.bulkDelete(toPurge);
+        }
+    }
+
+    // 2. Purge large synced history (Attendance Records) to keep local DB light
+    // We keep them locally for 24 hours just in case, then they are Cloud-Only
+    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    const oldRecords = await db.attendanceRecords
+        .filter((r) => r.synced === 1 && r.timestamp < oneDayAgo)
+        .primaryKeys();
+    
+    if (oldRecords.length > 0) {
+        console.log(`Sync: Purging ${oldRecords.length} old synced records to cloud-only state.`);
+        await db.attendanceRecords.bulkDelete(oldRecords);
+    }
+
+    // 3. Purge old sessions if they have no local records left
+    const oldSessions = await db.attendanceSessions
+        .filter((s) => s.synced === 1 && new Date(s.date).getTime() < oneDayAgo)
+        .toArray();
+    
+    for (const session of oldSessions) {
+        const localCount = await db.attendanceRecords.where('sessionId').equals(session.serverId).count();
+        if (localCount === 0) {
+            await db.attendanceSessions.delete(session.id!);
+        }
+    }
   }
 
   private async pushChanges() {
@@ -80,10 +127,7 @@ export class RealtimeSyncEngine {
 
     // Push Courses
     await this.pushTable<LocalCourse>('courses', db.courses, (item) => {
-      if (!this.isValidUUID(item.semesterId)) {
-        console.error('Sync: Push Failed - Course missing valid Semester UUID', item);
-        return null;
-      }
+      if (!this.isValidUUID(item.semesterId)) return null;
       return {
         id: item.serverId,
         code: item.code,
@@ -97,10 +141,7 @@ export class RealtimeSyncEngine {
 
     // Push Enrollments
     await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => {
-      if (!this.isValidUUID(item.studentId) || !this.isValidUUID(item.courseId)) {
-        console.error('Sync: Push Failed - Enrollment missing valid Student/Course UUID', item);
-        return null;
-      }
+      if (!this.isValidUUID(item.studentId) || !this.isValidUUID(item.courseId)) return null;
       return {
         id: item.serverId,
         student_id: item.studentId,
@@ -113,10 +154,7 @@ export class RealtimeSyncEngine {
 
     // Push Sessions
     await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => {
-      if (!this.isValidUUID(item.courseId)) {
-        console.error('Sync: Push Failed - Session missing valid Course UUID', item);
-        return null;
-      }
+      if (!this.isValidUUID(item.courseId)) return null;
       return {
         id: item.serverId,
         course_id: item.courseId,
@@ -130,10 +168,7 @@ export class RealtimeSyncEngine {
 
     // Push Records
     await this.pushTable<LocalAttendanceRecord>('attendance_records', db.attendanceRecords, (item) => {
-      if (!this.isValidUUID(item.sessionId) || !this.isValidUUID(item.studentId)) {
-        console.error('Sync: Push Failed - Record missing valid Session/Student UUID', item);
-        return null;
-      }
+      if (!this.isValidUUID(item.sessionId) || !this.isValidUUID(item.studentId)) return null;
       return {
         id: item.serverId,
         session_id: item.sessionId,
@@ -157,11 +192,7 @@ export class RealtimeSyncEngine {
 
     const payload = unsynced.map(mapFn).filter((p: any): p is NonNullable<typeof p> => p !== null);
     
-    if (payload.length === 0) {
-        // If they were all invalid, we DON'T mark as synced because we want to fix them.
-        console.warn(`Sync: ${unsynced.length} records in ${tableName} were invalid and not pushed.`);
-        return;
-    }
+    if (payload.length === 0) return;
 
     const { error } = await supabase.from(tableName).upsert(payload);
 
@@ -180,11 +211,19 @@ export class RealtimeSyncEngine {
     const since = lastSync ? new Date(parseInt(lastSync)).toISOString() : new Date(0).toISOString();
 
     const pull = async (tableName: TableName, table: any, mapToLocal: (serverItem: any) => any) => {
-        const { data, error } = await supabase
-            .from(tableName)
-            .select('*')
-            .eq('user_id', this.userId)
-            .gt('updated_at', since);
+        // We only pull Entities (Students, Courses, Semesters) automatically.
+        // Heavy data (Records, Sessions) are Cloud-First/Archive-Only to keep app light.
+        const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
+        
+        let query = supabase.from(tableName).select('*').eq('user_id', this.userId).gt('updated_at', since);
+        
+        // If it's heavy, only pull data from last 48 hours to have "Recent Activity" locally
+        if (isHeavy) {
+            const twoDaysAgo = new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString();
+            query = query.gt('created_at', twoDaysAgo);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             console.error(`Sync: Error pulling ${tableName}`, error);
@@ -250,7 +289,11 @@ export class RealtimeSyncEngine {
         if (localItem) {
              await table.update(localItem.id, { ...mapped, synced: 1 });
         } else {
-             await table.add({ ...mapped, synced: 1 });
+             // For Realtime, we only cache it locally if it's NOT heavy OR it's very recent.
+             const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
+             if (!isHeavy) {
+                await table.add({ ...mapped, synced: 1 });
+             }
         }
     } else if (eventType === 'DELETE') {
         const localItem = await table.where('serverId').equals(oldRecord.id).first();
@@ -266,7 +309,7 @@ export class RealtimeSyncEngine {
           case 'courses': return { ...base, code: r.code, title: r.title, semesterId: r.semester_id };
           case 'enrollments': return { ...base, studentId: r.student_id, courseId: r.course_id };
           case 'attendance_sessions': return { ...base, course_id: r.course_id, date: r.date, title: r.title };
-          case 'attendance_records': return { ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status, timestamp: r.marked_at };
+          case 'attendance_records': return { ...base, sessionId: r.session_id, student_id: r.student_id, status: r.status, timestamp: r.marked_at };
           default: return base;
       }
   }
