@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, CheckCircle, XCircle, HelpCircle, ChevronRight, Calendar, Clock, ArrowLeft, Book } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, HelpCircle, ChevronRight, Calendar, Clock, ArrowLeft, Book, Search, UserCheck, UserX, RotateCcw } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -16,6 +16,14 @@ export default function Attendance() {
   
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [markSearch, setMarkSearch] = useState('');
+  const [debouncedMarkSearch, setDebouncedMarkSearch] = useState('');
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedMarkSearch(markSearch), 300);
+    return () => clearTimeout(timer);
+  }, [markSearch]);
 
   const sessions = useLiveQuery(
     () => selectedCourseId ? db.attendanceSessions.where('courseId').equals(selectedCourseId).reverse().toArray() : [],
@@ -26,7 +34,8 @@ export default function Attendance() {
     async () => {
       if (!selectedCourseId) return [];
       const enrollmentList = await db.enrollments.where('courseId').equals(selectedCourseId).toArray();
-      const studentIds = enrollmentList.map(e => e.studentId);
+      const activeEnrollments = enrollmentList.filter(e => e.isDeleted !== 1);
+      const studentIds = activeEnrollments.map(e => e.studentId);
       return db.students.where('serverId').anyOf(studentIds).toArray();
     },
     [selectedCourseId]
@@ -37,7 +46,16 @@ export default function Attendance() {
     [activeSessionId]
   );
 
-  // Pagination for courses
+  // Filtered List for Marking
+  const filteredEnrollments = useMemo(() => {
+    if (!enrollments) return [];
+    return enrollments.filter(s => 
+      s.name.toLowerCase().includes(debouncedMarkSearch.toLowerCase()) || 
+      s.regNumber.includes(debouncedMarkSearch)
+    );
+  }, [enrollments, debouncedMarkSearch]);
+
+  // View 1 & 2 logic
   const [coursePage, setCoursePage] = useState(1);
   const itemsPerPage = 5;
   const totalCoursePages = Math.ceil((courses?.length || 0) / itemsPerPage);
@@ -46,7 +64,7 @@ export default function Attendance() {
   const handleCreateSession = async () => {
     if (!selectedCourseId || !user) return;
     const newSession = {
-      serverId: '', // Will be set by hook
+      serverId: '',
       courseId: selectedCourseId,
       date: new Date().toISOString().split('T')[0],
       title: `Session ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
@@ -62,18 +80,72 @@ export default function Attendance() {
   const updateRecord = async (studentId: string, status: 'present' | 'absent' | 'excused') => {
     if (!activeSessionId || !user) return;
     const existing = await db.attendanceRecords.where('[sessionId+studentId]').equals([activeSessionId, studentId]).first();
-    if (existing) await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now(), synced: 0 });
-    else await db.attendanceRecords.add({ 
-      serverId: '',
-      sessionId: activeSessionId, 
-      studentId, 
-      status, 
-      timestamp: Date.now(), 
-      synced: 0, 
-      userId: user.id,
-      isDeleted: 0
-    } as any);
-    if (window.navigator.vibrate) window.navigator.vibrate(10);
+    if (existing) {
+      await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now(), synced: 0 });
+    } else {
+      await db.attendanceRecords.add({ 
+        serverId: '',
+        sessionId: activeSessionId, 
+        studentId, 
+        status, 
+        timestamp: Date.now(), 
+        synced: 0, 
+        userId: user.id,
+        isDeleted: 0
+      } as any);
+    }
+    if (window.navigator.vibrate) window.navigator.vibrate(5);
+  };
+
+  const handleBulkMark = async (status: 'present' | 'absent') => {
+    if (!activeSessionId || !user || !filteredEnrollments.length) return;
+    
+    if (!confirm(`Mark ${filteredEnrollments.length} students as ${status.toUpperCase()}?`)) return;
+
+    await db.transaction('rw', db.attendanceRecords, async () => {
+      const now = Date.now();
+      const studentIds = filteredEnrollments.map(s => s.serverId);
+      
+      const existing = await db.attendanceRecords
+        .where('sessionId').equals(activeSessionId)
+        .filter(r => studentIds.includes(r.studentId))
+        .toArray();
+      
+      const existingIds = new Set(existing.map(r => r.studentId));
+      const toUpdate = existing.map(r => ({ key: r.id!, changes: { status, timestamp: now, synced: 0 } }));
+      
+      const toAdd = studentIds
+        .filter(id => !existingIds.has(id))
+        .map(studentId => ({
+          serverId: '',
+          sessionId: activeSessionId,
+          studentId,
+          status,
+          timestamp: now,
+          synced: 0,
+          userId: user.id,
+          isDeleted: 0
+        }));
+
+      if (toUpdate.length > 0) await db.attendanceRecords.bulkUpdate(toUpdate);
+      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd as any);
+    });
+  };
+
+  const handleResetRecords = async () => {
+    if (!activeSessionId || !filteredEnrollments.length) return;
+    if (!confirm('Clear attendance for these students?')) return;
+
+    const studentIds = filteredEnrollments.map(s => s.serverId);
+    const toClear = await db.attendanceRecords
+        .where('sessionId').equals(activeSessionId)
+        .filter(r => studentIds.includes(r.studentId))
+        .primaryKeys();
+    
+    if (toClear.length > 0) {
+        // Actually we mark as deleted so it syncs deletion to cloud
+        await db.attendanceRecords.bulkUpdate(toClear.map(k => ({ key: k as number, changes: { isDeleted: 1, synced: 0 } })));
+    }
   };
 
   if (!activeSemester) return (
@@ -169,8 +241,12 @@ export default function Attendance() {
 
   // View 3: Marking Mode
   const currentSession = sessions?.find(s => s.serverId === activeSessionId);
+  const activeRecords = records?.filter(r => r.isDeleted !== 1) || [];
+  
   const stats = {
-    present: records?.filter(r => r.status === 'present').length || 0,
+    present: activeRecords.filter(r => r.status === 'present').length,
+    absent: activeRecords.filter(r => r.status === 'absent').length,
+    excused: activeRecords.filter(r => r.status === 'excused').length,
     total: enrollments?.length || 0
   };
 
@@ -182,20 +258,41 @@ export default function Attendance() {
             <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={() => setActiveSessionId(null)}><ArrowLeft size={20} /></button>
             <div className="overflow-hidden">
               <h1 className="h6 fw-black mb-0 text-dark text-uppercase letter-spacing-n1 truncate">{currentSession?.title}</h1>
-              <p className="xx-small fw-black text-muted mb-0 uppercase tracking-widest">{stats.present} / {stats.total} ENROLLED</p>
+              <p className="xx-small fw-black text-muted mb-0 uppercase tracking-widest">{stats.present + stats.absent + stats.excused} / {stats.total} MARKED</p>
             </div>
           </div>
           <div className="bg-primary text-white rounded-pill px-3 py-1 fw-black xx-small shadow-sm">{Math.round((stats.present/stats.total)*100 || 0)}%</div>
         </div>
-        <div className="progress rounded-pill bg-light" style={{ height: '6px' }}>
-          <div className="progress-bar bg-primary shadow-sm" style={{ width: `${(stats.present/stats.total)*100}%`, transition: 'width 0.5s cubic-bezier(0.4, 0, 0.2, 1)' }}></div>
+
+        {/* Stats Row */}
+        <div className="row g-2 mb-3">
+            <div className="col-4"><div className="bg-light p-2 rounded-3 text-center border"><div className="h6 mb-0 fw-black text-success">{stats.present}</div><div className="xx-small fw-bold text-muted">PRESENT</div></div></div>
+            <div className="col-4"><div className="bg-light p-2 rounded-3 text-center border"><div className="h6 mb-0 fw-black text-danger">{stats.absent}</div><div className="xx-small fw-bold text-muted">ABSENT</div></div></div>
+            <div className="col-4"><div className="bg-light p-2 rounded-3 text-center border"><div className="h6 mb-0 fw-black text-warning">{stats.excused}</div><div className="xx-small fw-bold text-muted">EXCUSED</div></div></div>
+        </div>
+
+        {/* Search & Bulk Bar */}
+        <div className="d-flex gap-2">
+            <div className="modern-input-unified p-1 d-flex align-items-center bg-light shadow-inner flex-grow-1">
+                <Search size={16} className="text-muted ms-2" />
+                <input type="text" className="form-control border-0 bg-transparent py-1 small fw-bold" placeholder="Find student..." value={markSearch} onChange={e => setMarkSearch(e.target.value)} />
+            </div>
+            <div className="dropdown">
+                <button className="btn btn-light border rounded-3 p-2 shadow-sm" type="button" data-bs-toggle="dropdown"><Plus size={20} /></button>
+                <ul className="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 p-2">
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleBulkMark('present')}><UserCheck size={16} className="text-success" /> Mark All Present</button></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleBulkMark('absent')}><UserX size={16} className="text-danger" /> Mark All Absent</button></li>
+                    <li><hr className="dropdown-divider" /></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2 text-danger" onClick={handleResetRecords}><RotateCcw size={16} /> Reset Selection</button></li>
+                </ul>
+            </div>
         </div>
       </div>
 
       <div className="px-4 container-mobile d-flex flex-column gap-2">
         <AnimatePresence mode="popLayout">
-          {enrollments?.map(student => {
-            const record = records?.find(r => r.studentId === student.serverId);
+          {filteredEnrollments.map(student => {
+            const record = activeRecords.find(r => r.studentId === student.serverId);
             const status = record?.status;
             return (
               <motion.div key={student.serverId} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
@@ -214,9 +311,17 @@ export default function Attendance() {
             );
           })}
         </AnimatePresence>
+        
         {enrollments?.length === 0 && (
           <div className="text-center py-5 bg-white rounded-4 border-dashed border-2">
             <p className="xx-small fw-black text-muted text-uppercase tracking-widest mb-0">No students enrolled in this course</p>
+          </div>
+        )}
+
+        {filteredEnrollments.length === 0 && enrollments && enrollments.length > 0 && (
+          <div className="text-center py-5 opacity-50">
+            <Search size={40} className="text-muted mb-2 mx-auto" />
+            <p className="xx-small fw-black text-muted uppercase">No matches found for "{markSearch}"</p>
           </div>
         )}
       </div>
@@ -229,6 +334,7 @@ export default function Attendance() {
         .active-scale:active { transform: scale(0.98); }
         .scale-110 { transform: scale(1.1); }
         .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .shadow-inner { box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
       `}</style>
     </div>
   );
