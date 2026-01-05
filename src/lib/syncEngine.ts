@@ -12,11 +12,28 @@ export const syncEngine = {
       console.log('Sync: Starting for user', user.id);
       await this.pushToCloud(user.id);
       await this.pullFromCloud(user.id);
+      await this.garbageCollect();
       console.log('Sync: Completed');
       return { success: true };
     } catch (error) {
       console.error('Sync failed:', error);
       return { success: false, error };
+    }
+  },
+
+  async garbageCollect() {
+    // Safely remove local records that are both SYNCED and DELETED (tombstones)
+    // This keeps the IndexedDB size manageable over time
+    const tables = [db.students, db.semesters, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords];
+    
+    for (const table of tables) {
+      // Find records where synced=1 AND isDeleted=1
+      // Note: Dexie compound index queries are most efficient, but filtering is safe here for background task
+      const tombstones = await table.filter((r: any) => r.synced === 1 && r.isDeleted === 1).primaryKeys();
+      if (tombstones.length > 0) {
+        console.log(`GC: Cleaning up ${tombstones.length} tombstones from ${table.name}`);
+        await table.bulkDelete(tombstones);
+      }
     }
   },
 

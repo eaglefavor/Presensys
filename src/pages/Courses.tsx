@@ -374,7 +374,7 @@ export default function Courses() {
               <div className="vr opacity-25"></div>
               <div className="text-center">
                 <h6 className="fw-black mb-0 text-danger">{stats.notEnrolled}</h6>
-                <div className="xx-small fw-bold text-muted uppercase">Missing</div>
+                <div className="xx-small fw-bold text-muted uppercase">Not Enrolled</div>
               </div>
             </div>
 

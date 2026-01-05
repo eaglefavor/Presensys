@@ -85,15 +85,17 @@ export class PresensysDB extends Dexie {
     // Add hooks for automatic timestamping and sync status
     this.tables.forEach(table => {
       table.hook('creating', (_primKey, obj, _transaction) => {
-        obj.lastModified = Date.now();
-        obj.synced = 0;
+        // Only set defaults if not already provided (e.g. during sync)
+        if (obj.lastModified === undefined) obj.lastModified = Date.now();
+        if (obj.synced === undefined) obj.synced = 0;
       });
       table.hook('updating', (mods, _primKey, _obj, _transaction) => {
         if (typeof mods === 'object' && mods !== null) {
-          // If we are specifically setting 'synced' (e.g. from syncEngine), don't reset it to 0
-          if (!('synced' in mods)) {
-             return { lastModified: Date.now(), synced: 0 };
-          }
+          // If we are specifically setting 'synced' or 'lastModified' (e.g. from syncEngine), respect it
+          const updates: any = { };
+          if (!('lastModified' in mods)) updates.lastModified = Date.now();
+          if (!('synced' in mods)) updates.synced = 0;
+          return updates;
         } else {
            return { lastModified: Date.now(), synced: 0 };
         }
