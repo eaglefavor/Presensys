@@ -46,7 +46,7 @@ export class RealtimeSyncEngine {
   }
 
   private isValidUUID(uuid: any) {
-    if (typeof uuid !== 'string') return false;
+    if (!uuid || typeof uuid !== 'string') return false;
     return UUID_REGEX.test(uuid);
   }
 
@@ -81,7 +81,7 @@ export class RealtimeSyncEngine {
     // Push Courses
     await this.pushTable<LocalCourse>('courses', db.courses, (item) => {
       if (!this.isValidUUID(item.semesterId)) {
-        console.warn('Sync: Skipping course push - invalid semester UUID', item);
+        console.error('Sync: Push Failed - Course missing valid Semester UUID', item);
         return null;
       }
       return {
@@ -98,7 +98,7 @@ export class RealtimeSyncEngine {
     // Push Enrollments
     await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => {
       if (!this.isValidUUID(item.studentId) || !this.isValidUUID(item.courseId)) {
-        console.warn('Sync: Skipping enrollment push - invalid UUIDs', item);
+        console.error('Sync: Push Failed - Enrollment missing valid Student/Course UUID', item);
         return null;
       }
       return {
@@ -114,7 +114,7 @@ export class RealtimeSyncEngine {
     // Push Sessions
     await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => {
       if (!this.isValidUUID(item.courseId)) {
-        console.warn('Sync: Skipping session push - invalid course UUID', item);
+        console.error('Sync: Push Failed - Session missing valid Course UUID', item);
         return null;
       }
       return {
@@ -131,7 +131,7 @@ export class RealtimeSyncEngine {
     // Push Records
     await this.pushTable<LocalAttendanceRecord>('attendance_records', db.attendanceRecords, (item) => {
       if (!this.isValidUUID(item.sessionId) || !this.isValidUUID(item.studentId)) {
-        console.warn('Sync: Skipping record push - invalid UUIDs', item);
+        console.error('Sync: Push Failed - Record missing valid Session/Student UUID', item);
         return null;
       }
       return {
@@ -155,12 +155,11 @@ export class RealtimeSyncEngine {
     const unsynced = await table.filter((i: T) => i.synced === 0).toArray();
     if (unsynced.length === 0) return;
 
-    // Filter out nulls from mapFn (records with invalid UUIDs)
     const payload = unsynced.map(mapFn).filter((p: any): p is NonNullable<typeof p> => p !== null);
+    
     if (payload.length === 0) {
-        // If they were all invalid, mark them as "processed" or just leave them.
-        // For safety, let's mark them as synced so they stop crashing, even if they won't reach the server.
-        await table.bulkUpdate(unsynced.map((i: T) => ({ key: i.id!, changes: { synced: 1 } })));
+        // If they were all invalid, we DON'T mark as synced because we want to fix them.
+        console.warn(`Sync: ${unsynced.length} records in ${tableName} were invalid and not pushed.`);
         return;
     }
 
@@ -169,6 +168,7 @@ export class RealtimeSyncEngine {
     if (error) {
       console.error(`Sync: Error pushing to ${tableName}`, error);
     } else {
+      console.log(`Sync: Successfully pushed ${payload.length} records to ${tableName}`);
       await table.bulkUpdate(unsynced.map((i: T) => ({ key: i.id!, changes: { synced: 1 } })));
     }
   }
@@ -265,7 +265,7 @@ export class RealtimeSyncEngine {
           case 'students': return { ...base, regNumber: r.reg_number, name: r.name, email: r.email, phone: r.phone };
           case 'courses': return { ...base, code: r.code, title: r.title, semesterId: r.semester_id };
           case 'enrollments': return { ...base, studentId: r.student_id, courseId: r.course_id };
-          case 'attendance_sessions': return { ...base, courseId: r.course_id, date: r.date, title: r.title };
+          case 'attendance_sessions': return { ...base, course_id: r.course_id, date: r.date, title: r.title };
           case 'attendance_records': return { ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status, timestamp: r.marked_at };
           default: return base;
       }
