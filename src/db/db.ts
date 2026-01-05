@@ -73,13 +73,13 @@ export class PresensysDB extends Dexie {
 
   constructor() {
     super('PresensysDB');
-    this.version(7).stores({
-      semesters: '++id, name, startDate, synced, isDeleted, userId, lastModified',
-      students: '++id, &regNumber, name, synced, isDeleted, userId, lastModified',
-      courses: '++id, code, semesterId, synced, isDeleted, userId, lastModified',
-      enrollments: '++id, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, lastModified',
-      attendanceSessions: '++id, courseId, date, synced, isDeleted, userId, lastModified',
-      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, lastModified'
+    this.version(8).stores({
+      semesters: '++id, name, startDate, synced, isDeleted, userId, lastModified, serverId',
+      students: '++id, &regNumber, name, synced, isDeleted, userId, lastModified, serverId',
+      courses: '++id, code, semesterId, synced, isDeleted, userId, lastModified, serverId',
+      enrollments: '++id, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, lastModified, serverId',
+      attendanceSessions: '++id, courseId, date, synced, isDeleted, userId, lastModified, serverId',
+      attendanceRecords: '++id, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, lastModified, serverId'
     });
 
     // Add hooks for automatic timestamping and sync status
