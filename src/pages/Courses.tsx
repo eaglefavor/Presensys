@@ -20,7 +20,14 @@ export default function Courses() {
   
   const [showEnrollModal, setShowEnrollModal] = useState<{show: boolean, courseId?: string, courseName?: string}>({ show: false });
   const [enrollSearch, setEnrollSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [enrollFilter, setEnrollFilter] = useState<'all' | 'enrolled' | 'not_enrolled'>('all');
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(enrollSearch), 300);
+    return () => clearTimeout(timer);
+  }, [enrollSearch]);
   
   // Local Enrollment State (Pending Changes)
   const [localEnrollments, setLocalEnrollments] = useState<Set<string>>(new Set());
@@ -55,19 +62,23 @@ export default function Courses() {
 
   const allStudents = useLiveQuery(() => db.students.orderBy('name').toArray());
 
-  const studentsWithStatus = allStudents?.map(s => ({
-    ...s,
-    isEnrolled: localEnrollments.has(s.serverId)
-  })) || [];
-
-  const filteredStudents = studentsWithStatus.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(enrollSearch.toLowerCase()) || s.regNumber.includes(enrollSearch);
-    const matchesFilter = 
-      enrollFilter === 'all' ? true :
-      enrollFilter === 'enrolled' ? s.isEnrolled :
-      !s.isEnrolled;
-    return matchesSearch && matchesFilter;
-  });
+  const filteredStudents = useMemo(() => {
+    if (!allStudents) return [];
+    
+    return allStudents.filter(s => {
+      const isEnrolled = localEnrollments.has(s.serverId);
+      const matchesSearch = s.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || 
+                           s.regNumber.includes(debouncedSearch);
+      const matchesFilter = 
+        enrollFilter === 'all' ? true :
+        enrollFilter === 'enrolled' ? isEnrolled :
+        !isEnrolled;
+      return matchesSearch && matchesFilter;
+    }).map(s => ({
+      ...s,
+      isEnrolled: localEnrollments.has(s.serverId)
+    }));
+  }, [allStudents, debouncedSearch, enrollFilter, localEnrollments]);
 
   const stats = {
     all: allStudents?.length || 0,
@@ -78,6 +89,17 @@ export default function Courses() {
   const areAllVisibleSelected = filteredStudents.length > 0 && filteredStudents.every(s => s.isEnrolled);
   const totalPages = Math.ceil((courses?.length || 0) / itemsPerPage);
   const displayedCourses = courses?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Pagination for Enrollment Modal (Virtualization)
+  const [modalPage, setModalPage] = useState(1);
+  const modalItemsPerPage = 20;
+  const totalModalPages = Math.ceil(filteredStudents.length / modalItemsPerPage);
+  const displayedModalStudents = filteredStudents.slice((modalPage - 1) * modalItemsPerPage, modalPage * modalItemsPerPage);
+
+  // Reset modal page when filters or search change
+  useEffect(() => {
+    setModalPage(1);
+  }, [debouncedSearch, enrollFilter]);
 
   const handleAddCourse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,47 +149,61 @@ export default function Courses() {
     setIsSaving(true);
     
     try {
-      const toAdd: string[] = [];
-      const toRemove: string[] = [];
+      const toAddIds: string[] = [];
+      const toRemoveIds: string[] = [];
 
       for (const id of localEnrollments) {
-        if (!originalEnrollments.has(id)) toAdd.push(id);
+        if (!originalEnrollments.has(id)) toAddIds.push(id);
       }
       for (const id of originalEnrollments) {
-        if (!localEnrollments.has(id)) toRemove.push(id);
+        if (!localEnrollments.has(id)) toRemoveIds.push(id);
       }
 
       await db.transaction('rw', db.enrollments, async () => {
-        if (toRemove.length > 0) {
-           for (const studentId of toRemove) {
-             const records = await db.enrollments
-               .where('courseId').equals(showEnrollModal.courseId!)
-               .filter(e => e.studentId === studentId)
-               .toArray();
-             
-             for (const r of records) {
-                await db.enrollments.update(r.id!, { isDeleted: 1, synced: 0 });
-             }
-           }
+        // 1. Handle Removals (Bulk)
+        if (toRemoveIds.length > 0) {
+          const recordsToSoftDelete = await db.enrollments
+            .where('courseId').equals(showEnrollModal.courseId!)
+            .filter(e => toRemoveIds.includes(e.studentId))
+            .toArray();
+          
+          if (recordsToSoftDelete.length > 0) {
+            await db.enrollments.bulkUpdate(
+              recordsToSoftDelete.map(r => ({ key: r.id!, changes: { isDeleted: 1, synced: 0 } }))
+            );
+          }
         }
         
-        for (const studentId of toAdd) {
-          const existing = await db.enrollments
+        // 2. Handle Additions (Bulk)
+        if (toAddIds.length > 0) {
+          // Check for existing tombstones to resurrect
+          const existingTombstones = await db.enrollments
             .where('courseId').equals(showEnrollModal.courseId!)
-            .filter(e => e.studentId === studentId)
-            .first();
-            
-          if (existing) {
-             await db.enrollments.update(existing.id!, { isDeleted: 0, synced: 0 });
-          } else {
-             await db.enrollments.add({
-               serverId: '',
-               studentId,
-               courseId: showEnrollModal.courseId!,
-               userId: user.id,
-               synced: 0,
-               isDeleted: 0
-             } as any);
+            .filter(e => toAddIds.includes(e.studentId))
+            .toArray();
+          
+          const tombstoneStudentIds = new Set(existingTombstones.map(t => t.studentId));
+          const brandNewStudentIds = toAddIds.filter(id => !tombstoneStudentIds.has(id));
+
+          // Resurrect existing
+          if (existingTombstones.length > 0) {
+            await db.enrollments.bulkUpdate(
+              existingTombstones.map(t => ({ key: t.id!, changes: { isDeleted: 0, synced: 0 } }))
+            );
+          }
+
+          // Create brand new
+          if (brandNewStudentIds.length > 0) {
+            await db.enrollments.bulkAdd(
+              brandNewStudentIds.map(studentId => ({
+                serverId: '',
+                studentId,
+                courseId: showEnrollModal.courseId!,
+                userId: user.id,
+                synced: 0,
+                isDeleted: 0
+              } as any))
+            );
           }
         }
       });
@@ -180,7 +216,7 @@ export default function Courses() {
       setOriginalEnrollments(new Set(newIds));
       alert('Changes saved successfully!');
     } catch (err) {
-      console.error(err);
+      console.error('Save error:', err);
       alert('Failed to save changes.');
     } finally {
       setIsSaving(false);
@@ -375,7 +411,7 @@ export default function Courses() {
 
             {/* List */}
             <div className="flex-grow-1 overflow-auto bg-white">
-              {filteredStudents.length === 0 ? (
+              {displayedModalStudents.length === 0 ? (
                 <div className="h-100 d-flex flex-column align-items-center justify-content-center p-4 text-center opacity-50">
                   {enrollFilter === 'not_enrolled' && stats.notEnrolled === 0 ? (
                     <>
@@ -393,7 +429,7 @@ export default function Courses() {
                 </div>
               ) : (
                 <div className="list-group list-group-flush">
-                  {filteredStudents.map(student => (
+                  {displayedModalStudents.map(student => (
                     <div key={student.serverId} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: student.isEnrolled ? 'rgba(0,105,148,0.03)' : 'transparent' }}>
                       <div className="d-flex align-items-center gap-3 overflow-hidden">
                         <div className={`p-1 rounded-circle ${student.isEnrolled ? 'text-success' : 'text-muted opacity-25'}`}>
@@ -412,6 +448,15 @@ export default function Courses() {
                       </button>
                     </div>
                   ))}
+                  
+                  {/* Modal Pagination Controls */}
+                  {totalModalPages > 1 && (
+                    <div className="p-3 bg-light d-flex justify-content-between align-items-center border-top">
+                      <button className="btn btn-white border btn-sm fw-bold px-3" disabled={modalPage === 1} onClick={() => setModalPage(p => Math.max(p - 1, 1))}>PREV</button>
+                      <span className="xx-small fw-black text-muted uppercase">Page {modalPage} of {totalModalPages}</span>
+                      <button className="btn btn-white border btn-sm fw-bold px-3" disabled={modalPage === totalModalPages} onClick={() => setModalPage(p => Math.min(p + 1, totalModalPages))}>NEXT</button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
