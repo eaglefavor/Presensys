@@ -37,6 +37,7 @@ export class RealtimeSyncEngine {
     this.isSyncing = true;
 
     try {
+      await this.selfHealData(); // Fix malformed IDs before pushing
       await this.pushChanges();
       await this.pullChanges();
       await this.meticulousPurge();
@@ -52,8 +53,36 @@ export class RealtimeSyncEngine {
     return UUID_REGEX.test(uuid);
   }
 
+  /**
+   * Automatically fixes local records that have numeric IDs instead of UUIDs
+   * by mapping them to the current active semester/entities.
+   */
+  private async selfHealData() {
+    const activeSemester = await db.semesters.filter(s => s.isActive).first();
+    if (!activeSemester || !this.isValidUUID(activeSemester.serverId)) return;
+
+    // 1. Fix Courses with numeric semesterId
+    const brokenCourses = await db.courses.filter(c => !this.isValidUUID(c.semesterId)).toArray();
+    if (brokenCourses.length > 0) {
+        console.log(`Sync: Self-healing ${brokenCourses.length} courses...`);
+        await db.courses.bulkUpdate(brokenCourses.map(c => ({
+            key: c.id!,
+            changes: { semesterId: activeSemester.serverId, synced: 0 }
+        })));
+    }
+
+    // 2. Fix Sessions with numeric courseId
+    const brokenSessions = await db.attendanceSessions.filter(s => !this.isValidUUID(s.courseId)).toArray();
+    for (const session of brokenSessions) {
+        // Try to find the course locally by its local numeric ID if it was stored that way
+        const course = await db.courses.get(Number(session.courseId));
+        if (course && this.isValidUUID(course.serverId)) {
+            await db.attendanceSessions.update(session.id!, { courseId: course.serverId, synced: 0 });
+        }
+    }
+  }
+
   private async meticulousPurge() {
-    // 1. Purge records marked as isDeleted AND synced
     const tableMapping: Record<TableName, string> = {
         semesters: 'semesters',
         students: 'students',
@@ -71,19 +100,15 @@ export class RealtimeSyncEngine {
         }
     }
 
-    // 2. Purge large synced history (Attendance Records) to keep local DB light
-    // We keep them locally for 24 hours just in case, then they are Cloud-Only
     const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
     const oldRecords = await db.attendanceRecords
         .filter((r) => r.synced === 1 && r.timestamp < oneDayAgo)
         .primaryKeys();
     
     if (oldRecords.length > 0) {
-        console.log(`Sync: Purging ${oldRecords.length} old synced records to cloud-only state.`);
         await db.attendanceRecords.bulkDelete(oldRecords);
     }
 
-    // 3. Purge old sessions if they have no local records left
     const oldSessions = await db.attendanceSessions
         .filter((s) => s.synced === 1 && new Date(s.date).getTime() < oneDayAgo)
         .toArray();
@@ -190,7 +215,6 @@ export class RealtimeSyncEngine {
     if (unsynced.length === 0) return;
 
     const payload = unsynced.map(mapFn).filter((p: any): p is NonNullable<typeof p> => p !== null);
-    
     if (payload.length === 0) return;
 
     const { error } = await supabase.from(tableName).upsert(payload);
@@ -198,7 +222,6 @@ export class RealtimeSyncEngine {
     if (error) {
       console.error(`Sync: Error pushing to ${tableName}`, error);
     } else {
-      console.log(`Sync: Successfully pushed ${payload.length} records to ${tableName}`);
       await table.bulkUpdate(unsynced.map((i: T) => ({ key: i.id!, changes: { synced: 1 } })));
     }
   }
@@ -210,24 +233,15 @@ export class RealtimeSyncEngine {
     const since = lastSync ? new Date(parseInt(lastSync)).toISOString() : new Date(0).toISOString();
 
     const pull = async (tableName: TableName, table: any, mapToLocal: (serverItem: any) => any) => {
-        // We only pull Entities (Students, Courses, Semesters) automatically.
-        // Heavy data (Records, Sessions) are Cloud-First/Archive-Only to keep app light.
         const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
-        
         let query = supabase.from(tableName).select('*').eq('user_id', this.userId).gt('updated_at', since);
-        
-        // If it's heavy, only pull data from last 48 hours to have "Recent Activity" locally
         if (isHeavy) {
             const twoDaysAgo = new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString();
             query = query.gt('created_at', twoDaysAgo);
         }
 
         const { data, error } = await query;
-
-        if (error) {
-            console.error(`Sync: Error pulling ${tableName}`, error);
-            return;
-        }
+        if (error) return;
 
         if (data && data.length > 0) {
             await db.transaction('rw', table, async () => {
@@ -288,7 +302,6 @@ export class RealtimeSyncEngine {
         if (localItem) {
              await table.update(localItem.id, { ...mapped, synced: 1 });
         } else {
-             // For Realtime, we only cache it locally if it's NOT heavy OR it's very recent.
              const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
              if (!isHeavy) {
                 await table.add({ ...mapped, synced: 1 });
@@ -308,7 +321,7 @@ export class RealtimeSyncEngine {
           case 'courses': return { ...base, code: r.code, title: r.title, semesterId: r.semester_id };
           case 'enrollments': return { ...base, studentId: r.student_id, courseId: r.course_id };
           case 'attendance_sessions': return { ...base, course_id: r.course_id, date: r.date, title: r.title };
-          case 'attendance_records': return { ...base, sessionId: r.session_id, student_id: r.student_id, status: r.status, timestamp: r.marked_at };
+          case 'attendance_records': return { ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status, timestamp: r.marked_at };
           default: return base;
       }
   }
