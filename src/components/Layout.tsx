@@ -12,9 +12,11 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
+import { useAppStore } from '../store/useAppStore';
 import { realtimeSync } from '../lib/RealtimeSyncEngine';
 
 const Layout: React.FC = () => {
+  const activeSemester = useAppStore(state => state.activeSemester);
   const { profile, signOut, user } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -90,9 +92,13 @@ const Layout: React.FC = () => {
               {syncStatus === 'offline' && <CloudOff size={18} className="text-muted" />}
               {syncStatus === 'error' && <CloudOff size={18} className="text-danger" />}
             </div>
-            <div className="avatar-header" onClick={() => setIsMenuOpen(true)} style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--bg-gray)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
-              {profile?.full_name?.[0] || 'U'}
-            </div>
+            {activeSemester && (
+              <Link to="/semesters" className="text-decoration-none">
+                <span className="badge rounded-pill bg-light text-primary border px-2 py-2 fw-bold xx-small" style={{ color: 'var(--primary-blue)', borderColor: 'var(--border-color)' }}>
+                  {activeSemester.name.split(' ')[0]}
+                </span>
+              </Link>
+            )}
           </div>
         </div>
       </header>
