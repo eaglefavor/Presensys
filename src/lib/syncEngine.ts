@@ -98,38 +98,62 @@ export const syncEngine = {
     const unsynced = await table.filter((i: any) => i.synced !== 1).toArray();
     if (unsynced.length === 0) return;
 
-    const toSync = unsynced.map(mapFn);
-    
-    // Filter out records where a required FK was not resolved
-    const validToSync = toSync.filter((item: any) => {
-       if (tableName === 'courses') return !!item.semester_id;
-       if (tableName === 'enrollments') return !!item.student_id && !!item.course_id;
-       if (tableName === 'attendance_sessions') return !!item.course_id;
-       if (tableName === 'attendance_records') return !!item.session_id && !!item.student_id;
-       return true;
-    });
+    const toDelete = unsynced.filter((i: any) => i.isDeleted === 1);
+    const toUpsert = unsynced.filter((i: any) => i.isDeleted !== 1);
 
-    if (validToSync.length === 0) return;
-
-    const { data, error } = await supabase.from(tableName).upsert(validToSync).select();
-    
-    if (error) {
-      console.error(`Sync: Error pushing ${tableName}:`, error);
-    } else if (data) {
-      await db.transaction('rw', table, async () => {
-        for (const serverRecord of data) {
-          const localMatch = unsynced.find((u: any) => {
-            if (u.serverId === serverRecord.id) return true;
-            if (serverRecord.reg_number && u.regNumber === serverRecord.reg_number) return true;
-            if (u.lastModified === serverRecord.last_modified) return true;
-            return false;
-          });
-
-          if (localMatch) {
-            await table.update(localMatch.id!, { synced: 1, serverId: serverRecord.id });
-          }
+    // 1. Handle Deletes (Hard Delete on Server)
+    if (toDelete.length > 0) {
+      const idsToDelete = toDelete.map((i: any) => i.serverId).filter((id: any) => id !== undefined);
+      
+      if (idsToDelete.length > 0) {
+        const { error } = await supabase.from(tableName).delete().in('id', idsToDelete);
+        if (error) {
+          console.error(`Sync: Error deleting from ${tableName}:`, error);
+        } else {
+          // Mark locally as synced (so GC can pick them up)
+          await table.bulkUpdate(toDelete.map((i: any) => ({ key: i.id!, changes: { synced: 1 } })));
         }
+      } else {
+        // Local records marked deleted but never synced/had serverId? Just mark synced to GC them.
+        await table.bulkUpdate(toDelete.map((i: any) => ({ key: i.id!, changes: { synced: 1 } })));
+      }
+    }
+
+    // 2. Handle Upserts
+    if (toUpsert.length > 0) {
+      const toSync = toUpsert.map(mapFn);
+      
+      // Filter out records where a required FK was not resolved
+      const validToSync = toSync.filter((item: any) => {
+         if (tableName === 'courses') return !!item.semester_id;
+         if (tableName === 'enrollments') return !!item.student_id && !!item.course_id;
+         if (tableName === 'attendance_sessions') return !!item.course_id;
+         if (tableName === 'attendance_records') return !!item.session_id && !!item.student_id;
+         return true;
       });
+
+      if (validToSync.length > 0) {
+        const { data, error } = await supabase.from(tableName).upsert(validToSync).select();
+        
+        if (error) {
+          console.error(`Sync: Error pushing ${tableName}:`, error);
+        } else if (data) {
+          await db.transaction('rw', table, async () => {
+            for (const serverRecord of data) {
+              const localMatch = toUpsert.find((u: any) => {
+                if (u.serverId === serverRecord.id) return true;
+                if (serverRecord.reg_number && u.regNumber === serverRecord.reg_number) return true;
+                if (u.lastModified === serverRecord.last_modified) return true;
+                return false;
+              });
+
+              if (localMatch) {
+                await table.update(localMatch.id!, { synced: 1, serverId: serverRecord.id });
+              }
+            }
+          });
+        }
+      }
     }
   },
 
