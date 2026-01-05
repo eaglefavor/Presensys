@@ -10,12 +10,12 @@ export default function Attendance() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.id!).toArray() : [],
+    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).toArray() : [],
     [activeSemester]
   );
   
-  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
-  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const sessions = useLiveQuery(
     () => selectedCourseId ? db.attendanceSessions.where('courseId').equals(selectedCourseId).reverse().toArray() : [],
@@ -27,7 +27,7 @@ export default function Attendance() {
       if (!selectedCourseId) return [];
       const enrollmentList = await db.enrollments.where('courseId').equals(selectedCourseId).toArray();
       const studentIds = enrollmentList.map(e => e.studentId);
-      return db.students.where('id').anyOf(studentIds).toArray();
+      return db.students.where('serverId').anyOf(studentIds).toArray();
     },
     [selectedCourseId]
   );
@@ -45,21 +45,34 @@ export default function Attendance() {
 
   const handleCreateSession = async () => {
     if (!selectedCourseId || !user) return;
-    const id = await db.attendanceSessions.add({
+    const newSession = {
+      serverId: '', // Will be set by hook
       courseId: selectedCourseId,
       date: new Date().toISOString().split('T')[0],
       title: `Session ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
       userId: user.id,
-      synced: 0
-    });
-    setActiveSessionId(id as number);
+      synced: 0,
+      isDeleted: 0
+    };
+    const id = await db.attendanceSessions.add(newSession as any);
+    const added = await db.attendanceSessions.get(id as number);
+    if (added) setActiveSessionId(added.serverId);
   };
 
-  const updateRecord = async (studentId: number, status: 'present' | 'absent' | 'excused') => {
+  const updateRecord = async (studentId: string, status: 'present' | 'absent' | 'excused') => {
     if (!activeSessionId || !user) return;
     const existing = await db.attendanceRecords.where('[sessionId+studentId]').equals([activeSessionId, studentId]).first();
     if (existing) await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now(), synced: 0 });
-    else await db.attendanceRecords.add({ sessionId: activeSessionId, studentId, status, timestamp: Date.now(), synced: 0, userId: user.id });
+    else await db.attendanceRecords.add({ 
+      serverId: '',
+      sessionId: activeSessionId, 
+      studentId, 
+      status, 
+      timestamp: Date.now(), 
+      synced: 0, 
+      userId: user.id,
+      isDeleted: 0
+    } as any);
     if (window.navigator.vibrate) window.navigator.vibrate(10);
   };
 
@@ -82,8 +95,8 @@ export default function Attendance() {
         <div className="px-4 container-mobile d-flex flex-column gap-2">
           <AnimatePresence mode="popLayout">
             {displayedCourses?.map(course => (
-              <motion.div key={course.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-                <div className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4 transition-all active-scale" onClick={() => setSelectedCourseId(course.id!)}>
+              <motion.div key={course.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                <div className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4 transition-all active-scale" onClick={() => setSelectedCourseId(course.serverId)}>
                   <div className="bg-primary bg-opacity-10 text-primary p-2 rounded-2 shadow-inner"><Book size={24} /></div>
                   <div className="flex-grow-1 overflow-hidden">
                     <h6 className="fw-black mb-0 text-dark text-uppercase letter-spacing-n1">{course.code}</h6>
@@ -115,7 +128,7 @@ export default function Attendance() {
 
   // View 2: Sessions List
   if (!activeSessionId) {
-    const selectedCourse = courses?.find(c => c.id === selectedCourseId);
+    const selectedCourse = courses?.find(c => c.serverId === selectedCourseId);
     return (
       <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
         <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
@@ -134,7 +147,7 @@ export default function Attendance() {
           <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 ps-1">Recent Sessions</h6>
           <div className="d-flex flex-column gap-2">
             {sessions?.map(session => (
-              <div key={session.id} className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4 transition-all active-scale" onClick={() => setActiveSessionId(session.id!)}>
+              <div key={session.serverId} className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4 transition-all active-scale" onClick={() => setActiveSessionId(session.serverId)}>
                 <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
                 <div className="flex-grow-1">
                   <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
@@ -155,7 +168,7 @@ export default function Attendance() {
   }
 
   // View 3: Marking Mode
-  const currentSession = sessions?.find(s => s.id === activeSessionId);
+  const currentSession = sessions?.find(s => s.serverId === activeSessionId);
   const stats = {
     present: records?.filter(r => r.status === 'present').length || 0,
     total: enrollments?.length || 0
@@ -182,19 +195,19 @@ export default function Attendance() {
       <div className="px-4 container-mobile d-flex flex-column gap-2">
         <AnimatePresence mode="popLayout">
           {enrollments?.map(student => {
-            const record = records?.find(r => r.studentId === student.id);
+            const record = records?.find(r => r.studentId === student.serverId);
             const status = record?.status;
             return (
-              <motion.div key={student.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
+              <motion.div key={student.serverId} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
                 <div className="card-body p-3 d-flex align-items-center gap-3">
                   <div className="flex-grow-1 overflow-hidden">
                     <h6 className="fw-bold mb-0 text-dark text-truncate text-uppercase small letter-spacing-n1">{student.name}</h6>
                     <div className="xx-small fw-black text-muted font-monospace tracking-widest">{student.regNumber}</div>
                   </div>
                   <div className="d-flex gap-1 bg-light p-1 rounded-3">
-                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'present' ? 'bg-success text-white shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.id!, 'present')}><CheckCircle size={20} /></button>
-                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'absent' ? 'bg-danger text-white shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.id!, 'absent')}><XCircle size={20} /></button>
-                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'excused' ? 'bg-warning text-dark shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.id!, 'excused')}><HelpCircle size={20} /></button>
+                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'present' ? 'bg-success text-white shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.serverId, 'present')}><CheckCircle size={20} /></button>
+                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'absent' ? 'bg-danger text-white shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.serverId, 'absent')}><XCircle size={20} /></button>
+                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'excused' ? 'bg-warning text-dark shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.serverId, 'excused')}><HelpCircle size={20} /></button>
                   </div>
                 </div>
               </motion.div>

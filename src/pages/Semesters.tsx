@@ -20,7 +20,7 @@ export default function Semesters() {
   });
 
   const courseCounts = useLiveQuery(async () => {
-    const counts: Record<number, number> = {};
+    const counts: Record<string, number> = {};
     const courses = await db.courses.toArray();
     courses.forEach(c => { counts[c.semesterId] = (counts[c.semesterId] || 0) + 1; });
     return counts;
@@ -30,7 +30,15 @@ export default function Semesters() {
     e.preventDefault();
     if (!user) return;
     if (newSemester.startDate > newSemester.endDate) { alert('Start date cannot be after end date.'); return; }
-    await db.semesters.add({ ...newSemester, isActive: false, isArchived: false, synced: 0, userId: user.id });
+    await db.semesters.add({ 
+      serverId: '',
+      ...newSemester, 
+      isActive: false, 
+      isArchived: false, 
+      synced: 0, 
+      userId: user.id,
+      isDeleted: 0
+    } as any);
     setShowModal(false);
     setNewSemester({ name: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0] });
   };
@@ -52,27 +60,25 @@ export default function Semesters() {
 
   const handleDelete = async (id: number) => {
     if (confirm('Delete this cycle and all its data?')) {
+      const semester = await db.semesters.get(id);
+      if (!semester) return;
+
       await db.transaction('rw', [db.semesters, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {
-        const courses = await db.courses.where('semesterId').equals(id).toArray();
-        const courseIds = courses.map(c => c.id!);
+        const courses = await db.courses.where('semesterId').equals(semester.serverId).toArray();
+        const courseServerIds = courses.map(c => c.serverId);
         
-        if (courseIds.length > 0) {
-          const sessions = await db.attendanceSessions.where('courseId').anyOf(courseIds).toArray();
-          const sessionIds = sessions.map(s => s.id!);
+        if (courseServerIds.length > 0) {
+          const sessions = await db.attendanceSessions.where('courseId').anyOf(courseServerIds).toArray();
+          const sessionServerIds = sessions.map(s => s.serverId);
           
-          if (sessionIds.length > 0) {
-            // Mark attendance records as deleted
-            await db.attendanceRecords.where('sessionId').anyOf(sessionIds).modify({ isDeleted: 1, synced: 0 });
+          if (sessionServerIds.length > 0) {
+            await db.attendanceRecords.where('sessionId').anyOf(sessionServerIds).modify({ isDeleted: 1, synced: 0 });
           }
-          // Mark attendance sessions as deleted
-          await db.attendanceSessions.where('courseId').anyOf(courseIds).modify({ isDeleted: 1, synced: 0 });
-          // Mark enrollments as deleted
-          await db.enrollments.where('courseId').anyOf(courseIds).modify({ isDeleted: 1, synced: 0 });
-          // Mark courses as deleted
-          await db.courses.where('semesterId').equals(id).modify({ isDeleted: 1, synced: 0 });
+          await db.attendanceSessions.where('courseId').anyOf(courseServerIds).modify({ isDeleted: 1, synced: 0 });
+          await db.enrollments.where('courseId').anyOf(courseServerIds).modify({ isDeleted: 1, synced: 0 });
+          await db.courses.where('semesterId').equals(semester.serverId).modify({ isDeleted: 1, synced: 0 });
         }
         
-        // Mark semester as deleted
         await db.semesters.update(id, { isDeleted: 1, synced: 0 });
         await refreshActiveSemester();
       });
@@ -102,7 +108,7 @@ export default function Semesters() {
         <div className="d-flex flex-column gap-2">
           <AnimatePresence mode="popLayout">
             {semesters?.map((s) => (
-              <motion.div key={s.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card border-0 bg-white cursor-pointer shadow-sm" onClick={() => setSelectedSemester(s)}>
+              <motion.div key={s.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card border-0 bg-white cursor-pointer shadow-sm" onClick={() => setSelectedSemester(s)}>
                 <div className="card-body p-3 d-flex align-items-center gap-3">
                   <div className={`icon-box-small rounded-2 d-flex align-items-center justify-content-center ${s.isActive ? 'bg-primary text-white' : 'bg-light text-muted'}`} style={{ width: '44px', height: '44px' }}>
                     {s.isActive ? <LayoutDashboard size={20} /> : <Calendar size={20} />}
@@ -112,7 +118,7 @@ export default function Semesters() {
                     <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1">
                       {new Date(s.startDate).getFullYear()} <ArrowRight size={10} /> {new Date(s.endDate).getFullYear()}
                       <span className="mx-1">•</span>
-                      <BookOpen size={10} className="text-primary" /> {courseCounts?.[s.id!] || 0} Courses
+                      <BookOpen size={10} className="text-primary" /> {courseCounts?.[s.serverId] || 0} Courses
                     </div>
                   </div>
                   {s.isActive ? (

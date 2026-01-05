@@ -10,32 +10,31 @@ export default function Courses() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.id!).filter(c => c.isDeleted !== 1).toArray() : [],
+    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray() : [],
     [activeSemester]
   );
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [courseForm, setCourseForm] = useState({ id: 0, code: '', title: '' });
+  const [courseForm, setCourseForm] = useState({ id: 0, serverId: '', code: '', title: '' });
   
-  const [showEnrollModal, setShowEnrollModal] = useState<{show: boolean, courseId?: number, courseName?: string}>({ show: false });
+  const [showEnrollModal, setShowEnrollModal] = useState<{show: boolean, courseId?: string, courseName?: string}>({ show: false });
   const [enrollSearch, setEnrollSearch] = useState('');
   const [enrollFilter, setEnrollFilter] = useState<'all' | 'enrolled' | 'not_enrolled'>('all');
   
   // Local Enrollment State (Pending Changes)
-  const [localEnrollments, setLocalEnrollments] = useState<Set<number>>(new Set());
-  const [originalEnrollments, setOriginalEnrollments] = useState<Set<number>>(new Set());
+  const [localEnrollments, setLocalEnrollments] = useState<Set<string>>(new Set());
+  const [originalEnrollments, setOriginalEnrollments] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
 
   // Load Enrollments when Modal Opens
   useEffect(() => {
     if (showEnrollModal.show && showEnrollModal.courseId) {
       db.enrollments.where('courseId').equals(showEnrollModal.courseId).toArray().then(records => {
-        // Filter out soft-deleted records so they don't appear in the UI
         const activeRecords = records.filter(r => r.isDeleted !== 1);
         const ids = new Set(activeRecords.map(e => e.studentId));
         setLocalEnrollments(ids);
-        setOriginalEnrollments(new Set(ids)); // Create a copy
+        setOriginalEnrollments(new Set(ids));
       });
     } else {
       setLocalEnrollments(new Set());
@@ -43,7 +42,6 @@ export default function Courses() {
     }
   }, [showEnrollModal.show, showEnrollModal.courseId]);
 
-  // Derived Dirty State
   const isDirty = useMemo(() => {
     if (localEnrollments.size !== originalEnrollments.size) return true;
     for (const id of localEnrollments) {
@@ -52,16 +50,14 @@ export default function Courses() {
     return false;
   }, [localEnrollments, originalEnrollments]);
   
-  // Pagination
   const itemsPerPage = 5;
   const [currentPage, setCurrentPage] = useState(1);
 
   const allStudents = useLiveQuery(() => db.students.orderBy('name').toArray());
 
-  // Filter Logic based on Local State
   const studentsWithStatus = allStudents?.map(s => ({
     ...s,
-    isEnrolled: localEnrollments.has(s.id!)
+    isEnrolled: localEnrollments.has(s.serverId)
   })) || [];
 
   const filteredStudents = studentsWithStatus.filter(s => {
@@ -69,7 +65,7 @@ export default function Courses() {
     const matchesFilter = 
       enrollFilter === 'all' ? true :
       enrollFilter === 'enrolled' ? s.isEnrolled :
-      !s.isEnrolled; // not_enrolled
+      !s.isEnrolled;
     return matchesSearch && matchesFilter;
   });
 
@@ -80,8 +76,6 @@ export default function Courses() {
   };
 
   const areAllVisibleSelected = filteredStudents.length > 0 && filteredStudents.every(s => s.isEnrolled);
-
-  // Pagination Logic
   const totalPages = Math.ceil((courses?.length || 0) / itemsPerPage);
   const displayedCourses = courses?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
@@ -92,21 +86,27 @@ export default function Courses() {
       await db.courses.update(courseForm.id, { code: courseForm.code, title: courseForm.title, synced: 0 });
       setIsEditing(false);
     } else {
-      // Exclude 'id' so Dexie generates a new one
-      const { id, ...newCourseData } = courseForm;
-      await db.courses.add({ ...newCourseData, semesterId: activeSemester.id!, userId: user.id, synced: 0 });
+      await db.courses.add({ 
+        serverId: '',
+        code: courseForm.code, 
+        title: courseForm.title, 
+        semesterId: activeSemester.serverId, 
+        userId: user.id, 
+        synced: 0,
+        isDeleted: 0 
+      } as any);
     }
     setShowAddModal(false);
-    setCourseForm({ id: 0, code: '', title: '' });
+    setCourseForm({ id: 0, serverId: '', code: '', title: '' });
   };
 
   const handleEditClick = (course: any) => {
-    setCourseForm({ id: course.id, code: course.code, title: course.title });
+    setCourseForm({ id: course.id, serverId: course.serverId, code: course.code, title: course.title });
     setIsEditing(true);
     setShowAddModal(true);
   };
 
-  const handleToggleLocal = (studentId: number) => {
+  const handleToggleLocal = (studentId: string) => {
     const newSet = new Set(localEnrollments);
     if (newSet.has(studentId)) newSet.delete(studentId);
     else newSet.add(studentId);
@@ -116,31 +116,20 @@ export default function Courses() {
   const handleBulkLocal = (targetState: boolean) => {
     const newSet = new Set(localEnrollments);
     filteredStudents.forEach(s => {
-      if (targetState) newSet.add(s.id!);
-      else newSet.delete(s.id!);
+      if (targetState) newSet.add(s.serverId);
+      else newSet.delete(s.serverId);
     });
     setLocalEnrollments(newSet);
   };
 
   const handleSaveChanges = async () => {
-    console.log('handleSaveChanges: Triggered');
-    if (!user) {
-      console.error('handleSaveChanges: No user found');
-      return;
-    }
-    // Check strict undefined/null to allow ID 0 if it exists
-    if (showEnrollModal.courseId === undefined || showEnrollModal.courseId === null) {
-      console.error('handleSaveChanges: No course ID', showEnrollModal);
-      return;
-    }
-    
+    if (!user || !showEnrollModal.courseId) return;
     setIsSaving(true);
     
     try {
-      const toAdd: number[] = [];
-      const toRemove: number[] = [];
+      const toAdd: string[] = [];
+      const toRemove: string[] = [];
 
-      // Calculate diff
       for (const id of localEnrollments) {
         if (!originalEnrollments.has(id)) toAdd.push(id);
       }
@@ -148,10 +137,7 @@ export default function Courses() {
         if (!localEnrollments.has(id)) toRemove.push(id);
       }
 
-      console.log('handleSaveChanges: Diff', { toAdd, toRemove });
-
       await db.transaction('rw', db.enrollments, async () => {
-        // Remove Deleted - SOFT DELETE
         if (toRemove.length > 0) {
            for (const studentId of toRemove) {
              const records = await db.enrollments
@@ -165,7 +151,6 @@ export default function Courses() {
            }
         }
         
-        // Add New - CHECK FOR EXISTING (TOMBSTONE) FIRST
         for (const studentId of toAdd) {
           const existing = await db.enrollments
             .where('courseId').equals(showEnrollModal.courseId!)
@@ -173,54 +158,48 @@ export default function Courses() {
             .first();
             
           if (existing) {
-             // Resurrect if deleted, or just ensure it's active
              await db.enrollments.update(existing.id!, { isDeleted: 0, synced: 0 });
           } else {
-             // Create new
              await db.enrollments.add({
+               serverId: '',
                studentId,
                courseId: showEnrollModal.courseId!,
                userId: user.id,
-               synced: 0
-             });
+               synced: 0,
+               isDeleted: 0
+             } as any);
           }
         }
       });
 
-      console.log('handleSaveChanges: Transaction Complete');
-
-      // Verify and Reload from DB (Filter out deleted)
       const updatedRecords = await db.enrollments.where('courseId').equals(showEnrollModal.courseId!).toArray();
       const activeRecords = updatedRecords.filter(r => r.isDeleted !== 1);
       const newIds = new Set(activeRecords.map(e => e.studentId));
       
       setLocalEnrollments(newIds);
-      setOriginalEnrollments(new Set(newIds)); // Update baseline to new DB state
-      
+      setOriginalEnrollments(new Set(newIds));
       alert('Changes saved successfully!');
     } catch (err) {
-      console.error('handleSaveChanges: Error', err);
-      alert('Failed to save changes. Please try again.');
+      console.error(err);
+      alert('Failed to save changes.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleCloseModal = () => {
-    if (isDirty) {
-      if (!confirm('You have unsaved changes. Are you sure you want to close?')) return;
-    }
+    if (isDirty && !confirm('You have unsaved changes. Are you sure you want to close?')) return;
     setShowEnrollModal({ show: false });
   };
 
   const handleDeleteCourse = async (id: number) => {
     if (confirm('Delete this course and all its enrollments?')) {
+      const course = await db.courses.get(id);
+      if (!course) return;
+
       await db.transaction('rw', [db.courses, db.enrollments], async () => {
-        // Mark course as deleted
         await db.courses.update(id, { isDeleted: 1, synced: 0 });
-        
-        // Mark associated enrollments as deleted
-        const enrollments = await db.enrollments.where('courseId').equals(id).toArray();
+        const enrollments = await db.enrollments.where('courseId').equals(course.serverId).toArray();
         for (const enrollment of enrollments) {
           await db.enrollments.update(enrollment.id!, { isDeleted: 1, synced: 0 });
         }
@@ -251,7 +230,7 @@ export default function Courses() {
           <button 
             className="btn btn-primary rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" 
             style={{ width: '52px', height: '52px' }} 
-            onClick={() => { setIsEditing(false); setCourseForm({ id: 0, code: '', title: '' }); setShowAddModal(true); }}
+            onClick={() => { setIsEditing(false); setCourseForm({ id: 0, serverId: '', code: '', title: '' }); setShowAddModal(true); }}
           >
             <Plus size={24} />
           </button>
@@ -262,13 +241,13 @@ export default function Courses() {
         <div className="d-flex flex-column gap-3">
           <AnimatePresence mode="popLayout">
             {displayedCourses?.map(course => (
-              <motion.div key={course.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}>
+              <motion.div key={course.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}>
                 <div className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
                   <div className="card-body p-3 d-flex align-items-center gap-3">
                     <div className="bg-primary bg-opacity-10 text-primary p-3 rounded-3 flex-shrink-0" style={{ width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Book size={24} />
                     </div>
-                    <div className="flex-grow-1 overflow-hidden" onClick={() => setShowEnrollModal({ show: true, courseId: course.id, courseName: course.title })} style={{ cursor: 'pointer' }}>
+                    <div className="flex-grow-1 overflow-hidden" onClick={() => setShowEnrollModal({ show: true, courseId: course.serverId, courseName: course.title })} style={{ cursor: 'pointer' }}>
                       <h6 className="fw-black mb-0 text-dark text-truncate text-uppercase letter-spacing-n1">{course.code}</h6>
                       <p className="xx-small fw-bold text-muted mb-0 text-truncate text-uppercase">{course.title}</p>
                     </div>
@@ -276,7 +255,7 @@ export default function Courses() {
                   <div className="p-2 border-top bg-light d-flex gap-2">
                     <button 
                       className="btn btn-white border flex-grow-1 py-1 px-2 rounded-3 fw-bold xx-small text-primary d-flex align-items-center justify-content-center gap-1"
-                      onClick={() => setShowEnrollModal({ show: true, courseId: course.id, courseName: course.title })}
+                      onClick={() => setShowEnrollModal({ show: true, courseId: course.serverId, courseName: course.title })}
                     >
                       <Users size={12} /> ENROLL
                     </button>
@@ -415,7 +394,7 @@ export default function Courses() {
               ) : (
                 <div className="list-group list-group-flush">
                   {filteredStudents.map(student => (
-                    <div key={student.id} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: student.isEnrolled ? 'rgba(0,105,148,0.03)' : 'transparent' }}>
+                    <div key={student.serverId} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: student.isEnrolled ? 'rgba(0,105,148,0.03)' : 'transparent' }}>
                       <div className="d-flex align-items-center gap-3 overflow-hidden">
                         <div className={`p-1 rounded-circle ${student.isEnrolled ? 'text-success' : 'text-muted opacity-25'}`}>
                           {student.isEnrolled ? <CheckCircle2 size={20} /> : <Circle size={20} />}
@@ -427,7 +406,7 @@ export default function Courses() {
                       </div>
                       <button 
                         className={`btn btn-sm fw-bold rounded-pill px-3 py-1 d-flex align-items-center gap-1 ${student.isEnrolled ? 'btn-outline-danger border-0 bg-danger-subtle text-danger' : 'btn-outline-primary border-0 bg-primary-subtle text-primary'}`}
-                        onClick={() => handleToggleLocal(student.id!)}
+                        onClick={() => handleToggleLocal(student.serverId)}
                       >
                         {student.isEnrolled ? <><UserMinus size={14} /> Remove</> : <><UserPlus size={14} /> Enroll</>}
                       </button>

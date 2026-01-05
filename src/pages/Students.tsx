@@ -58,15 +58,12 @@ export default function Students() {
     if (confirm(`Delete ${selectedIds.size} students?`)) {
       await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
         const ids = Array.from(selectedIds);
+        const studentRecords = await db.students.where('id').anyOf(ids).toArray();
+        const studentServerIds = studentRecords.map(s => s.serverId);
         
-        // Mark students as deleted
         await db.students.where('id').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
-
-        // Mark associated enrollments as deleted
-        await db.enrollments.where('studentId').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
-
-        // Mark associated attendance records as deleted
-        await db.attendanceRecords.where('studentId').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
+        await db.enrollments.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
+        await db.attendanceRecords.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
       });
       setIsSelectionMode(false);
       setSelectedIds(new Set());
@@ -94,7 +91,6 @@ export default function Students() {
     doc.save('presensys_student_list.pdf');
   };
 
-  // --- Standard Logic (Reset, Scan, Upload, Parse, Save) ---
   const resetImportState = () => {
     setImportMode('select');
     setPasteData('');
@@ -143,7 +139,14 @@ export default function Students() {
   };
 
   const handleMapperComplete = (data: { name: string; regNumber: string }[]) => {
-    setParsedStudents(data);
+    const studentsData = data.map(d => ({
+      serverId: '',
+      name: d.name,
+      regNumber: d.regNumber,
+      isDeleted: 0,
+      synced: 0
+    } as Student));
+    setParsedStudents(studentsData);
     setShowMapper(false);
     setUploadedFile(null);
     setImportMode('paste'); 
@@ -174,13 +177,19 @@ export default function Students() {
     setParseError(null);
     const results: Student[] = [];
     const lines = pasteData.split('\n');
-    const regNoRegex = /(\d{10})/; // Strict 10 digit check
+    const regNoRegex = /(\d{10})/;
     lines.forEach(line => {
       const match = line.match(regNoRegex);
       if (match) {
         const regNumber = match[0];
-        let name = line.replace(regNumber, '').replace(/[,	]/g, '').trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
-        if (name.length > 2) results.push({ regNumber, name });
+        let name = line.replace(regNumber, '').replace(/[,\t]/g, '').trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+        if (name.length > 2) results.push({
+          serverId: '',
+          regNumber, 
+          name,
+          isDeleted: 0,
+          synced: 0
+        } as Student);
       }
     });
     if (results.length === 0 && pasteData.trim().length > 0) {
@@ -194,7 +203,10 @@ export default function Students() {
     if (!user) return;
     setIsSaving(true);
     try {
-      let dataToSave = importMode === 'manual' ? manualRows.filter(r => r.name.trim() && r.regNumber.trim()) : parsedStudents;
+      let dataToSave = importMode === 'manual' 
+        ? manualRows.filter(r => r.name.trim() && r.regNumber.trim()).map(r => ({ serverId: '', name: r.name, regNumber: r.regNumber, isDeleted: 0, synced: 0 } as Student)) 
+        : parsedStudents;
+      
       const validData: Student[] = [];
       const seenRegs = new Set();
       let hasErrors = false;
@@ -287,7 +299,7 @@ export default function Students() {
               const isSelected = selectedIds.has(s.id!);
               return (
                 <motion.div 
-                  key={s.id} 
+                  key={s.serverId} 
                   layout 
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -376,12 +388,9 @@ export default function Students() {
                           <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={async () => { 
                             if(confirm('Delete student record?')) { 
                               await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
-                                // Mark student as deleted
                                 await db.students.update(selectedStudent.id!, { isDeleted: 1, synced: 0 });
-                                // Mark enrollments as deleted
-                                await db.enrollments.where('studentId').equals(selectedStudent.id!).modify({ isDeleted: 1, synced: 0 });
-                                // Mark attendance records as deleted
-                                await db.attendanceRecords.where('studentId').equals(selectedStudent.id!).modify({ isDeleted: 1, synced: 0 });
+                                await db.enrollments.where('studentId').equals(selectedStudent.serverId).modify({ isDeleted: 1, synced: 0 });
+                                await db.attendanceRecords.where('studentId').equals(selectedStudent.serverId).modify({ isDeleted: 1, synced: 0 });
                               });
                               setSelectedStudent(null); 
                             } 
