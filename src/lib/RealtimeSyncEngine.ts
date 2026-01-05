@@ -4,6 +4,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 type TableName = 'semesters' | 'students' | 'courses' | 'enrollments' | 'attendance_sessions' | 'attendance_records';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export class RealtimeSyncEngine {
   private userId: string | null = null;
   private channel: RealtimeChannel | null = null;
@@ -16,11 +18,7 @@ export class RealtimeSyncEngine {
   async initialize(userId: string) {
     this.userId = userId;
     console.log('Sync: Initializing for user', userId);
-    
-    // 1. Initial Sync (Pull differences)
     await this.sync();
-
-    // 2. Setup Realtime Subscription
     this.setupRealtimeSubscription();
   }
 
@@ -45,6 +43,11 @@ export class RealtimeSyncEngine {
     } finally {
       this.isSyncing = false;
     }
+  }
+
+  private isValidUUID(uuid: any) {
+    if (typeof uuid !== 'string') return false;
+    return UUID_REGEX.test(uuid);
   }
 
   private async pushChanges() {
@@ -76,48 +79,72 @@ export class RealtimeSyncEngine {
     }));
 
     // Push Courses
-    await this.pushTable<LocalCourse>('courses', db.courses, (item) => ({
-      id: item.serverId,
-      code: item.code,
-      title: item.title,
-      semester_id: item.semesterId,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt
-    }));
+    await this.pushTable<LocalCourse>('courses', db.courses, (item) => {
+      if (!this.isValidUUID(item.semesterId)) {
+        console.warn('Sync: Skipping course push - invalid semester UUID', item);
+        return null;
+      }
+      return {
+        id: item.serverId,
+        code: item.code,
+        title: item.title,
+        semester_id: item.semesterId,
+        user_id: this.userId,
+        is_deleted: item.isDeleted,
+        updated_at: item.updatedAt
+      };
+    });
 
     // Push Enrollments
-    await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => ({
-      id: item.serverId,
-      student_id: item.studentId,
-      course_id: item.courseId,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt
-    }));
+    await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => {
+      if (!this.isValidUUID(item.studentId) || !this.isValidUUID(item.courseId)) {
+        console.warn('Sync: Skipping enrollment push - invalid UUIDs', item);
+        return null;
+      }
+      return {
+        id: item.serverId,
+        student_id: item.studentId,
+        course_id: item.courseId,
+        user_id: this.userId,
+        is_deleted: item.isDeleted,
+        updated_at: item.updatedAt
+      };
+    });
 
     // Push Sessions
-    await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => ({
-      id: item.serverId,
-      course_id: item.courseId,
-      date: item.date,
-      title: item.title,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt
-    }));
+    await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => {
+      if (!this.isValidUUID(item.courseId)) {
+        console.warn('Sync: Skipping session push - invalid course UUID', item);
+        return null;
+      }
+      return {
+        id: item.serverId,
+        course_id: item.courseId,
+        date: item.date,
+        title: item.title,
+        user_id: this.userId,
+        is_deleted: item.isDeleted,
+        updated_at: item.updatedAt
+      };
+    });
 
     // Push Records
-    await this.pushTable<LocalAttendanceRecord>('attendance_records', db.attendanceRecords, (item) => ({
-      id: item.serverId,
-      session_id: item.sessionId,
-      student_id: item.studentId,
-      status: item.status,
-      marked_at: item.timestamp,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt
-    }));
+    await this.pushTable<LocalAttendanceRecord>('attendance_records', db.attendanceRecords, (item) => {
+      if (!this.isValidUUID(item.sessionId) || !this.isValidUUID(item.studentId)) {
+        console.warn('Sync: Skipping record push - invalid UUIDs', item);
+        return null;
+      }
+      return {
+        id: item.serverId,
+        session_id: item.sessionId,
+        student_id: item.studentId,
+        status: item.status,
+        marked_at: item.timestamp,
+        user_id: this.userId,
+        is_deleted: item.isDeleted,
+        updated_at: item.updatedAt
+      };
+    });
   }
 
   private async pushTable<T extends { id?: number; synced: number; updatedAt?: string; serverId: string }>(
@@ -128,7 +155,15 @@ export class RealtimeSyncEngine {
     const unsynced = await table.filter((i: T) => i.synced === 0).toArray();
     if (unsynced.length === 0) return;
 
-    const payload = unsynced.map(mapFn);
+    // Filter out nulls from mapFn (records with invalid UUIDs)
+    const payload = unsynced.map(mapFn).filter((p: any): p is NonNullable<typeof p> => p !== null);
+    if (payload.length === 0) {
+        // If they were all invalid, mark them as "processed" or just leave them.
+        // For safety, let's mark them as synced so they stop crashing, even if they won't reach the server.
+        await table.bulkUpdate(unsynced.map((i: T) => ({ key: i.id!, changes: { synced: 1 } })));
+        return;
+    }
+
     const { error } = await supabase.from(tableName).upsert(payload);
 
     if (error) {
@@ -161,7 +196,6 @@ export class RealtimeSyncEngine {
                 for (const item of data) {
                     const localItem = await table.where('serverId').equals(item.id).first();
                     const mapped = mapToLocal(item);
-                    
                     if (localItem) {
                         await table.update(localItem.id, { ...mapped, synced: 1 });
                     } else {
@@ -195,6 +229,7 @@ export class RealtimeSyncEngine {
   }
 
   private setupRealtimeSubscription() {
+    if (!this.userId) return;
     if (this.channel) this.channel.unsubscribe();
 
     this.channel = supabase.channel('db_changes')

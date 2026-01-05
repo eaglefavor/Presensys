@@ -12,8 +12,8 @@ export interface LocalSemester {
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
-  isDeleted: number; // 0 or 1
-  synced: number; // 0 = dirty, 1 = synced
+  isDeleted: number;
+  synced: number;
 }
 
 export interface LocalStudent {
@@ -35,7 +35,7 @@ export interface LocalCourse {
   serverId: string;
   code: string;
   title: string;
-  semesterId: string; // References serverId
+  semesterId: string;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -92,17 +92,29 @@ export class PresensysDB extends Dexie {
 
   constructor() {
     super('PresensysDB');
-    this.version(11).stores({
+    
+    const schema = {
       semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
       students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
       courses: '++id, &serverId, semesterId, code, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
       attendanceSessions: '++id, &serverId, courseId, date, synced, isDeleted, userId, updatedAt',
       attendanceRecords: '++id, &serverId, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, updatedAt'
+    };
+
+    // Version 11 fix for index
+    this.version(11).stores(schema);
+
+    // Version 12: Force clear stale data to resolve UUID mismatch errors
+    this.version(12).stores(schema).upgrade(async (tx) => {
+      console.log('DB Upgrade (v12): Clearing local data to resolve UUID conflicts.');
+      const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
+      await Promise.all(tables.map(t => tx.table(t).clear()));
+      localStorage.removeItem('last_sync_timestamp');
     });
 
     this.tables.forEach(table => {
-      table.hook('creating', (_primKey, obj, _transaction) => {
+      table.hook('creating', (_primKey, obj) => {
         if (!obj.serverId) obj.serverId = uuidv4();
         if (!obj.createdAt) obj.createdAt = new Date().toISOString();
         if (!obj.updatedAt) obj.updatedAt = new Date().toISOString();
@@ -110,7 +122,7 @@ export class PresensysDB extends Dexie {
         if (obj.synced === undefined) obj.synced = 0;
       });
 
-      table.hook('updating', (mods, _primKey, _obj, _transaction) => {
+      table.hook('updating', (mods) => {
         if (typeof mods === 'object' && mods !== null) {
           if ('synced' in mods) return mods;
           return { updatedAt: new Date().toISOString(), synced: 0 };
@@ -123,7 +135,6 @@ export class PresensysDB extends Dexie {
 
 export const db = new PresensysDB();
 
-// Re-export original types for compatibility
 export type Semester = LocalSemester;
 export type Student = LocalStudent;
 export type Course = LocalCourse;
