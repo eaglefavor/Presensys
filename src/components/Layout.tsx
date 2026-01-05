@@ -1,11 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { 
-  LayoutDashboard, 
-  Users, 
-  BookOpen, 
-  CheckSquare, 
-  Archive, 
   ChevronLeft,
   CloudSync,
   CloudOff,
@@ -15,14 +10,12 @@ import {
   Menu,
   X,
   ChevronRight,
-  CalendarDays
 } from 'lucide-react';
-import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { realtimeSync } from '../lib/RealtimeSyncEngine';
+import BottomNav from './BottomNav';
 
 const Layout: React.FC = () => {
-  const activeSemester = useAppStore(state => state.activeSemester);
   const { profile, signOut, user } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
@@ -49,22 +42,19 @@ const Layout: React.FC = () => {
     window.addEventListener('online', () => setSyncStatus('synced'));
     window.addEventListener('offline', () => setSyncStatus('offline'));
 
-    return () => {
-      // Cleanup handled inside realtimeSync class (it manages its own listeners effectively)
-      // window.removeEventListener('online', ...); 
-    };
+    return () => { };
   }, [user]);
 
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/students', label: 'Students', icon: Users },
-    { path: '/semesters', label: 'Semester', icon: CalendarDays },
-    { path: '/courses', label: 'Courses', icon: BookOpen },
-    { path: '/attendance', label: 'Mark Attendance', icon: CheckSquare },
-    { path: '/archives', label: 'Data Archives', icon: Archive },
+    { path: '/', label: 'Feed' },
+    { path: '/students', label: 'Students' },
+    { path: '/semesters', label: 'Cycles' },
+    { path: '/courses', label: 'Courses' },
+    { path: '/attendance', label: 'Mark Attendance' },
+    { path: '/archives', label: 'Archives' },
   ];
 
-  const isRootPath = location.pathname === '/' || navItems.some(item => item.path === location.pathname);
+  const isRootPath = location.pathname === '/' || ['/students', '/semesters', '/courses', '/attendance', '/archives'].includes(location.pathname);
 
   const handleManualSync = async () => {
     if (!navigator.onLine || !user) {
@@ -86,37 +76,36 @@ const Layout: React.FC = () => {
       <header className="app-header bg-white border-bottom sticky-top shadow-sm">
         <div className="container-mobile d-flex align-items-center justify-content-between px-3 h-100">
           <div className="d-flex align-items-center gap-2">
-            <button className="btn btn-link text-primary p-0 me-1" onClick={() => setIsMenuOpen(true)}><Menu size={26} /></button>
-            {!isRootPath && <button className="btn btn-link text-dark p-0" onClick={() => navigate(-1)}><ChevronLeft size={24} /></button>}
-            <h1 className="h6 mb-0 fw-black text-primary letter-spacing-n1" style={{ color: 'var(--primary-blue) !important' }}>PRESENSYS</h1>
+            {!isRootPath ? (
+              <button className="btn btn-link text-dark p-0 me-2" onClick={() => navigate(-1)}><ChevronLeft size={24} /></button>
+            ) : (
+              <button className="btn btn-link text-primary p-0 me-2" onClick={() => setIsMenuOpen(true)}><Menu size={26} /></button>
+            )}
+            <h1 className="h5 mb-0 fw-black text-primary letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h1>
           </div>
           
-          <div className="d-flex align-items-center gap-2">
+          <div className="d-flex align-items-center gap-3">
             <div className="sync-indicator" onClick={handleManualSync} style={{ cursor: 'pointer' }}>
               {syncStatus === 'syncing' && <RefreshCw size={18} className="text-primary spin" />}
               {syncStatus === 'synced' && <CloudSync size={18} style={{ color: 'var(--primary-blue)' }} />}
               {syncStatus === 'offline' && <CloudOff size={18} className="text-muted" />}
               {syncStatus === 'error' && <CloudOff size={18} className="text-danger" />}
             </div>
-            {activeSemester && (
-              <Link to="/semesters" className="text-decoration-none">
-                <span className="badge rounded-pill bg-light text-primary border px-2 py-2 fw-bold xx-small" style={{ color: 'var(--primary-blue)', borderColor: 'var(--border-color)' }}>
-                  {activeSemester.name.split(' ')[0]}
-                </span>
-              </Link>
-            )}
+            <div className="avatar-header" onClick={() => setIsMenuOpen(true)} style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--bg-gray)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
+              {profile?.full_name?.[0] || 'U'}
+            </div>
           </div>
         </div>
       </header>
 
-      {/* Optimized Sidebar (CSS Transitions) */}
+      {/* Sidebar Drawer */}
       <div className={`menu-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}></div>
       <aside className={`side-menu bg-white shadow-2xl ${isMenuOpen ? 'open' : ''}`}>
         <div className="d-flex flex-column h-100">
           <div className="p-4 bg-white border-bottom d-flex justify-content-between align-items-start">
             <div>
               <h5 className="fw-black mb-0 text-primary uppercase letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h5>
-              <p className="xx-small fw-bold text-muted opacity-75 mb-0">Management Portal</p>
+              <p className="xx-small fw-bold text-muted opacity-75 mb-0">Portal Management</p>
             </div>
             <button className="btn btn-light rounded-circle p-1" onClick={() => setIsMenuOpen(false)}><X size={20} /></button>
           </div>
@@ -127,7 +116,7 @@ const Layout: React.FC = () => {
             </div>
             <div className="overflow-hidden">
               <div className="fw-bold small text-dark text-truncate">{profile?.full_name || 'User'}</div>
-              <div className="xx-small text-muted text-uppercase fw-bold">{profile?.role} Account</div>
+              <div className="xx-small text-muted text-uppercase fw-bold">{profile?.role} ACCOUNT</div>
             </div>
           </div>
 
@@ -135,10 +124,7 @@ const Layout: React.FC = () => {
             <div className="d-flex flex-column gap-1">
               {navItems.map((item) => (
                 <Link key={item.path} to={item.path} onClick={() => setIsMenuOpen(false)} className={`nav-item-premium ${location.pathname === item.path ? 'active' : ''}`}>
-                  <div className="d-flex align-items-center gap-3">
-                    <item.icon size={20} className="nav-icon" />
-                    <span className="fw-bold small">{item.label}</span>
-                  </div>
+                  <span className="fw-bold small">{item.label}</span>
                   <ChevronRight size={14} className="arrow-icon" />
                 </Link>
               ))}
@@ -154,11 +140,13 @@ const Layout: React.FC = () => {
         </div>
       </aside>
 
-      <main className="app-content">
+      <main className="app-content flex-grow-1 overflow-auto" style={{ paddingBottom: '80px' }}>
         <div className="container-mobile">
           <Outlet />
         </div>
       </main>
+
+      <BottomNav />
 
       <style>{`
         .menu-overlay {
