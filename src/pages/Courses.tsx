@@ -10,7 +10,7 @@ export default function Courses() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.id!).toArray() : [],
+    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.id!).filter(c => c.isDeleted !== 1).toArray() : [],
     [activeSemester]
   );
   

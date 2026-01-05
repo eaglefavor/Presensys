@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Semesters() {
   const { user } = useAuthStore();
-  const semesters = useLiveQuery(() => db.semesters.orderBy('startDate').reverse().toArray());
+  const semesters = useLiveQuery(() => db.semesters.orderBy('startDate').reverse().filter(s => s.isDeleted !== 1).toArray());
   const refreshActiveSemester = useAppStore(state => state.refreshActiveSemester);
   
   const [showModal, setShowModal] = useState(false);

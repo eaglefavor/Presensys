@@ -11,7 +11,7 @@ import autoTable from 'jspdf-autotable';
 
 export default function Students() {
   const { user } = useAuthStore();
-  const students = useLiveQuery(() => db.students.orderBy('name').toArray());
+  const students = useLiveQuery(() => db.students.orderBy('name').filter(s => s.isDeleted !== 1).toArray());
   const [searchTerm, setSearchTerm] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
