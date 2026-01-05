@@ -10,21 +10,24 @@ export class RealtimeSyncEngine {
   private userId: string | null = null;
   private channel: RealtimeChannel | null = null;
   private isSyncing = false;
+  private isInitialized = false;
 
   constructor() {
     this.setupNetworkListeners();
   }
 
   async initialize(userId: string) {
+    if (this.isInitialized && this.userId === userId) return;
     this.userId = userId;
-    console.log('Sync: Initializing for user', userId);
+    this.isInitialized = true;
+    
+    console.log('Sync: Initialized');
     await this.sync();
     this.setupRealtimeSubscription();
   }
 
   private setupNetworkListeners() {
     window.addEventListener('online', () => {
-      console.log('Sync: Online. Triggering sync.');
       this.sync();
     });
   }
@@ -34,11 +37,9 @@ export class RealtimeSyncEngine {
     this.isSyncing = true;
 
     try {
-      console.log('Sync: Starting...');
       await this.pushChanges();
       await this.pullChanges();
-      await this.meticulousPurge(); // Clean up local data after sync
-      console.log('Sync: Completed.');
+      await this.meticulousPurge();
     } catch (error) {
       console.error('Sync: Failed', error);
     } finally {
@@ -52,7 +53,6 @@ export class RealtimeSyncEngine {
   }
 
   private async meticulousPurge() {
-    console.log('Sync: Starting meticulous purge...');
     // 1. Purge records marked as isDeleted AND synced
     const tableMapping: Record<TableName, string> = {
         semesters: 'semesters',
@@ -67,7 +67,6 @@ export class RealtimeSyncEngine {
         const table = (db as any)[dexieName];
         const toPurge = await table.filter((r: any) => r.isDeleted === 1 && r.synced === 1).primaryKeys();
         if (toPurge.length > 0) {
-            console.log(`Sync: Purging ${toPurge.length} deleted records from ${dexieName}`);
             await table.bulkDelete(toPurge);
         }
     }

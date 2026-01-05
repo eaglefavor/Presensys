@@ -38,19 +38,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   fetchProfile: async () => {
-    const { user } = get();
-    if (!user) {
-      console.warn('fetchProfile: No user found in state');
-      return;
-    }
+    const { user, profile } = get();
+    if (!user) return;
     
-    // 1. Try to get profile from local storage first (Offline Support)
+    // Prevent redundant fetches if we already have the correct profile
+    if (profile && profile.id === user.id) return;
+
+    // 1. Try local cache
     const cachedProfile = localStorage.getItem('user_profile');
     if (cachedProfile) {
-      set({ profile: JSON.parse(cachedProfile), loading: false });
+      const parsed = JSON.parse(cachedProfile);
+      if (parsed.id === user.id) {
+        set({ profile: parsed, loading: false });
+      }
     }
 
-    console.log('fetchProfile: Fetching profile for UUID:', user.id);
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -58,14 +60,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
     
     if (error) {
-      console.error('fetchProfile: Error fetching profile:', error.message);
-      // If offline and we have cache, keep it. If online and error, show error.
-      if (navigator.onLine && !cachedProfile) {
+      if (navigator.onLine && !get().profile) {
          set({ loading: false, profile: null });
       }
     } else {
-      console.log('fetchProfile: Success! Data received:', data);
-      localStorage.setItem('user_profile', JSON.stringify(data)); // Update cache
+      localStorage.setItem('user_profile', JSON.stringify(data));
       set({ profile: data as Profile, loading: false });
     }
   },

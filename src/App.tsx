@@ -60,15 +60,6 @@ function App() {
     );
   }
 
-  // Debug log to help you see your current status in the browser console
-  if (session) {
-    console.log('User Profile:', {
-      email: session.user.email,
-      role: profile?.role,
-      status: profile?.status
-    });
-  }
-
   return (
     <BrowserRouter>
       <ReloadPrompt />
