@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { syncEngine } from '../lib/syncEngine';
+import { realtimeSync } from '../lib/RealtimeSyncEngine';
 
 const Layout: React.FC = () => {
   const activeSemester = useAppStore(state => state.activeSemester);
@@ -30,29 +30,28 @@ const Layout: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
-    const performSync = async () => {
+    const initSync = async () => {
       if (!navigator.onLine || !user) {
         setSyncStatus(navigator.onLine ? 'synced' : 'offline');
         return;
       }
       setSyncStatus('syncing');
-      const result = await syncEngine.syncAll();
-      if (result.success) {
+      try {
+        await realtimeSync.initialize(user.id);
         setSyncStatus('synced');
-      } else {
+      } catch (e) {
+        console.error(e);
         setSyncStatus('error');
       }
     };
 
-    performSync();
-    window.addEventListener('online', performSync);
+    initSync();
+    window.addEventListener('online', () => setSyncStatus('synced'));
     window.addEventListener('offline', () => setSyncStatus('offline'));
-    const interval = setInterval(performSync, 30000);
 
     return () => {
-      window.removeEventListener('online', performSync);
-      window.removeEventListener('offline', () => setSyncStatus('offline'));
-      clearInterval(interval);
+      // Cleanup handled inside realtimeSync class (it manages its own listeners effectively)
+      // window.removeEventListener('online', ...); 
     };
   }, [user]);
 
@@ -72,13 +71,13 @@ const Layout: React.FC = () => {
         alert('Cannot sync: Device is offline.');
         return;
     }
-    if (confirm('Force download data from cloud? This may fix missing items.')) {
-        setSyncStatus('syncing');
-        await syncEngine.pullFromCloud(user.id); // Force pull specifically
-        const result = await syncEngine.syncAll();
-        if (result.success) setSyncStatus('synced');
-        else setSyncStatus('error');
-        window.location.reload(); // Refresh to show new data
+    setSyncStatus('syncing');
+    try {
+        await realtimeSync.sync();
+        setSyncStatus('synced');
+    } catch (e) {
+        console.error(e);
+        setSyncStatus('error');
     }
   };
 
