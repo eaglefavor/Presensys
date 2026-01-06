@@ -68,16 +68,27 @@ export class RealtimeSyncEngine {
    * by mapping them to the current active semester/entities.
    */
   private async selfHealData() {
-    const activeSemester = await db.semesters.filter(s => s.isActive).first();
-    if (!activeSemester || !this.isValidUUID(activeSemester.serverId)) return;
+    let activeSemester = await db.semesters.filter(s => s.isActive).first();
+    
+    // Fallback: If no active semester, use the most recent one
+    if (!activeSemester) {
+        activeSemester = await db.semesters.orderBy('endDate').reverse().first();
+    }
 
-    // 1. Fix Courses with numeric semesterId
-    const brokenCourses = await db.courses.filter(c => !this.isValidUUID(c.semesterId)).toArray();
-    if (brokenCourses.length > 0) {
-        console.log(`Sync: Self-healing ${brokenCourses.length} courses...`);
-        await db.courses.bulkUpdate(brokenCourses.map(c => ({
+    if (!activeSemester || !this.isValidUUID(activeSemester.serverId)) {
+        console.warn('Sync: No valid semester found for self-healing.');
+        return;
+    }
+
+    // 1. Fix Courses with numeric semesterId or invalid UUID
+    const brokenCourses = await db.courses.toArray();
+    const coursesToFix = brokenCourses.filter(c => !this.isValidUUID(c.semesterId));
+    
+    if (coursesToFix.length > 0) {
+        console.log(`Sync: Self-healing ${coursesToFix.length} courses to semester ${activeSemester.name}...`);
+        await db.courses.bulkUpdate(coursesToFix.map(c => ({
             key: c.id!,
-            changes: { semesterId: activeSemester.serverId, synced: 0 }
+            changes: { semesterId: activeSemester!.serverId, synced: 0 }
         })));
     }
 
@@ -225,6 +236,11 @@ export class RealtimeSyncEngine {
     if (unsynced.length === 0) return;
 
     const payload = unsynced.map(mapFn).filter((p: any): p is NonNullable<typeof p> => p !== null);
+    
+    if (unsynced.length > payload.length) {
+        console.warn(`Sync: Skipped ${unsynced.length - payload.length} invalid items in ${tableName}. Check foreign keys.`);
+    }
+
     if (payload.length === 0) return;
 
     const { data, error } = await supabase.from(tableName).upsert(payload).select();
