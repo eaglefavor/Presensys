@@ -47,9 +47,13 @@ export class RealtimeSyncEngine {
     this.isSyncing = true;
 
     try {
-      await this.selfHealData(); // Fix malformed IDs before pushing
-      await this.pushChanges();
+      // 1. Pull first to ensure we have parents (Semesters) for our orphans
       await this.pullChanges();
+      // 2. Fix malformed IDs using the data we just pulled (or existing local data)
+      await this.selfHealData(); 
+      // 3. Push the fixed/healed data
+      await this.pushChanges();
+      
       await this.meticulousPurge();
     } catch (error) {
       console.error('Sync: Failed', error);
