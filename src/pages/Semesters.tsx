@@ -18,6 +18,7 @@ export default function Semesters() {
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0],
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const courseCounts = useLiveQuery(async () => {
     const counts: Record<string, number> = {};
@@ -28,19 +29,30 @@ export default function Semesters() {
 
   const handleAddSemester = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-    if (newSemester.startDate > newSemester.endDate) { alert('Start date cannot be after end date.'); return; }
-    await db.semesters.add({ 
-      serverId: '',
-      ...newSemester, 
-      isActive: false, 
-      isArchived: false, 
-      synced: 0, 
-      userId: user.id,
-      isDeleted: 0
-    } as any);
-    setShowModal(false);
-    setNewSemester({ name: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0] });
+    if (!user || isSubmitting) return;
+    
+    setIsSubmitting(true);
+    try {
+      if (newSemester.startDate > newSemester.endDate) { 
+        alert('Start date cannot be after end date.'); 
+        return; 
+      }
+      await db.semesters.add({ 
+        serverId: '',
+        ...newSemester, 
+        isActive: false, 
+        isArchived: false, 
+        synced: 0, 
+        userId: user.id,
+        isDeleted: 0
+      } as any);
+      setShowModal(false);
+      setNewSemester({ name: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0] });
+    } catch (error) {
+      console.error('Failed to create semester:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSetActive = async (id: number) => {
@@ -180,7 +192,7 @@ export default function Semesters() {
                   <div className="mb-3"><label className="xx-small fw-bold text-muted ps-1">CYCLE TITLE</label><div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="e.g. 2025/2026 First Semester" required value={newSemester.name} onChange={e => setNewSemester({...newSemester, name: e.target.value})} /></div></div>
                   <div className="row g-3"><div className="col-6"><label className="xx-small fw-bold text-muted ps-1">START DATE</label><div className="modern-input-unified p-1"><input type="date" className="form-control border-0 bg-transparent small fw-bold" required value={newSemester.startDate} onChange={e => setNewSemester({...newSemester, startDate: e.target.value})} /></div></div><div className="col-6"><label className="xx-small fw-bold text-muted ps-1">END DATE</label><div className="modern-input-unified p-1"><input type="date" className="form-control border-0 bg-transparent small fw-bold" required value={newSemester.endDate} onChange={e => setNewSemester({...newSemester, endDate: e.target.value})} /></div></div></div>
                 </div>
-                <div className="modal-footer border-0 p-4 pt-0"><button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowModal(false)}>Cancel</button><button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-sm fw-bold">CREATE CYCLE</button></div>
+                <div className="modal-footer border-0 p-4 pt-0"><button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowModal(false)}>Cancel</button><button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-sm fw-bold" disabled={isSubmitting}>{isSubmitting ? 'CREATING...' : 'CREATE CYCLE'}</button></div>
               </form>
             </div>
           </motion.div>
