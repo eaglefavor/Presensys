@@ -11,9 +11,19 @@ export class RealtimeSyncEngine {
   private channel: RealtimeChannel | null = null;
   private isSyncing = false;
   private isInitialized = false;
+  private debounceTimer: any = null;
 
   constructor() {
     this.setupNetworkListeners();
+    db.onLocalChange(() => this.triggerSync());
+  }
+
+  // Reactive Sync: Call this whenever local data changes
+  triggerSync() {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.debounceTimer = setTimeout(() => {
+      this.sync();
+    }, 2000); // 2-second debounce to batch rapid changes
   }
 
   async initialize(userId: string) {

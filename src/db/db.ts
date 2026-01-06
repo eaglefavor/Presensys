@@ -89,6 +89,8 @@ export class PresensysDB extends Dexie {
   enrollments!: Table<LocalEnrollment>;
   attendanceSessions!: Table<LocalAttendanceSession>;
   attendanceRecords!: Table<LocalAttendanceRecord>;
+  
+  private onChangeListeners: (() => void)[] = [];
 
   constructor() {
     super('PresensysDB');
@@ -120,16 +122,30 @@ export class PresensysDB extends Dexie {
         if (!obj.updatedAt) obj.updatedAt = new Date().toISOString();
         if (obj.isDeleted === undefined) obj.isDeleted = 0;
         if (obj.synced === undefined) obj.synced = 0;
+        this.notifyChange();
       });
 
       table.hook('updating', (mods) => {
+        this.notifyChange();
         if (typeof mods === 'object' && mods !== null) {
           if ('synced' in mods) return mods;
           return { updatedAt: new Date().toISOString(), synced: 0 };
         }
         return { updatedAt: new Date().toISOString(), synced: 0 };
       });
+
+      table.hook('deleting', () => {
+        this.notifyChange();
+      });
     });
+  }
+
+  onLocalChange(callback: () => void) {
+    this.onChangeListeners.push(callback);
+  }
+
+  private notifyChange() {
+    this.onChangeListeners.forEach(l => l());
   }
 }
 
