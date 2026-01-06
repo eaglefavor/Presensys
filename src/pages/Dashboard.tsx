@@ -20,17 +20,17 @@ export default function Dashboard() {
   
   const studentCount = useLiveQuery(() => db.students.count());
   const courseCount = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.id!).count() : 0,
+    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).count() : 0,
     [activeSemester]
   );
   
   const attendanceStats = useLiveQuery(async () => {
     if (!activeSemester) return null;
-    const courses = await db.courses.where('semesterId').equals(activeSemester.id!).toArray();
+    const courses = await db.courses.where('semesterId').equals(activeSemester.serverId).toArray();
     const statsList = [];
     for (const course of courses) {
-      const sessions = await db.attendanceSessions.where('courseId').equals(course.id!).toArray();
-      const sessionIds = sessions.map(s => s.id!);
+      const sessions = await db.attendanceSessions.where('courseId').equals(course.serverId).toArray();
+      const sessionIds = sessions.map(s => s.serverId);
       const records = await db.attendanceRecords.where('sessionId').anyOf(sessionIds).toArray();
       const presentCount = records.filter(r => r.status === 'present').length;
       const totalPossible = records.length;
