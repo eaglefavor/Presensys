@@ -274,13 +274,17 @@ export class RealtimeSyncEngine {
     const lastSync = localStorage.getItem('last_sync_timestamp');
     const since = lastSync ? new Date(parseInt(lastSync)).toISOString() : new Date(0).toISOString();
     const isFreshSync = !lastSync || lastSync === '0';
+    
+    // Integrity Check: If we have no semesters locally, force a fresh pull for them
+    const localSemesterCount = await db.semesters.count();
+    const semesterSince = localSemesterCount === 0 ? new Date(0).toISOString() : since;
 
-    const pull = async (tableName: TableName, table: any, mapToLocal: (serverItem: any) => any) => {
+    const pull = async (tableName: TableName, table: any, mapToLocal: (serverItem: any) => any, customSince?: string) => {
         const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
-        let query = supabase.from(tableName).select('*').eq('user_id', this.userId).gt('updated_at', since);
+        let query = supabase.from(tableName).select('*').eq('user_id', this.userId).gt('updated_at', customSince || since);
         
         // Smart Pull: On fresh sync, ignore deleted history to prevent "Zombie" accumulation
-        if (isFreshSync) {
+        if (isFreshSync || (customSince && customSince === new Date(0).toISOString())) {
             query = query.eq('is_deleted', 0);
         }
 
@@ -313,7 +317,7 @@ export class RealtimeSyncEngine {
 
     await pull('semesters', db.semesters, (s) => ({
         serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date, isActive: s.is_active, isArchived: s.is_archived, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
-    }));
+    }), semesterSince);
     await pull('students', db.students, (s) => ({
         serverId: s.id, regNumber: s.reg_number, name: s.name, email: s.email, phone: s.phone, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
     }));
