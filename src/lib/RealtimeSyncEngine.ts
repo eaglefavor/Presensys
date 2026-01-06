@@ -217,12 +217,24 @@ export class RealtimeSyncEngine {
     const payload = unsynced.map(mapFn).filter((p: any): p is NonNullable<typeof p> => p !== null);
     if (payload.length === 0) return;
 
-    const { error } = await supabase.from(tableName).upsert(payload);
+    const { data, error } = await supabase.from(tableName).upsert(payload).select();
 
     if (error) {
       console.error(`Sync: Error pushing to ${tableName}`, error);
-    } else {
-      await table.bulkUpdate(unsynced.map((i: T) => ({ key: i.id!, changes: { synced: 1 } })));
+    } else if (data) {
+      // Server Authority: Update local records with server's true timestamp and mark as synced
+      const updates = data.map((serverItem: any) => {
+        const localItem = unsynced.find((u: any) => u.serverId === serverItem.id);
+        if (!localItem) return null;
+        return {
+          key: localItem.id!,
+          changes: { synced: 1, updatedAt: serverItem.updated_at }
+        };
+      }).filter((u: any) => u !== null);
+
+      if (updates.length > 0) {
+        await table.bulkUpdate(updates);
+      }
     }
   }
 
@@ -231,11 +243,18 @@ export class RealtimeSyncEngine {
     
     const lastSync = localStorage.getItem('last_sync_timestamp');
     const since = lastSync ? new Date(parseInt(lastSync)).toISOString() : new Date(0).toISOString();
+    const isFreshSync = !lastSync || lastSync === '0';
 
     const pull = async (tableName: TableName, table: any, mapToLocal: (serverItem: any) => any) => {
         const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
         let query = supabase.from(tableName).select('*').eq('user_id', this.userId).gt('updated_at', since);
-        if (isHeavy) {
+        
+        // Smart Pull: On fresh sync, ignore deleted history to prevent "Zombie" accumulation
+        if (isFreshSync) {
+            query = query.eq('is_deleted', 0);
+        }
+
+        if (isHeavy && !isFreshSync) {
             const twoDaysAgo = new Date(Date.now() - (48 * 60 * 60 * 1000)).toISOString();
             query = query.gt('created_at', twoDaysAgo);
         }
@@ -247,6 +266,10 @@ export class RealtimeSyncEngine {
             await db.transaction('rw', table, async () => {
                 for (const item of data) {
                     const localItem = await table.where('serverId').equals(item.id).first();
+                    
+                    // Local-is-King: Never overwrite unsynced local changes with incoming server data
+                    if (localItem && localItem.synced === 0) continue;
+
                     const mapped = mapToLocal(item);
                     if (localItem) {
                         await table.update(localItem.id, { ...mapped, synced: 1 });
@@ -298,6 +321,10 @@ export class RealtimeSyncEngine {
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
         const localItem = await table.where('serverId').equals(newRecord.id).first();
+        
+        // Local-is-King: Ignore incoming realtime updates if we have unsynced local changes
+        if (localItem && localItem.synced === 0) return;
+
         const mapped = this.mapServerToLocal(tableName, newRecord);
         if (localItem) {
              await table.update(localItem.id, { ...mapped, synced: 1 });
@@ -309,6 +336,9 @@ export class RealtimeSyncEngine {
         }
     } else if (eventType === 'DELETE') {
         const localItem = await table.where('serverId').equals(oldRecord.id).first();
+        // Local-is-King: Don't delete if we have unsynced local changes (rare conflict, but safe)
+        if (localItem && localItem.synced === 0) return;
+        
         if (localItem) await table.delete(localItem.id);
     }
   }
