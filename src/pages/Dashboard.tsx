@@ -1,14 +1,32 @@
 import { useMemo, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2 } from 'lucide-react';
+import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2, Bug } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
+import { realtimeSync } from '../lib/RealtimeSyncEngine';
 
 export default function Dashboard() {
   const activeSemester = useAppStore(state => state.activeSemester);
+
+  const handleDebugSync = async () => {
+    console.log('--- DEBUG: STARTING SYNC DUMP ---');
+    const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
+    
+    for (const tableName of tables) {
+      // @ts-ignore
+      const unsynced = await db[tableName].filter(i => i.synced === 0).toArray();
+      if (unsynced.length > 0) {
+        console.log(`Unsynced in ${tableName}:`, unsynced);
+      } else {
+        console.log(`${tableName}: All synced.`);
+      }
+    }
+    console.log('--- TRIGGERING MANUAL SYNC ---');
+    realtimeSync.triggerSync();
+  };
 
   useEffect(() => {
     const testSupabase = async () => {
@@ -55,9 +73,14 @@ export default function Dashboard() {
             <h1 className="h4 fw-black mb-0 text-primary" style={{ color: 'var(--primary-blue)' }}>DASHBOARD</h1>
             <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">{activeSemester?.name || 'Academic Overview'}</p>
           </div>
-          <Link to="/attendance" className="btn btn-primary rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" style={{ width: '52px', height: '52px' }}>
-            <Plus size={24} />
-          </Link>
+          <div className="d-flex gap-2">
+            <button className="btn btn-warning rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" style={{ width: '52px', height: '52px' }} onClick={handleDebugSync}>
+                <Bug size={24} />
+            </button>
+            <Link to="/attendance" className="btn btn-primary rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" style={{ width: '52px', height: '52px' }}>
+                <Plus size={24} />
+            </Link>
+          </div>
         </div>
       </div>
 
