@@ -1,6 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, CheckCircle, XCircle, HelpCircle, ChevronRight, Calendar, Clock, ArrowLeft, Book, Search, UserCheck, UserX, RotateCcw } from 'lucide-react';
+import { 
+  Plus, Calendar, UserCheck, UserX, Search, 
+  CheckCircle, XCircle, HelpCircle, 
+  RotateCcw, Settings2, Book, ChevronRight, ArrowLeft, Clock
+} from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -104,7 +108,7 @@ export default function Attendance() {
 
     await db.transaction('rw', db.attendanceRecords, async () => {
       const now = Date.now();
-      const studentIds = filteredEnrollments.map(s => s.serverId);
+      const studentIds = filteredEnrollments.map((s: any) => s.serverId);
       
       const existing = await db.attendanceRecords
         .where('sessionId').equals(activeSessionId)
@@ -115,8 +119,8 @@ export default function Attendance() {
       const toUpdate = existing.map(r => ({ key: r.id!, changes: { status, timestamp: now, synced: 0 } }));
       
       const toAdd = studentIds
-        .filter(id => !existingIds.has(id))
-        .map(studentId => ({
+        .filter((id: string) => !existingIds.has(id))
+        .map((studentId: string) => ({
           serverId: '',
           sessionId: activeSessionId,
           studentId,
@@ -278,7 +282,7 @@ export default function Attendance() {
                 <input type="text" className="form-control border-0 bg-transparent py-1 small fw-bold" placeholder="Find student..." value={markSearch} onChange={e => setMarkSearch(e.target.value)} />
             </div>
             <div className="dropdown">
-                <button className="btn btn-light border rounded-3 p-2 shadow-sm" type="button" data-bs-toggle="dropdown"><Plus size={20} /></button>
+                <button className="btn btn-light border rounded-3 p-2 shadow-sm" type="button" data-bs-toggle="dropdown"><Settings2 size={20} /></button>
                 <ul className="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 p-2">
                     <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleBulkMark('present')}><UserCheck size={16} className="text-success" /> Mark All Present</button></li>
                     <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleBulkMark('absent')}><UserX size={16} className="text-danger" /> Mark All Absent</button></li>
@@ -291,7 +295,7 @@ export default function Attendance() {
 
       <div className="px-4 container-mobile d-flex flex-column gap-2">
         <AnimatePresence mode="popLayout">
-          {filteredEnrollments.map(student => {
+          {filteredEnrollments.map((student: any) => {
             const record = activeRecords.find(r => r.studentId === student.serverId);
             const status = record?.status;
             return (
