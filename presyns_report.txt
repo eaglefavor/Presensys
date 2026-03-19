@@ -1,0 +1,43 @@
+This is preseyns. For more info on the project check @presyns.txt . We have a lot to do and there are so many things going wrong. These are the following:
+
+1) In the data archive section, I need you to add the function for attendance compilation. Now it should be done as so; when a certain time period and course is selected, the system will compile the entire student attendance for that time period for each student, for the course selected, showing how many attendance sessions were held and how many each student were  present for, their attendance percentage.
+
+2) Look at these errors: Sync: No valid semester found for self-healing.
+Sync: Skipped 1 invalid items in courses. Check foreign keys.
+Sync: Skipped 1 invalid items in attendance_sessions. Check foreign keys.
+Sync: No valid semester found for self-healing.
+Sync: Skipped 1 invalid items in courses. Check foreign keys.
+Sync: Skipped 1 invalid items in attendance_sessions. Check foreign keys.
+Sync: No valid semester found for self-healing.
+Error: Sync: Error pushing to students 
+Object {code: "23505", details: null, hint: null, message: "duplicate key value violates unique constraint "students_reg_number_key""}
+code: "23505"
+details: null
+hint: null
+message: "duplicate key value violates unique constraint "students_reg_number_key""
+[[Prototype]]: Object.
+
+I found this from the console logs in Eruda. What's going on?
+
+3) Another function you will add to Presensys is the 3G network optimization.
+
+The "WhatsApp" Sync Engine (Offline-First)
+WhatsApp works on 3G because it doesn't wait for the server to confirm an action. You should implement an Optimistic UI combined with a Persistent Outbox.
+Custom Service Worker: Build a worker that intercepts every fetch request. If the network is 3G (check navigator.connection.effectiveType), serve from CacheStorage first, then update in the background.
+IndexedDB for State: Instead of keeping your app state only in memory (Redux/Context), mirror it to IndexedDB. If a user in Ifite clicks a button while their signal drops, save that "action" to an IndexedDB queue.
+Background Sync API: Use the SyncManager to fire off that queue the moment the browser detects a stable heartbeat, even if the user has closed the tab.
+
+A. Binary Data Transfer (The "Pro" Route)
+Standard JSON is "heavy" because it's text-based. WhatsApp and high-performance apps often use binary formats.
+Protocol Buffers (Protobuf): Instead of sending { "user": "Victor", "id": 123 } as text, Protobuf serializes this into a tiny binary blob. On 3G, reducing the payload size by even 30% can be the difference between a 2-second and a 10-second load.
+Brotli Compression: Ensure your Vercel deployment is forcing Brotli instead of Gzip. Brotli is significantly more efficient for the types of text files (JS/CSS) your site serves.
+
+B. Extreme Code Splitting
+Don't let the user download the "Settings" page code if they are only looking at the "Home" page.
+Route-based splitting: Every page should be its own tiny JS chunk.
+Component-level lazy loading: If a component (like a map or a heavy chart) is below the fold, do not even request the code for it until the user scrolls near it.
+
+4) Also, for those accounts that used Google authentication to sign up, we add a function maybe in "Settings" for them to add a password or change their password.
+Then also for every attendance session taken, the option to export should be present. This option to export should be very flexible, allowing for all kinds of formats and sharing style ( Gmail, WhatsApp, Facebook.) for platforms and for file types (raw text - properly arranged, xlsx file, CSV file, PDF, etc). 
+
+5) It still has a sync problem, the data and changes I make are not syncing to the cloud storage fast enough. So I can make changes, comeback to my account, but the changes are now nowhere to be found or were only recorded halfway.

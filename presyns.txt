@@ -1,0 +1,41 @@
+﻿🚀 PRESENSYS: Project Handoff & Architecture Guide
+1. What is Presensys?
+Presensys is a mobile-first Progressive Web App (PWA) designed to digitize and streamline the attendance recording system at Nnamdi Azikiwe University (UNIZIK). It replaces the chaotic, easily forged, and time-consuming "paper-passing" method used in overcrowded lecture halls with a secure, digital, and offline-capable solution.
+2. The Core Philosophy & "Feel"
+To build for UNIZIK is to build for extreme edge cases. The developer must understand the daily reality of the users (Class Reps and Lecturers):
+ * Offline is King: Network coverage in places like Ifite, Science Village, or deep inside GST halls is highly erratic. The app must never block a user from marking attendance just because they have no signal. It must work entirely offline and silently sync in the background when the connection returns.
+ * Utilitarian & Snappy: The UI should not be bloated with heavy animations. Users are often trying to mark 300 students in 10 minutes while standing up. Large touch targets, high contrast (Dark Mode preferred for battery saving during Awka blackouts), and instant visual feedback are mandatory.
+ * Trust No Network, Trust No Client: Students will try to cheat the 75% attendance rule. The system is designed to eventually incorporate Geofencing and dynamic QR codes to ensure physical presence.
+3. The Goals
+ * Eliminate Paper: Save hours of manual data entry for lecturers at the end of the semester.
+ * Enforce the 75% Rule: Provide real-time data to students and lecturers about who is eligible to write exams.
+ * Hassle-Free Security: Ensure Class Reps can securely manage their own department's data without stepping on each other's toes (Multi-tenancy).
+4. The Tech Stack & Architecture
+ * Frontend Environment: React / Next.js configured as a Progressive Web App (PWA).
+ * Local State / Offline Cache: Dexie.js (IndexedDB Wrapper). This holds the offline data.
+ * Backend & Database: Supabase (PostgreSQL). Hosted in the EU-Frankfurt region to ensure the lowest possible latency via West African undersea cables.
+ * Authentication: Google OAuth 2.0 paired with a custom "Departmental Secret Key" gatekeeping system.
+5. The Database Schema (The Secret Sauce)
+The Supabase backend has already been architected and deployed. It is specifically designed for offline syncing. Do not change the core column structures without understanding why they exist:
+ * UUIDs Everywhere: We use UUID instead of BIGINT for primary keys. This allows the offline PWA to generate a unique ID for an attendance record while disconnected, completely avoiding ID-collision errors when pushing to the cloud later.
+ * Soft Deletes (is_deleted): We never run DELETE commands. If a rep removes a student, we set is_deleted = 1. This allows the offline sync engine to tell the cloud database, "Hey, this record was deleted while I was offline."
+ * Timestamps (updated_at): Crucial for conflict resolution. The sync engine checks this to see which version of a record is the newest.
+ * Multi-Tenancy (user_id): Every single table has a user_id column linked to auth.users. Row Level Security (RLS) is strictly enforced so users can only fetch and mutate their own department's data.
+6. The Build Plan / Roadmap (Where to pick up)
+Phase 1: Infrastructure (✅ Completed)
+ * Supabase project initialized.
+ * Relational tables created (Semesters -> Courses -> Students -> Sessions -> Records).
+ * Security schemas (RLS), Profiles trigger, and Google OAuth configured.
+Phase 2: The Offline Sync Engine (📍 Current Priority)
+ * Task: Build the bridge between Dexie.js (local) and Supabase (cloud).
+ * Logic: When the app loads or regains network (window.addEventListener('online')), fetch rows from Dexie where updated_at is newer than the last sync, and push them to Supabase.
+Phase 3: The UI / UX Framework
+ * Dashboard: Show total students, active courses, and average attendance.
+ * Action Center: The mobile UI for tapping [P], [A], or [E] (Present, Absent, Excused) next to a student's name.
+Phase 4: The "Smart Paste" Engine (The Killer Feature)
+ * Task: Class Reps get messy lists of names/reg numbers on WhatsApp. We need a text-area input that parses this junk text.
+ * Logic: Use a Regular Expression (Regex) targeting the UNIZIK 10-digit format (e.g., /\d{10}/g) to automatically extract Reg Numbers and pair them with adjacent text (Names).
+Phase 5: Archives & Export
+ * Task: Allow lecturers to export a semester's attendance into a clean, UNIZIK-formatted CSV/Excel sheet for final result computation.
+7. A Note to the Next Developer
+Welcome to Presensys. You aren't just building a CRUD app; you are solving a massive logistical nightmare for thousands of students and educators. Keep the UI simple, respect the user's data and battery.

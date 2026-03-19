@@ -1,0 +1,118 @@
+:root {
+  --primary-blue: #006994; /* Sea Blue */
+  --soft-white: #ffffff;
+  --bg-gray: #f0f2f5; /* Facebook-like light gray bg */
+  --border-color: #e4e6eb;
+  --text-dark: #1c1e21;
+  --text-muted: #65676b;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  background-color: var(--bg-gray);
+  font-family: 'Alegreya Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text-dark);
+  margin: 0;
+  padding: 0;
+  font-weight: 400;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Comic Neue', cursive;
+  font-weight: 700;
+}
+
+/* App Container */
+.app-container {
+  background-color: var(--soft-white);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Inputs & Forms (Simplistic & Professional) */
+input, textarea {
+  user-select: text;
+}
+
+.modern-input-unified {
+  background: var(--bg-gray) !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--border-color) !important;
+  transition: all 0.2s ease;
+}
+
+.modern-input-unified:focus-within {
+  border-color: var(--primary-blue) !important;
+  background: var(--soft-white) !important;
+  box-shadow: 0 0 0 2px rgba(0, 105, 148, 0.1) !important;
+}
+
+/* Social Media Style Cards */
+.card {
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: background-color 0.2s;
+}
+
+.card:active {
+  background-color: #f5f6f7;
+}
+
+/* Navigation Drawer Elements */
+.nav-item-premium {
+  padding: 12px 16px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.nav-item-premium.active {
+  color: var(--primary-blue);
+  background-color: rgba(0, 105, 148, 0.05);
+}
+
+/* Floating Action Button Style */
+.btn-primary {
+  background-color: var(--primary-blue);
+  border: none;
+  font-weight: 700;
+  border-radius: 8px;
+}
+
+.btn-primary:hover {
+  background-color: #005a84;
+}
+
+/* Animations */
+.animate-in {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Desktop Framing */
+@media (min-width: 501px) {
+  .app-container {
+    margin: 20px auto;
+    max-width: 500px;
+    height: calc(100vh - 40px);
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    position: relative;
+  }
+}
+
+/* Typography & Utilities */
+.fw-black { font-weight: 900 !important; }
+.letter-spacing-n1 { letter-spacing: -1.2px; }
+.xx-small { font-size: 10px; }
+.tracking-widest { letter-spacing: 2px; }
+.shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+.rounded-top-5 { border-top-left-radius: 32px !important; border-top-right-radius: 32px !important; }
