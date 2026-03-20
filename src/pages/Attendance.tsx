@@ -156,10 +156,13 @@ export default function Attendance() {
   const handleSessionExport = (format: 'csv' | 'xlsx' | 'pdf' | 'text' | 'share') => {
     if (!enrollments || !activeSessionId || !currentSession) return;
     const selectedCourse = courses?.find(c => c.serverId === selectedCourseId);
+    const profile = useAuthStore.getState().profile;
+    const meta = { faculty: profile?.faculty, department: profile?.department, level: profile?.level };
     
-    const exportData = enrollments.map((student: any) => {
+    const exportData = enrollments.map((student: any, idx: number) => {
       const record = activeRecords.find(r => r.studentId === student.serverId);
       return {
+        'S/N': idx + 1,
         'Name': student.name,
         'Reg Number': student.regNumber,
         'Status': record?.status?.toUpperCase() || 'UNMARKED',
@@ -167,14 +170,14 @@ export default function Attendance() {
     });
 
     const filename = `attendance_${selectedCourse?.code || 'session'}_${currentSession.date}`;
-    const title = `${selectedCourse?.code || 'Attendance'} — ${currentSession.title} (${currentSession.date})`;
+    const title = `${selectedCourse?.code || 'Attendance'} - ${currentSession.title} (${currentSession.date})`;
 
     switch (format) {
-      case 'csv': exportToCSV(exportData, filename); break;
-      case 'xlsx': exportToXLSX(exportData, filename); break;
-      case 'pdf': exportToPDF(exportData, title, filename); break;
-      case 'text': { const text = exportToText(exportData, title); downloadText(text, filename); break; }
-      case 'share': { const text = exportToText(exportData, title); shareData(text, title); break; }
+      case 'csv': exportToCSV(exportData, filename, meta); break;
+      case 'xlsx': exportToXLSX(exportData, filename, meta); break;
+      case 'pdf': exportToPDF(exportData, title, filename, meta); break;
+      case 'text': { const text = exportToText(exportData, title, meta); downloadText(text, filename); break; }
+      case 'share': { const text = exportToText(exportData, title, meta); shareData(text, title); break; }
     }
   };
 

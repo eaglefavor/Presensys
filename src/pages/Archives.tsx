@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, Archive, History, BarChart3, Calendar, Download, Share2, FileText, FileSpreadsheet } from 'lucide-react';
 import { db } from '../db/db';
 import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { exportToCSV, exportToXLSX, exportToPDF, exportToText, downloadText, shareData } from '../lib/ExportUtils';
@@ -192,7 +193,11 @@ export default function Archives() {
 
   const handleExport = (format: 'csv' | 'xlsx' | 'pdf' | 'text' | 'share') => {
     setShowExportMenu(false);
-    const exportData = compilationData.map(row => ({
+    const profile = useAuthStore.getState().profile;
+    const meta = { faculty: profile?.faculty, department: profile?.department, level: profile?.level };
+
+    const exportData = compilationData.map((row, idx) => ({
+      'S/N': idx + 1,
       'Name': row.name,
       'Reg Number': row.regNumber,
       'Total Sessions': row.totalSessions,
@@ -203,29 +208,29 @@ export default function Archives() {
     }));
 
     const filename = `attendance_${compilationTitle.replace(/\s+/g, '_')}_${startDate}_to_${endDate}`;
-    const title = `Attendance Compilation: ${compilationTitle}\nPeriod: ${startDate} to ${endDate}`;
+    const title = `Attendance Compilation: ${compilationTitle} | Period: ${startDate} to ${endDate}`;
 
     switch (format) {
       case 'csv':
-        exportToCSV(exportData, filename);
+        exportToCSV(exportData, filename, meta);
         toast.success('CSV downloaded!');
         break;
       case 'xlsx':
-        exportToXLSX(exportData, filename);
+        exportToXLSX(exportData, filename, meta);
         toast.success('Excel file downloaded!');
         break;
       case 'pdf':
-        exportToPDF(exportData, title, filename);
+        exportToPDF(exportData, title, filename, meta);
         toast.success('PDF downloaded!');
         break;
       case 'text': {
-        const text = exportToText(exportData, title);
+        const text = exportToText(exportData, title, meta);
         downloadText(text, filename);
         toast.success('Text file downloaded!');
         break;
       }
       case 'share': {
-        const text = exportToText(exportData, title);
+        const text = exportToText(exportData, title, meta);
         shareData(text, `Attendance: ${compilationTitle}`).then(ok => {
           if (ok) toast.success('Shared / Copied to clipboard!');
         });

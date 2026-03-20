@@ -1,0 +1,124 @@
+1. I want to add these two pointers to the website. In the settings page, there should be a drop-down to select *LEVEL* and another to select *_FACULTY AND DEPARTMENT_* these two information are needed for the proper exportation of accurate attendance data. So the lecturer knows where this is coming from
+
+The idea is this, that every account should be attached to a Level, a Faculty and, under a faculty, a department. The various faculties and their corresponding departments:
+
+1. Faculty of Agriculture 
+Departments: Agricultural Economics & Extension, Animal Science & Technology, Crop Science & Horticulture, Fisheries & Aquaculture, Food Science & Technology, Forestry & Wildlife Management, Soil Science & Land Resources. 
+
+2. Faculty of Arts
+Departments: Chinese, English Language & Literature, History & International Studies, Igbo, African & Asian Studies, Linguistics, Modern European Languages, Music, Philosophy, Religion & Human Relations, Theatre Arts. 
+
+3. Faculty of Basic Clinical Sciences 
+Departments: This faculty primarily handles clinical training rotations for medical students (e.g., Surgery, Internal Medicine). 
+
+4. Faculty of Basic Medical Sciences 
+Departments: Anatomy, Human Physiology, Human Biochemistry. 
+
+5. Faculty of Biosciences
+Departments: Applied Biochemistry, Applied Microbiology & Brewing, Botany, Parasitology & Entomology, Zoology. 
+
+6. Faculty of Education
+Departments: Adult Education, Early Childhood & Primary Education, Educational Foundation, Educational Management & Policy, Guidance & Counseling, Human Kinetics & Health Education, Science Education, Vocational Education, Library & Information Science. 
+
+7. Faculty of Engineering
+Departments: Agricultural & Bioresources, Chemical, Civil, Electrical, Electronic & Computer, Industrial & Production, Mechanical, Metallurgical & Materials, Polymer & Textile, Petroleum Engineering (newest). 
+
+8. Faculty of Environmental Sciences
+Departments: Architecture, Building, Environmental Management, Estate Management, Fine & Applied Arts, Geography & Meteorology, Quantity Surveying, Surveying & Geoinformatics, Interior Architecture and Design (new). 
+
+9. Faculty of Health Sciences & Technology
+Departments: Environmental Health Sciences, Human Nutrition & Dietetics, Medical Rehabilitation (Physiotherapy), Nursing Science, Radiography & Radiological Sciences. 
+
+10. Faculty of Law
+Departments: Civil Law, Commercial Law, International Law, Public Law. 
+
+11. Faculty of Management Sciences
+Departments: Accountancy, Banking & Finance, Business Administration, Cooperative Economics & Management, Marketing, Public Administration, Entrepreneurial Studies, Logistics & Supply Chain Management (new), Procurement Management (new), Insurance (new). 
+
+12. Faculty of Medicine
+Programmes: Medicine & Surgery (MBBS), Bachelor of Dental Surgery (B.D.S) (recently approved). 
+
+13. Faculty of Medical Laboratory Sciences
+Departments: Clinical Chemistry, Haematology & Blood Transfusion, Histopathology, Immunology & Immunochemistry, Medical Microbiology & Public Health. 
+
+14. Faculty of Pharmaceutical Sciences
+Departments: Pharmaceutical & Medicinal Chemistry, Pharmaceutics & Pharmaceutical Technology, Pharmacognosy & Traditional Medicine, Pharmacology & Toxicology, Pharmaceutical Microbiology & Biotechnology. 
+
+15. Faculty of Physical Sciences
+Departments: Computer Science, Geological Sciences, Geophysics, Mathematics, Physics & Industrial Physics, Pure & Industrial Chemistry, Statistics. 
+
+16. Faculty of Social Sciences
+Departments: Economics, Mass Communication, Political Science, Psychology, Sociology & Anthropology, Journalism and Media Studies (new), Broadcasting (new). 
+
+17. Faculty of Technology & Vocational Education
+Focus: Technical and vocational teaching specializations.
+
+
+It should all be moved to the apps' settings section, it should be a drop-down allowing a user to select their department and faculty. Then the levels should also be a drop-down (100 Level, 200 level....) you get. So that all this information will be included in the export of an attendance session data, so the lecturer can know what came from where.
+
+2. The exported data should be formatted better: ¨T¨T¨T TFS 213 ¡ª Session 20 Mar (2026-03-20) ¨T¨T¨T
+Generated: 20/03/2026, 10:42:17
+
+Name                                ©¦Reg Number  ©¦Status   
+©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©à©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©à©¤©¤©¤©¤©¤©¤©¤©¤©¤
+ARINZE-OZOAGU PASCHAL               ©¦2024104096  ©¦PRESENT  
+CHIKAOBI BLESSING                   ©¦2024104111  ©¦PRESENT  
+OBIJIAKU RAPHAEL CHIDIOGO           ©¦2024104004  ©¦PRESENT  
+ANUKWU PAUL ODERA                   ©¦2024104003  ©¦PRESENT  
+ORAGWU CHINEMEREM PRISCILLA         ©¦2024104045  ©¦PRESENT  
+OKEKE CHUKWUNONSO FRANKLIN          ©¦2024104089  ©¦PRESENT  
+ANYANWU PRAISE URIDINACHI           ©¦2024104056  ©¦PRESENT  
+EZETE GIFTED ONYIYECHI              ©¦2024074129  ©¦PRESENT  
+OGBONNA VICTOR CHIEMELIE            ©¦2024104138  ©¦PRESENT  
+MARTINS-ESOMONU NNADALU BRUNO       ©¦2024104069  ©¦PRESENT  
+ILODUBA CRISPINIAL CHIMDIDU         ©¦2024104140  ©¦PRESENT  
+JIDECHI OBALIM MIRACLE              ©¦2024104088  ©¦PRESENT  
+UKPAIL ABIGAIL EZINNE               ©¦2024104106  ©¦PRESENT  
+NWAFOR-EMEH CHIDERA TREASURE        ©¦2024104132  ©¦PRESENT  
+UGADU PROMISE MARTHA                ©¦2024104014  ©¦PRESENT  
+CHIJIOKE CHIOMA JANE                ©¦2024104007  ©¦PRESENT  
+JOSEPH CHINAZA DEBORAH              ©¦2024104097  ©¦PRESENT  
+LINUS CHINEMEREM CHARLES            ©¦2024104060  ©¦PRESENT  
+HYCIENTH EMMANUEL CHUKWUDI          ©¦2024104083  ©¦PRESENT  
+NWOSU GIFT OGECHUKWU                ©¦2024104073  ©¦PRESENT  
+OBICHUKWU CHINAZO GIFT              ©¦2024104009  ©¦PRESENT  
+NDIANEFO DENNIS EZENWA NWABUEZE     ©¦2024104044  ©¦PRESENT  
+OKPAGA PERPETUAL ENOSHI             ©¦2024104048  ©¦PRESENT  
+MARIZU CHIDUBEM IFEANYICHUKWU       ©¦2024104043  ©¦PRESENT  
+ODO EMELDINE UGOCHUKWU              ©¦2024104031  ©¦PRESENT  
+NJOKU SAMUEL KENECHUKWU             ©¦2024104012  ©¦PRESENT  
+CHINKE STANLEY CHIMAOGE             ©¦2024104135  ©¦PRESENT  
+OWOAMANAM CHISOM STEPHANIE          ©¦2024104081  ©¦PRESENT  
+AKUNNA VALERIAN ONYEDIKA            ©¦2024104087  ©¦PRESENT  
+ANYANWU IHUAKU GRACE                ©¦2024104121  ©¦PRESENT  
+OKORORIE DAVID IZUCHUKWU            ©¦2024104085  ©¦PRESENT  
+OPARAOCHA MMESOMA MARYCATHERINE     ©¦2024104131  ©¦PRESENT  
+OKPARA MMESOMA RUTH                 ©¦2024104028  ©¦PRESENT  
+EZEKIEL MARY OLUCHI                 ©¦2024104024  ©¦PRESENT  
+NNAJI ONYEKA PETER                  ©¦2024104011  ©¦PRESENT  
+IKE-EZE ADAEZE BLESSING             ©¦2024104010  ©¦PRESENT  
+OKOYE ESOMCHUKWU JULIET             ©¦2024104020  ©¦PRESENT  
+SUNDAY ESTHER                       ©¦2024104013  ©¦PRESENT  
+OFOMA CHINOSO CYNTHIA               ©¦2024104104  ©¦PRESENT  
+AGBASIANYA PRECIOUS NMERICHUKWU     ©¦2024104030  ©¦PRESENT  
+UMEGBOLU CHELSEA MMESOMA            ©¦2024104027  ©¦PRESENT  
+ANTHONY TIMOTHY CONFIDENCE          ©¦2024104074  ©¦PRESENT  
+NGOZI JULIET ANORUE                 ©¦2024104025  ©¦PRESENT  
+EKEDUM FAVOUR KOSISOCHUKWU          ©¦2024104114  ©¦PRESENT  
+IRECHUKWU CHINAZAM FREDA            ©¦2024104141  ©¦PRESENT  
+AKPUTA CHRISTIAN UGOCHUKWU          ©¦2024104066  ©¦PRESENT  
+EZEOBI MIRACLE OLUEBUBE             ©¦2024104079  ©¦PRESENT  
+IDOKO PRECIOUS CHIDINMA             ©¦2024104035  ©¦PRESENT  
+OFORKANSI MMESOMA RITA              ©¦2024104082  ©¦PRESENT  
+EMMANUEL RITA CHIAMAKA              ©¦2024104032  ©¦PRESENT  
+UGHANZE IKECHUKWU CALEB             ©¦2024104128  ©¦PRESENT  
+EZENWABACHILI CHIDERA ANTHONIA      ©¦2024104019  ©¦PRESENT  
+PETER JOEL CIMEMEWOYA               ©¦2024104054  ©¦PRESENT  
+OBI DIKACHISICHO ESTHER             ©¦2024074023  ©¦PRESENT  
+EZEOGU DESTINY OZIOMA GOODNEWS      ©¦2024104142  ©¦PRESENT  
+UDOH WISDOM EDIOMO                  ©¦2024104108  ©¦PRESENT  
+CHUKWUMA VICTOR OGBONNA             ©¦2024104113  ©¦PRESENT  
+OKWUDILI MARY ONYEBUCHI             ©¦2024104139  ©¦PRESENT  
+OKEZIE FAVOUR AMARACHI              ©¦2024104070
+
+we need to arrange the format, it can't be like this. Something more cleaner, organised, that a University can use with ease and won't cause any future problems as it accumulates. Also easy to sort.

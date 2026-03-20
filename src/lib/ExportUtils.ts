@@ -7,18 +7,33 @@ export interface ExportRow {
   [key: string]: string | number;
 }
 
+export interface ExportMeta {
+  faculty?: string;
+  department?: string;
+  level?: string;
+}
+
 /**
  * Export data as a CSV file download.
  */
-export function exportToCSV(data: ExportRow[], filename: string) {
-  const csv = Papa.unparse(data);
+export function exportToCSV(data: ExportRow[], filename: string, meta?: ExportMeta) {
+  // Prepend metadata rows if available
+  const metaLines: string[] = [];
+  if (meta?.faculty) metaLines.push(`Faculty,${meta.faculty}`);
+  if (meta?.department) metaLines.push(`Department,${meta.department}`);
+  if (meta?.level) metaLines.push(`Level,${meta.level}`);
+
+  let csv = Papa.unparse(data);
+  if (metaLines.length > 0) {
+    csv = metaLines.join('\n') + '\n\n' + csv;
+  }
   downloadBlob(csv, `${filename}.csv`, 'text/csv;charset=utf-8;');
 }
 
 /**
  * Export data as an XLSX (Excel) file download.
  */
-export function exportToXLSX(data: ExportRow[], filename: string) {
+export function exportToXLSX(data: ExportRow[], filename: string, meta?: ExportMeta) {
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
@@ -33,13 +48,25 @@ export function exportToXLSX(data: ExportRow[], filename: string) {
   });
   ws['!cols'] = maxWidths;
 
+  // Add metadata as a second sheet if available
+  if (meta && (meta.faculty || meta.department || meta.level)) {
+    const metaData = [
+      { Field: 'Faculty', Value: meta.faculty || '' },
+      { Field: 'Department', Value: meta.department || '' },
+      { Field: 'Level', Value: meta.level || '' },
+      { Field: 'Generated', Value: new Date().toLocaleString() },
+    ];
+    const metaWs = XLSX.utils.json_to_sheet(metaData);
+    XLSX.utils.book_append_sheet(wb, metaWs, 'Info');
+  }
+
   XLSX.writeFile(wb, `${filename}.xlsx`);
 }
 
 /**
  * Export data as a formatted PDF file download.
  */
-export function exportToPDF(data: ExportRow[], title: string, filename: string) {
+export function exportToPDF(data: ExportRow[], title: string, filename: string, meta?: ExportMeta) {
   const doc = new jsPDF({ orientation: 'landscape' });
   
   // Title
@@ -47,11 +74,18 @@ export function exportToPDF(data: ExportRow[], title: string, filename: string) 
   doc.setFont('helvetica', 'bold');
   doc.text(title, 14, 15);
   
-  // Subtitle with date
+  // Subtitle with date + academic info
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
-  doc.text(`Generated: ${new Date().toLocaleString()} | Presensys — UNIZIK`, 14, 22);
+  const metaParts = [
+    `Generated: ${new Date().toLocaleString()}`,
+    meta?.faculty ? `Faculty: ${meta.faculty}` : '',
+    meta?.department ? `Dept: ${meta.department}` : '',
+    meta?.level ? `Level: ${meta.level}` : '',
+    'Presensys - UNIZIK',
+  ].filter(Boolean);
+  doc.text(metaParts.join(' | '), 14, 22);
   doc.setTextColor(0);
 
   if (data.length > 0) {
@@ -74,8 +108,9 @@ export function exportToPDF(data: ExportRow[], title: string, filename: string) 
 
 /**
  * Export data as formatted plain text.
+ * Uses ONLY ASCII characters for maximum device compatibility.
  */
-export function exportToText(data: ExportRow[], title: string): string {
+export function exportToText(data: ExportRow[], title: string, meta?: ExportMeta): string {
   if (data.length === 0) return `${title}\n\nNo records found.`;
 
   const headers = Object.keys(data[0]);
@@ -83,22 +118,28 @@ export function exportToText(data: ExportRow[], title: string): string {
     Math.max(h.length, ...data.map(row => String(row[h] || '').length)) + 2
   );
 
-  const divider = colWidths.map(w => '─'.repeat(w)).join('┼');
-  const headerLine = headers.map((h, i) => h.padEnd(colWidths[i])).join('│');
+  const divider = colWidths.map(w => '-'.repeat(w)).join('-+-');
+  const headerLine = headers.map((h, i) => h.padEnd(colWidths[i])).join(' | ');
   const bodyLines = data.map(row =>
-    headers.map((h, i) => String(row[h] ?? '').padEnd(colWidths[i])).join('│')
+    headers.map((h, i) => String(row[h] ?? '').padEnd(colWidths[i])).join(' | ')
   );
 
+  const metaLines: string[] = [];
+  if (meta?.faculty) metaLines.push(`Faculty: ${meta.faculty}`);
+  if (meta?.department) metaLines.push(`Department: ${meta.department}`);
+  if (meta?.level) metaLines.push(`Level: ${meta.level}`);
+
   const text = [
-    `═══ ${title} ═══`,
+    `--- ${title} ---`,
     `Generated: ${new Date().toLocaleString()}`,
+    ...metaLines,
     '',
     headerLine,
     divider,
     ...bodyLines,
-    '',
+    divider,
     `Total Records: ${data.length}`,
-    `Source: Presensys — UNIZIK Digital Attendance`
+    `Source: Presensys - UNIZIK Digital Attendance`
   ].join('\n');
 
   return text;

@@ -9,6 +9,9 @@ interface Profile {
   role: 'admin' | 'rep';
   status: 'pending' | 'verified' | 'terminated';
   invalid_tries: number;
+  faculty?: string;
+  department?: string;
+  level?: string;
 }
 
 interface AuthState {
