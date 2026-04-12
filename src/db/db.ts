@@ -126,9 +126,16 @@ export class PresensysDB extends Dexie {
       });
 
       table.hook('updating', (mods) => {
-        this.notifyChange();
-        if (typeof mods === 'object' && mods !== null) {
-          if ('synced' in mods) return mods;
+        // Suppress notifyChange when the sync engine marks a record as synced (synced: 1).
+        // A value of 0 means unsynced (needs push); 1 means the server has confirmed it.
+        // Notifying on synced=1 would cause a wasteful re-sync cycle after every push.
+        const modsObj = typeof mods === 'object' && mods !== null ? (mods as Record<string, unknown>) : null;
+        const isSyncEngineUpdate = modsObj !== null && 'synced' in modsObj && modsObj.synced === 1;
+        if (!isSyncEngineUpdate) {
+          this.notifyChange();
+        }
+        if (modsObj) {
+          if ('synced' in modsObj) return mods;
           return { updatedAt: new Date().toISOString(), synced: 0 };
         }
         return { updatedAt: new Date().toISOString(), synced: 0 };

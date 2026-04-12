@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { db } from '../db/db';
+import { realtimeSync } from '../lib/RealtimeSyncEngine';
 import type { Session, User } from '@supabase/supabase-js';
 
 interface Profile {
@@ -76,6 +77,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     await supabase.auth.signOut();
     localStorage.removeItem('user_profile'); // Clear cache on logout
     
+    // Stop the sync engine and unsubscribe from realtime before clearing data
+    realtimeSync.cleanup();
+    localStorage.removeItem('last_sync_timestamp');
+
     // CRITICAL: Wipe local data to prevent cross-account leakage and force re-sync on next login
     await db.transaction('rw', [db.semesters, db.students, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {
       await db.semesters.clear();

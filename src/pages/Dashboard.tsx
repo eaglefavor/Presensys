@@ -74,9 +74,11 @@ export default function Dashboard() {
             <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">{activeSemester?.name || 'Academic Overview'}</p>
           </div>
           <div className="d-flex gap-2">
-            <button className="btn btn-warning rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" style={{ width: '52px', height: '52px' }} onClick={handleDebugSync}>
+            {import.meta.env.DEV && (
+              <button className="btn btn-warning rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" style={{ width: '52px', height: '52px' }} onClick={handleDebugSync}>
                 <Bug size={24} />
-            </button>
+              </button>
+            )}
             <Link to="/attendance" className="btn btn-primary rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center" style={{ width: '52px', height: '52px' }}>
                 <Plus size={24} />
             </Link>
