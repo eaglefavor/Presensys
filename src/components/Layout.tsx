@@ -66,14 +66,8 @@ const Layout: React.FC = () => {
       toast.error('Cannot sync: Device is offline.');
       return;
     }
-    setSyncStatus('syncing');
-    try {
-      await realtimeSync.sync();
-      setSyncStatus('synced');
-    } catch (e) {
-      console.error(e);
-      setSyncStatus('error');
-    }
+    // The engine emits its own status events via onStatusChange; no manual overrides needed.
+    realtimeSync.sync();
   };
 
   return (

@@ -436,7 +436,7 @@ export class RealtimeSyncEngine {
     const localSemesterCount = await db.semesters.count();
     const semesterSince = localSemesterCount === 0 ? new Date(0).toISOString() : since;
 
-    const pull = async (tableName: TableName, table: any, mapToLocal: (serverItem: any) => any, customSince?: string) => {
+    const pull = async (tableName: TableName, table: any, mapToLocal: (serverItem: any) => any, customSince?: string): Promise<boolean> => {
         const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
         let query = supabase.from(tableName).select('*').eq('user_id', this.userId).gt('updated_at', customSince || since);
         
@@ -453,7 +453,7 @@ export class RealtimeSyncEngine {
         const { data, error } = await query;
         if (error) {
           console.error(`Sync: Error pulling ${tableName}`, error);
-          return;
+          return false;
         }
 
         if (data && data.length > 0) {
@@ -473,28 +473,38 @@ export class RealtimeSyncEngine {
                 }
             });
         }
+        return true;
     };
 
-    await pull('semesters', db.semesters, (s) => ({
-        serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date, isActive: s.is_active, isArchived: s.is_archived, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
-    }), semesterSince);
-    await pull('students', db.students, (s) => ({
-        serverId: s.id, regNumber: s.reg_number, name: s.name, email: s.email, phone: s.phone, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
-    }));
-    await pull('courses', db.courses, (c) => ({
-        serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id, userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at
-    }));
-    await pull('enrollments', db.enrollments, (e) => ({
-        serverId: e.id, studentId: e.student_id, courseId: e.course_id, userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at
-    }));
-    await pull('attendance_sessions', db.attendanceSessions, (s) => ({
-        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
-    }));
-    await pull('attendance_records', db.attendanceRecords, (r) => ({
-        serverId: r.id, sessionId: r.session_id, studentId: r.student_id, status: r.status, timestamp: r.marked_at, userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at
-    }));
+    const results = await Promise.all([
+      pull('semesters', db.semesters, (s) => ({
+          serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date, isActive: s.is_active, isArchived: s.is_archived, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
+      }), semesterSince),
+      pull('students', db.students, (s) => ({
+          serverId: s.id, regNumber: s.reg_number, name: s.name, email: s.email, phone: s.phone, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
+      })),
+      pull('courses', db.courses, (c) => ({
+          serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id, userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at
+      })),
+      pull('enrollments', db.enrollments, (e) => ({
+          serverId: e.id, studentId: e.student_id, courseId: e.course_id, userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at
+      })),
+      pull('attendance_sessions', db.attendanceSessions, (s) => ({
+          serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at
+      })),
+      pull('attendance_records', db.attendanceRecords, (r) => ({
+          serverId: r.id, sessionId: r.session_id, studentId: r.student_id, status: r.status, timestamp: r.marked_at, userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at
+      })),
+    ]);
 
-    localStorage.setItem('last_sync_timestamp', Date.now().toString());
+    // Only advance the timestamp if ALL tables pulled successfully.
+    // If any failed, we keep the old timestamp so the next sync retries those records.
+    const allSucceeded = results.every(Boolean);
+    if (allSucceeded) {
+      localStorage.setItem('last_sync_timestamp', Date.now().toString());
+    } else {
+      console.warn('Sync: One or more tables failed to pull. Timestamp not advanced — will retry on next sync.');
+    }
   }
 
   private setupRealtimeSubscription() {
@@ -507,6 +517,7 @@ export class RealtimeSyncEngine {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students', filter: `user_id=eq.${this.userId}` }, (payload) => this.handleRealtimeEvent('students', db.students, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'courses', filter: `user_id=eq.${this.userId}` }, (payload) => this.handleRealtimeEvent('courses', db.courses, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'semesters', filter: `user_id=eq.${this.userId}` }, (payload) => this.handleRealtimeEvent('semesters', db.semesters, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments', filter: `user_id=eq.${this.userId}` }, (payload) => this.handleRealtimeEvent('enrollments', db.enrollments, payload))
       .subscribe();
   }
 
