@@ -126,11 +126,11 @@ export class PresensysDB extends Dexie {
       });
 
       table.hook('updating', (mods) => {
-        // Only notify of a change when user data is being modified.
-        // Skip when the sync engine marks records as synced to prevent
-        // a redundant re-sync cycle after every successful push.
+        // Suppress notifyChange when the sync engine marks a record as synced (synced: 1).
+        // A value of 0 means unsynced (needs push); 1 means the server has confirmed it.
+        // Notifying on synced=1 would cause a wasteful re-sync cycle after every push.
         const modsObj = typeof mods === 'object' && mods !== null ? (mods as Record<string, unknown>) : null;
-        const isSyncEngineUpdate = modsObj?.synced === 1;
+        const isSyncEngineUpdate = modsObj !== null && 'synced' in modsObj && modsObj.synced === 1;
         if (!isSyncEngineUpdate) {
           this.notifyChange();
         }

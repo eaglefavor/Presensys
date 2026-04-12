@@ -534,6 +534,9 @@ export class RealtimeSyncEngine {
         if (localItem) {
              await table.update(localItem.id, { ...mapped, synced: 1 });
         } else {
+             // Heavy tables (attendance_sessions, attendance_records) are subscribed for UPDATE/DELETE
+             // but new records are not inserted locally via realtime to avoid bloating local storage
+             // with all historical data. New sessions/records arrive via the periodic pull instead.
              const isHeavy = ['attendance_records', 'attendance_sessions'].includes(tableName);
              if (!isHeavy) {
                 await table.add({ ...mapped, synced: 1 });
