@@ -130,13 +130,15 @@ export class PresensysDB extends Dexie {
         // A value of 0 means unsynced (needs push); 1 means the server has confirmed it.
         // Notifying on synced=1 would cause a wasteful re-sync cycle after every push.
         const modsObj = typeof mods === 'object' && mods !== null ? (mods as Record<string, unknown>) : null;
-        const isSyncEngineUpdate = modsObj !== null && 'synced' in modsObj && modsObj.synced === 1;
-        if (!isSyncEngineUpdate) {
+        const isSyncEngineConfirm = modsObj !== null && 'synced' in modsObj && modsObj.synced === 1;
+        if (!isSyncEngineConfirm) {
           this.notifyChange();
         }
-        if (modsObj) {
-          if ('synced' in modsObj) return mods;
-          return { updatedAt: new Date().toISOString(), synced: 0 };
+        // Only skip auto-stamping when the sync engine is confirming a push (synced: 1).
+        // For all other updates — including user edits that happen to include synced: 0 —
+        // refresh updatedAt so the server sees the latest write time.
+        if (isSyncEngineConfirm) {
+          return; // pass-through: let the engine's own changes apply unchanged
         }
         return { updatedAt: new Date().toISOString(), synced: 0 };
       });

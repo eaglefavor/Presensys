@@ -365,16 +365,6 @@ export default function Attendance() {
         )}
       </div>
 
-      <style>{`
-        .fw-black { font-weight: 900; }
-        .letter-spacing-n1 { letter-spacing: -1.2px; }
-        .xx-small { font-size: 10px; }
-        .tracking-widest { letter-spacing: 2px; }
-        .active-scale:active { transform: scale(0.98); }
-        .scale-110 { transform: scale(1.1); }
-        .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .shadow-inner { box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
-      `}</style>
     </div>
   );
 }

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle } from 'lucide-react';
 import { db, type Student } from '../db/db';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
 import jsPDF from 'jspdf';
@@ -35,8 +36,19 @@ export default function Students() {
   const [isSaving, setIsSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
 
-  const itemsPerPage = 7;
+  // Live attendance stats for the selected student detail panel
+  const selectedStudentStats = useLiveQuery(async () => {
+    if (!selectedStudent) return null;
+    const records = await db.attendanceRecords
+      .where('studentId').equals(selectedStudent.serverId)
+      .filter(r => r.isDeleted !== 1)
+      .toArray();
+    const total = records.length;
+    const present = records.filter(r => r.status === 'present').length;
+    return { total, percentage: total > 0 ? Math.round((present / total) * 100) : 0 };
+  }, [selectedStudent]);
   const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 7;
 
   // --- Bulk Selection Logic ---
   const toggleSelection = (id: number) => {
@@ -47,6 +59,9 @@ export default function Students() {
     if (newSet.size === 0 && !isSelectionMode) setIsSelectionMode(false);
   };
 
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [confirmStudentDelete, setConfirmStudentDelete] = useState<Student | null>(null);
+
   const handleLongPress = (id: number) => {
     if (!isSelectionMode) {
       setIsSelectionMode(true);
@@ -55,20 +70,27 @@ export default function Students() {
     }
   };
 
-  const handleBulkDelete = async () => {
-    if (confirm(`Delete ${selectedIds.size} students?`)) {
-      await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
-        const ids = Array.from(selectedIds);
-        const studentRecords = await db.students.where('id').anyOf(ids).toArray();
-        const studentServerIds = studentRecords.map(s => s.serverId);
-        
-        await db.students.where('id').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
-        await db.enrollments.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
-        await db.attendanceRecords.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
-      });
-      setIsSelectionMode(false);
-      setSelectedIds(new Set());
-    }
+  const doBulkDelete = async () => {
+    await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
+      const ids = Array.from(selectedIds);
+      const studentRecords = await db.students.where('id').anyOf(ids).toArray();
+      const studentServerIds = studentRecords.map(s => s.serverId);
+      
+      await db.students.where('id').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
+      await db.enrollments.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
+      await db.attendanceRecords.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
+    });
+    setIsSelectionMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const doStudentDelete = async (student: Student) => {
+    await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
+      await db.students.update(student.id!, { isDeleted: 1, synced: 0 });
+      await db.enrollments.where('studentId').equals(student.serverId).modify({ isDeleted: 1, synced: 0 });
+      await db.attendanceRecords.where('studentId').equals(student.serverId).modify({ isDeleted: 1, synced: 0 });
+    });
+    setSelectedStudent(null);
   };
 
   // --- Export Logic ---
@@ -126,13 +148,15 @@ export default function Students() {
     setShowScanner(true);
   };
 
-  const handleScanSuccess = (decodedText: string) => {
+  const handleScanSuccess = useCallback((decodedText: string) => {
     const regNoMatch = decodedText.match(/(\d{10})/); 
     const finalValue = regNoMatch ? regNoMatch[0] : decodedText;
     if (activeScanRowIndex !== null) updateManualRow(activeScanRowIndex, 'regNumber', finalValue);
     setShowScanner(false);
     setActiveScanRowIndex(null);
-  };
+  }, [activeScanRowIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleScannerClose = useCallback(() => setShowScanner(false), []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -248,9 +272,14 @@ export default function Students() {
   };
 
   const filteredStudents = students?.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.regNumber.includes(searchTerm));
-  if (searchTerm && currentPage !== 1) setCurrentPage(1);
   const totalPages = Math.ceil((filteredStudents?.length || 0) / itemsPerPage);
   const displayedStudents = filteredStudents?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  // Reset to page 1 whenever the search term changes — done in an effect
+  // to avoid calling setState during render, which React disallows.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   const stringToColor = (str: string) => {
@@ -353,7 +382,7 @@ export default function Students() {
           >
             <div className="container-mobile d-flex gap-3">
               <button className="btn btn-light flex-grow-1 fw-bold" onClick={() => { setIsSelectionMode(false); setSelectedIds(new Set()); }}>Cancel</button>
-              <button className="btn btn-danger flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2" onClick={handleBulkDelete}>
+              <button className="btn btn-danger flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2" onClick={() => setConfirmBulkDelete(true)}>
                 <Trash2 size={18} /> Delete ({selectedIds.size})
               </button>
             </div>
@@ -379,23 +408,14 @@ export default function Students() {
                         
                         <div className="row g-2 mb-4 text-start">
                           <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><GraduationCap size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">STATUS</div><div className="small fw-black text-dark">ACTIVE</div></div></div>
-                          <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><Calendar size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">JOINED</div><div className="small fw-black text-dark">2024</div></div></div>
-                          <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><History size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">ATTEND</div><div className="small fw-black text-dark">0%</div></div></div>
+                          <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><Calendar size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">JOINED</div><div className="small fw-black text-dark">{selectedStudent.createdAt ? new Date(selectedStudent.createdAt).getFullYear() : '—'}</div></div></div>
+                          <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><History size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">ATTEND</div><div className="small fw-black text-dark">{selectedStudentStats ? `${selectedStudentStats.percentage}%` : '…'}</div></div></div>
                         </div>
 
                         <div className="d-flex flex-column gap-2">
                           <button className="btn btn-primary-unified w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={handleEditClick}><Edit2 size={18} className="me-2" /> Edit Student</button>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
-                          <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={async () => { 
-                            if(confirm('Delete student record?')) { 
-                              await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
-                                await db.students.update(selectedStudent.id!, { isDeleted: 1, synced: 0 });
-                                await db.enrollments.where('studentId').equals(selectedStudent.serverId).modify({ isDeleted: 1, synced: 0 });
-                                await db.attendanceRecords.where('studentId').equals(selectedStudent.serverId).modify({ isDeleted: 1, synced: 0 });
-                              });
-                              setSelectedStudent(null); 
-                            } 
-                          }}>Delete Student</button>
+                          <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => setConfirmStudentDelete(selectedStudent)}>Delete Student</button>
                         </div>
                       </>
                     ) : (
@@ -508,23 +528,33 @@ export default function Students() {
         </div>
       )}
 
-      {showScanner && <BarcodeScanner onScanSuccess={handleScanSuccess} onClose={() => setShowScanner(false)} />}
+      {showScanner && <BarcodeScanner onScanSuccess={handleScanSuccess} onClose={handleScannerClose} />}
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title={`Delete ${selectedIds.size} Student${selectedIds.size !== 1 ? 's' : ''}`}
+        message="This will permanently remove the selected students, their enrollments, and attendance records. This cannot be undone."
+        confirmLabel="Delete All"
+        variant="danger"
+        onConfirm={() => { doBulkDelete(); setConfirmBulkDelete(false); }}
+        onCancel={() => setConfirmBulkDelete(false)}
+      />
+
+      <ConfirmDialog
+        open={!!confirmStudentDelete}
+        title="Delete Student"
+        message={`Delete "${confirmStudentDelete?.name}"? Their enrollments and attendance records will also be removed.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmStudentDelete) doStudentDelete(confirmStudentDelete); setConfirmStudentDelete(null); }}
+        onCancel={() => setConfirmStudentDelete(null)}
+      />
 
       <style>{`
-        .fw-black { font-weight: 900; }
-        .letter-spacing-n1 { letter-spacing: -1px; }
-        .xx-small { font-size: 10px; }
         .text-gold { color: #cfb53b; }
         .avatar-circle { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
         .avatar-circle-lg { width: 80px; height: 80px; border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 32px; }
-        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-        .shadow-inner { box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
-        .shadow-top { box-shadow: 0 -4px 12px rgba(0,0,0,0.03); }
-        .rounded-top-5 { border-top-left-radius: 32px; border-top-right-radius: 32px; }
         .btn-white-glass { background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(4px); }
-        .max-w-md { max-width: 480px; }
-        .max-w-lg { max-width: 600px; }
-        .btn-primary-unified { background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%); border: none; color: #fff; }
       `}</style>
     </div>
   );

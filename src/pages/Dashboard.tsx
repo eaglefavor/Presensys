@@ -1,23 +1,25 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2, Bug } from 'lucide-react';
-import { db } from '../db/db';
+import { db, type LocalSemester, type LocalStudent, type LocalCourse, type LocalEnrollment, type LocalAttendanceSession, type LocalAttendanceRecord } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
 import { realtimeSync } from '../lib/RealtimeSyncEngine';
+
+type DexieTableKey = 'semesters' | 'students' | 'courses' | 'enrollments' | 'attendanceSessions' | 'attendanceRecords';
+type DexieTableRecord = LocalSemester | LocalStudent | LocalCourse | LocalEnrollment | LocalAttendanceSession | LocalAttendanceRecord;
 
 export default function Dashboard() {
   const activeSemester = useAppStore(state => state.activeSemester);
 
   const handleDebugSync = async () => {
     console.log('--- DEBUG: STARTING SYNC DUMP ---');
-    const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
+    const tables: DexieTableKey[] = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
     
     for (const tableName of tables) {
-      // @ts-ignore
-      const unsynced = await db[tableName].filter(i => i.synced === 0).toArray();
+      const table = db[tableName] as import('dexie').Table<DexieTableRecord & { synced: number }>;
+      const unsynced = await table.filter(i => i.synced === 0).toArray();
       if (unsynced.length > 0) {
         console.log(`Unsynced in ${tableName}:`, unsynced);
       } else {
@@ -27,14 +29,6 @@ export default function Dashboard() {
     console.log('--- TRIGGERING MANUAL SYNC ---');
     realtimeSync.triggerSync();
   };
-
-  useEffect(() => {
-    const testSupabase = async () => {
-      const { data, error } = await supabase.from('semesters').select('*').limit(1);
-      if (!error) console.log('Supabase connected:', data);
-    };
-    testSupabase();
-  }, []);
   
   const studentCount = useLiveQuery(() => db.students.count());
   const courseCount = useLiveQuery(

@@ -21,7 +21,7 @@ export class RealtimeSyncEngine {
   private channel: RealtimeChannel | null = null;
   private isSyncing = false;
   private isInitialized = false;
-  private debounceTimer: any = null;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private retryCount = 0;
   private maxRetries = 3;
   private currentStatus: SyncStatus = 'idle';
@@ -196,17 +196,20 @@ export class RealtimeSyncEngine {
         }
     }
 
-    const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+    // Purge attendance records that have been synced and are older than 30 days.
+    // 24 h was too aggressive — reps need to review yesterday's sessions locally.
+    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     const oldRecords = await db.attendanceRecords
-        .filter((r) => r.synced === 1 && r.timestamp < oneDayAgo)
+        .filter((r) => r.synced === 1 && r.timestamp < thirtyDaysAgo)
         .primaryKeys();
     
     if (oldRecords.length > 0) {
         await db.attendanceRecords.bulkDelete(oldRecords);
     }
 
+    // Purge synced sessions older than 30 days that have no local attendance records.
     const oldSessions = await db.attendanceSessions
-        .filter((s) => s.synced === 1 && new Date(s.date).getTime() < oneDayAgo)
+        .filter((s) => s.synced === 1 && new Date(s.date).getTime() < thirtyDaysAgo)
         .toArray();
     
     for (const session of oldSessions) {

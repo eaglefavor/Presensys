@@ -19,6 +19,7 @@ interface AuthState {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  profileVerified: boolean; // true only after a successful server fetch (not from cache)
   loading: boolean;
   setSession: (session: Session | null) => Promise<void>;
   fetchProfile: () => Promise<void>;
@@ -29,6 +30,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
   user: null,
   profile: null,
+  profileVerified: false,
   loading: true,
   
   setSession: async (session) => {
@@ -37,23 +39,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (session) {
       await get().fetchProfile();
     } else {
-      set({ loading: false, profile: null });
+      set({ loading: false, profile: null, profileVerified: false });
     }
   },
 
   fetchProfile: async () => {
-    const { user, profile } = get();
+    const { user } = get();
     if (!user) return;
-    
-    // Prevent redundant fetches if we already have the correct profile
-    if (profile && profile.id === user.id) return;
 
-    // 1. Try local cache
+    // Seed the UI with a cached profile while the server request is in-flight.
+    // We intentionally do NOT set profileVerified here — security-sensitive
+    // UI (e.g. the Admin route) must wait for the server confirmation below.
     const cachedProfile = localStorage.getItem('user_profile');
     if (cachedProfile) {
-      const parsed = JSON.parse(cachedProfile);
-      if (parsed.id === user.id) {
-        set({ profile: parsed, loading: false });
+      try {
+        const parsed = JSON.parse(cachedProfile);
+        if (parsed.id === user.id) {
+          set({ profile: parsed });
+        }
+      } catch {
+        localStorage.removeItem('user_profile');
       }
     }
 
@@ -64,12 +69,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
     
     if (error) {
-      if (navigator.onLine && !get().profile) {
-         set({ loading: false, profile: null });
-      }
+      // Offline or network failure — keep the cached profile for offline use but
+      // mark loading as done. profileVerified stays false so the Admin route
+      // does not render on stale cached data.
+      set({ loading: false });
     } else {
       localStorage.setItem('user_profile', JSON.stringify(data));
-      set({ profile: data as Profile, loading: false });
+      set({ profile: data as Profile, profileVerified: true, loading: false });
     }
   },
 
@@ -91,7 +97,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await db.attendanceRecords.clear();
     });
 
-    set({ session: null, user: null, profile: null });
+    set({ session: null, user: null, profile: null, profileVerified: false });
     window.location.href = '/login'; // Force full reload to reset all states
   }
 }));

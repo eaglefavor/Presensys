@@ -6,6 +6,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Semesters() {
   const { user } = useAuthStore();
@@ -14,6 +15,7 @@ export default function Semesters() {
 
   const [showModal, setShowModal] = useState(false);
   const [selectedSemester, setSelectedSemester] = useState<Semester | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Semester | null>(null);
   const [newSemester, setNewSemester] = useState({
     name: '',
     startDate: new Date().toISOString().split('T')[0],
@@ -60,43 +62,45 @@ export default function Semesters() {
     await db.transaction('rw', db.semesters, async () => {
       await db.semesters.toCollection().modify({ isActive: false });
       await db.semesters.update(id, { isActive: true });
-      await refreshActiveSemester();
     });
+    // refreshActiveSemester reads from db.semesters — call it after the
+    // write transaction has committed to guarantee it sees the new state.
+    await refreshActiveSemester();
     setSelectedSemester(null);
   };
 
   const handleArchive = async (id: number, currentStatus: boolean) => {
     await db.semesters.update(id, { isArchived: !currentStatus });
+    // Call outside any transaction so the read sees the committed write.
     await refreshActiveSemester();
     setSelectedSemester(null);
   };
 
   const handleDelete = async (id: number) => {
-    if (confirm('Delete this cycle and all its data?')) {
-      const semester = await db.semesters.get(id);
-      if (!semester) return;
+    const semester = await db.semesters.get(id);
+    if (!semester) return;
 
-      await db.transaction('rw', [db.semesters, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {
-        const courses = await db.courses.where('semesterId').equals(semester.serverId).toArray();
-        const courseServerIds = courses.map(c => c.serverId);
+    await db.transaction('rw', [db.semesters, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords], async () => {
+      const courses = await db.courses.where('semesterId').equals(semester.serverId).toArray();
+      const courseServerIds = courses.map(c => c.serverId);
 
-        if (courseServerIds.length > 0) {
-          const sessions = await db.attendanceSessions.where('courseId').anyOf(courseServerIds).toArray();
-          const sessionServerIds = sessions.map(s => s.serverId);
+      if (courseServerIds.length > 0) {
+        const sessions = await db.attendanceSessions.where('courseId').anyOf(courseServerIds).toArray();
+        const sessionServerIds = sessions.map(s => s.serverId);
 
-          if (sessionServerIds.length > 0) {
-            await db.attendanceRecords.where('sessionId').anyOf(sessionServerIds).modify({ isDeleted: 1, synced: 0 });
-          }
-          await db.attendanceSessions.where('courseId').anyOf(courseServerIds).modify({ isDeleted: 1, synced: 0 });
-          await db.enrollments.where('courseId').anyOf(courseServerIds).modify({ isDeleted: 1, synced: 0 });
-          await db.courses.where('semesterId').equals(semester.serverId).modify({ isDeleted: 1, synced: 0 });
+        if (sessionServerIds.length > 0) {
+          await db.attendanceRecords.where('sessionId').anyOf(sessionServerIds).modify({ isDeleted: 1, synced: 0 });
         }
+        await db.attendanceSessions.where('courseId').anyOf(courseServerIds).modify({ isDeleted: 1, synced: 0 });
+        await db.enrollments.where('courseId').anyOf(courseServerIds).modify({ isDeleted: 1, synced: 0 });
+        await db.courses.where('semesterId').equals(semester.serverId).modify({ isDeleted: 1, synced: 0 });
+      }
 
-        await db.semesters.update(id, { isDeleted: 1, synced: 0 });
-        await refreshActiveSemester();
-      });
-      setSelectedSemester(null);
-    }
+      await db.semesters.update(id, { isDeleted: 1, synced: 0 });
+    });
+    // Call refreshActiveSemester after the transaction commits.
+    await refreshActiveSemester();
+    setSelectedSemester(null);
   };
 
   return (
@@ -172,7 +176,7 @@ export default function Semesters() {
                     <div className="d-flex flex-column gap-2 mb-4">
                       {!selectedSemester.isActive && !selectedSemester.isArchived && <button className="btn btn-primary w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={() => handleSetActive(selectedSemester.id!)}>Set as Active</button>}
                       <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border shadow-sm" onClick={() => handleArchive(selectedSemester.id!, selectedSemester.isArchived)}>{selectedSemester.isArchived ? 'Restore' : 'Archive Semester'}</button>
-                      <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => handleDelete(selectedSemester.id!)}>Delete Record</button>
+                      <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => setConfirmDelete(selectedSemester)}>Delete Record</button>
                     </div>
                     <button className="btn btn-light w-100 py-2 rounded-3 text-muted fw-bold small" onClick={() => setSelectedSemester(null)}>Close</button>
                   </div>
@@ -200,13 +204,15 @@ export default function Semesters() {
         </div>
       )}
 
-      <style>{`
-        .fw-black { font-weight: 900; }
-        .letter-spacing-n1 { letter-spacing: -1px; }
-        .xx-small { font-size: 10px; }
-        .rounded-top-5 { border-top-left-radius: 32px !important; border-top-right-radius: 32px !important; }
-        .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
-      `}</style>
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Delete Cycle"
+        message={`Delete "${confirmDelete?.name}" and all its courses, enrollments, and attendance data? This cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDelete?.id) handleDelete(confirmDelete.id); setConfirmDelete(null); }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

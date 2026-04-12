@@ -35,7 +35,7 @@ function PageLoader() {
 }
 
 function App() {
-  const { session, profile, loading, setSession } = useAuthStore();
+  const { session, profile, profileVerified, loading, setSession } = useAuthStore();
   const setActiveSemester = useAppStore(state => state.setActiveSemester);
 
   // Automatically sync active semester from DB to Store whenever it changes
@@ -100,8 +100,8 @@ function App() {
             <Route path="archives" element={<Archives />} />
             <Route path="settings" element={<Settings />} />
 
-            {/* Admin only route */}
-            {profile?.role === 'admin' && (
+            {/* Admin only route — requires server-confirmed profile to prevent localStorage spoofing */}
+            {profileVerified && profile?.role === 'admin' && (
               <Route path="admin" element={<Admin />} />
             )}
           </Route>
