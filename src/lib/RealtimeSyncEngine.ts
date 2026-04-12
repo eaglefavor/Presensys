@@ -4,6 +4,8 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 
 type TableName = 'semesters' | 'students' | 'courses' | 'enrollments' | 'attendance_sessions' | 'attendance_records';
 
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Network-aware debounce defaults
@@ -22,10 +24,44 @@ export class RealtimeSyncEngine {
   private debounceTimer: any = null;
   private retryCount = 0;
   private maxRetries = 3;
+  private currentStatus: SyncStatus = 'idle';
+  private statusListeners: ((status: SyncStatus) => void)[] = [];
 
   constructor() {
     this.setupNetworkListeners();
     db.onLocalChange(() => this.triggerSync());
+  }
+
+  /** Subscribe to sync status changes. Returns an unsubscribe function. */
+  onStatusChange(callback: (status: SyncStatus) => void): () => void {
+    this.statusListeners.push(callback);
+    // Immediately emit the current status to the new subscriber
+    callback(this.currentStatus);
+    return () => {
+      this.statusListeners = this.statusListeners.filter(l => l !== callback);
+    };
+  }
+
+  private emitStatus(status: SyncStatus) {
+    this.currentStatus = status;
+    this.statusListeners.forEach(l => l(status));
+  }
+
+  /** Reset the engine state and unsubscribe from realtime. Call on user sign-out. */
+  cleanup() {
+    if (this.channel) {
+      this.channel.unsubscribe();
+      this.channel = null;
+    }
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = null;
+    }
+    this.userId = null;
+    this.isInitialized = false;
+    this.isSyncing = false;
+    this.retryCount = 0;
+    this.emitStatus('idle');
   }
 
   /** Get network-aware debounce delay */
@@ -58,11 +94,15 @@ export class RealtimeSyncEngine {
       this.retryCount = 0; // Reset retry count when coming back online
       this.sync();
     });
+    window.addEventListener('offline', () => {
+      this.emitStatus('offline');
+    });
   }
 
   async sync() {
     if (!this.userId || !navigator.onLine || this.isSyncing) return;
     this.isSyncing = true;
+    this.emitStatus('syncing');
 
     try {
       // 1. Pull first to ensure we have parents (Semesters) for our orphans
@@ -74,6 +114,7 @@ export class RealtimeSyncEngine {
       
       await this.meticulousPurge();
       this.retryCount = 0; // Reset on success
+      this.emitStatus('synced');
     } catch (error) {
       console.error('Sync: Failed', error);
       // Retry with exponential backoff
@@ -84,6 +125,7 @@ export class RealtimeSyncEngine {
         setTimeout(() => this.sync(), backoffMs);
       } else {
         console.error(`Sync: Max retries (${this.maxRetries}) reached. Will retry on next trigger.`);
+        this.emitStatus('error');
       }
     } finally {
       this.isSyncing = false;

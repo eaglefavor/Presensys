@@ -126,7 +126,13 @@ export class PresensysDB extends Dexie {
       });
 
       table.hook('updating', (mods) => {
-        this.notifyChange();
+        // Only notify of a change when user data is being modified.
+        // Skip when the sync engine marks records as synced (synced: 1) to prevent
+        // a redundant re-sync cycle after every successful push.
+        const isSyncEngineUpdate = typeof mods === 'object' && mods !== null && (mods as any).synced === 1;
+        if (!isSyncEngineUpdate) {
+          this.notifyChange();
+        }
         if (typeof mods === 'object' && mods !== null) {
           if ('synced' in mods) return mods;
           return { updatedAt: new Date().toISOString(), synced: 0 };

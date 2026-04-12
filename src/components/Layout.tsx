@@ -16,37 +16,27 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
-import { realtimeSync } from '../lib/RealtimeSyncEngine';
+import { realtimeSync, type SyncStatus } from '../lib/RealtimeSyncEngine';
 
 const Layout: React.FC = () => {
   const activeSemester = useAppStore(state => state.activeSemester);
   const { profile, signOut, user } = useAuthStore();
   const location = useLocation();
   const navigate = useNavigate();
-  const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline' | 'error'>('synced');
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
-    const initSync = async () => {
-      if (!navigator.onLine || !user) {
-        setSyncStatus(navigator.onLine ? 'synced' : 'offline');
-        return;
-      }
-      setSyncStatus('syncing');
-      try {
-        await realtimeSync.initialize(user.id);
-        setSyncStatus('synced');
-      } catch (e) {
-        console.error(e);
-        setSyncStatus('error');
-      }
-    };
+    // Subscribe to the engine's status events for accurate real-time feedback
+    const unsubscribe = realtimeSync.onStatusChange(setSyncStatus);
 
-    initSync();
-    window.addEventListener('online', () => setSyncStatus('synced'));
-    window.addEventListener('offline', () => setSyncStatus('offline'));
+    if (user && navigator.onLine) {
+      realtimeSync.initialize(user.id);
+    } else if (!navigator.onLine) {
+      setSyncStatus('offline');
+    }
 
-    return () => { };
+    return unsubscribe;
   }, [user]);
 
   // Count unsynced records across all tables
@@ -102,7 +92,7 @@ const Layout: React.FC = () => {
           <div className="d-flex align-items-center gap-3">
             <div className="sync-indicator position-relative" onClick={handleManualSync} style={{ cursor: 'pointer' }}>
               {syncStatus === 'syncing' && <RefreshCw size={18} className="text-primary spin" />}
-              {syncStatus === 'synced' && <CloudSync size={18} style={{ color: 'var(--primary-blue)' }} />}
+              {(syncStatus === 'synced' || syncStatus === 'idle') && <CloudSync size={18} style={{ color: 'var(--primary-blue)' }} />}
               {syncStatus === 'offline' && <CloudOff size={18} className="text-muted" />}
               {syncStatus === 'error' && <CloudOff size={18} className="text-danger" />}
               {unsyncedCount > 0 && (
