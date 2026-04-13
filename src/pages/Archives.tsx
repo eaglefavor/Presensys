@@ -408,7 +408,7 @@ export default function Archives() {
     setLoading(true); setStudentPage(1);
     setStudentCourseFilter(''); setStudentDateStart(''); setStudentDateEnd('');
     setExpandedCourses(new Set());
-    setStudentResult(s);
+    setStudentResult({ ...s, isDeleted: 0, synced: 1 });
     const details = await doStudentFetch(s);
     setStudentAttendance(details);
     setLoading(false);
