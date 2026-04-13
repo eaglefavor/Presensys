@@ -59,7 +59,7 @@ const Layout: React.FC = () => {
     { path: '/settings', label: 'Settings' },
   ];
 
-  const isRootPath = location.pathname === '/' || ['/students', '/semesters', '/courses', '/attendance', '/archives'].includes(location.pathname);
+  const isMainNavPage = location.pathname === '/' || ['/students', '/semesters', '/courses', '/attendance', '/archives'].includes(location.pathname);
 
   const handleManualSync = async () => {
     if (!navigator.onLine || !user) {
@@ -75,7 +75,7 @@ const Layout: React.FC = () => {
       <header className="app-header bg-white border-bottom sticky-top shadow-sm">
         <div className="container-mobile d-flex align-items-center justify-content-between px-3 h-100">
           <div className="d-flex align-items-center gap-2">
-            {!isRootPath ? (
+            {!isMainNavPage ? (
               <button className="btn btn-link text-dark p-0 me-2" onClick={() => navigate(-1)}><ChevronLeft size={24} /></button>
             ) : (
               <button className="btn btn-link text-primary p-0 me-2" onClick={() => setIsMenuOpen(true)}><Menu size={26} /></button>

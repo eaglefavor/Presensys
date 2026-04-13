@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { Plus, Ticket, Trash2, Copy, Check, Users, ShieldCheck, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Admin() {
   const [codes, setCodes] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalUsers: 0, activeReps: 0, pendingUsers: 0 });
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [confirmDeleteCodeId, setConfirmDeleteCodeId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchCodes();
@@ -15,30 +18,50 @@ export default function Admin() {
   }, []);
 
   const fetchCodes = async () => {
-    const { data } = await supabase.from('access_codes').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('access_codes').select('*').order('created_at', { ascending: false });
+    if (error) {
+      toast.error('Failed to load access codes.');
+      return;
+    }
     if (data) setCodes(data);
   };
 
   const fetchStats = async () => {
-    const { count: total } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: verified } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'verified');
-    const { count: pending } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+    const { count: total, error: e1 } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+    const { count: verified, error: e2 } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'verified');
+    const { count: pending, error: e3 } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+    if (e1 || e2 || e3) {
+      toast.error('Failed to load user stats.');
+      return;
+    }
     setStats({ totalUsers: total || 0, activeReps: verified || 0, pendingUsers: pending || 0 });
   };
 
   const generateCode = async () => {
     setLoading(true);
-    const newCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+    // Use crypto.getRandomValues for a cryptographically secure random code.
+    const bytes = new Uint8Array(4);
+    crypto.getRandomValues(bytes);
+    const newCode = Array.from(bytes)
+      .map(b => b.toString(36).toUpperCase())
+      .join('')
+      .substring(0, 6);
     const { error } = await supabase.from('access_codes').insert({ code: newCode });
-    if (!error) await fetchCodes();
+    if (error) {
+      toast.error('Failed to generate code: ' + error.message);
+    } else {
+      await fetchCodes();
+    }
     setLoading(false);
   };
 
   const deleteCode = async (id: number) => {
-    if (confirm('Delete this access code?')) {
-      await supabase.from('access_codes').delete().eq('id', id);
-      await fetchCodes();
+    const { error } = await supabase.from('access_codes').delete().eq('id', id);
+    if (error) {
+      toast.error('Failed to delete code.');
+      return;
     }
+    await fetchCodes();
   };
 
   const copyToClipboard = (code: string, id: number) => {
@@ -100,7 +123,7 @@ export default function Admin() {
                       {copiedId === c.id ? <Check size={18} /> : <Copy size={18} />}
                     </button>
                   )}
-                  <button className="btn btn-light rounded-circle p-2 text-danger" onClick={() => deleteCode(c.id)}>
+                  <button className="btn btn-light rounded-circle p-2 text-danger" onClick={() => setConfirmDeleteCodeId(c.id)}>
                     <Trash2 size={18} />
                   </button>
                 </div>
@@ -115,12 +138,15 @@ export default function Admin() {
         </div>
       </div>
 
-      <style>{`
-        .fw-black { font-weight: 900; }
-        .letter-spacing-n1 { letter-spacing: -1.2px; }
-        .xx-small { font-size: 10px; }
-        .tracking-widest { letter-spacing: 2px; }
-      `}</style>
+      <ConfirmDialog
+        open={confirmDeleteCodeId !== null}
+        title="Delete Access Code"
+        message="Delete this access code? Any rep who has not yet used it will be unable to verify."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDeleteCodeId !== null) deleteCode(confirmDeleteCodeId); setConfirmDeleteCodeId(null); }}
+        onCancel={() => setConfirmDeleteCodeId(null)}
+      />
     </div>
   );
 }

@@ -264,27 +264,6 @@ export default function Settings() {
           </div>
         </motion.div>
       </div>
-
-      <style>{`
-        .fw-black { font-weight: 900; }
-        .letter-spacing-n1 { letter-spacing: -1.2px; }
-        .xx-small { font-size: 10px; }
-        .tracking-widest { letter-spacing: 2px; }
-        .border-left-blue { border-left: 4px solid var(--primary-blue) !important; }
-        .modern-input-unified {
-          background: #f8f9fa;
-          border-radius: 14px;
-          overflow: hidden;
-          border: 1.5px solid transparent;
-          transition: all 0.2s ease;
-        }
-        .modern-input-unified:focus-within {
-          border-color: #0d6efd;
-          background: #fff;
-          box-shadow: 0 8px 20px rgba(13,110,253,0.06);
-        }
-        .modern-input-unified .form-control:focus { box-shadow: none; }
-      `}</style>
     </div>
   );
 }

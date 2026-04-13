@@ -18,7 +18,7 @@ export default function FileMapper({ file, onComplete, onCancel }: FileMapperPro
     const reader = new FileReader();
     reader.onload = (e) => {
       const data = e.target?.result;
-      const workbook = read(data, { type: 'binary' });
+      const workbook = read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const json = utils.sheet_to_json(sheet, { header: 1 });
@@ -34,7 +34,7 @@ export default function FileMapper({ file, onComplete, onCancel }: FileMapperPro
         setMapping({ name: nameGuess, regNumber: regGuess });
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   }, [file]);
 
   useEffect(() => {

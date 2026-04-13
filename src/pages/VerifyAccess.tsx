@@ -29,7 +29,9 @@ export default function VerifyAccess() {
         setMessage(data.message);
         setIsError(true);
         if (data.message.includes('terminated')) {
-          // Force logout or show blocked screen
+          // The profile will reflect 'terminated' status; sign the user out
+          // so they cannot re-enter the code entry screen on reload.
+          setTimeout(() => useAuthStore.getState().signOut(), 2000);
         }
       }
     }

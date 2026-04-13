@@ -7,7 +7,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 export default function Auth() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [isLogin, setIsLogin] = useState(location.pathname === '/login' || !location.pathname.includes('signup'));
+  // Derive initial state and keep in sync with URL — consistent expression in both places.
+  const [isLogin, setIsLogin] = useState(location.pathname !== '/signup');
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

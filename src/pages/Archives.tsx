@@ -20,6 +20,7 @@ interface CompilationRow {
 }
 
 export default function Archives() {
+  const { user } = useAuthStore();
   const [mode, setMode] = useState<ArchiveMode>('student');
 
   // Student Search state
@@ -45,7 +46,12 @@ export default function Archives() {
 
   // Load courses when compilation tab is opened
   const loadCourses = async () => {
-    const { data } = await supabase.from('courses').select('id, code, title').eq('is_deleted', 0);
+    if (!user) return;
+    const { data } = await supabase
+      .from('courses')
+      .select('id, code, title')
+      .eq('user_id', user.id)
+      .eq('is_deleted', 0);
     if (data) setCourses(data);
   };
 
@@ -74,6 +80,7 @@ export default function Archives() {
 
     if (!student) {
       setStudentResult(null);
+      setStudentAttendance([]); // clear any previous search results
       toast.error('Student not found.');
       setLoading(false);
       return;
@@ -98,12 +105,14 @@ export default function Archives() {
       return;
     }
 
-    const detailedRecords = records.map((r: any) => ({
-      status: r.status,
-      timestamp: r.marked_at,
-      session: { date: r.attendance_sessions.date, title: r.attendance_sessions.title },
-      course: { code: r.attendance_sessions.courses.code, title: r.attendance_sessions.courses.title }
-    }));
+    const detailedRecords = records
+      .filter((r: any) => r.attendance_sessions && r.attendance_sessions.courses)
+      .map((r: any) => ({
+        status: r.status,
+        timestamp: r.marked_at,
+        session: { date: r.attendance_sessions.date, title: r.attendance_sessions.title },
+        course: { code: r.attendance_sessions.courses.code, title: r.attendance_sessions.courses.title }
+      }));
 
     setStudentAttendance(detailedRecords);
     setLoading(false);
@@ -459,30 +468,6 @@ export default function Archives() {
         </AnimatePresence>
       </div>
 
-      <style>{`
-        .fw-black { font-weight: 900; }
-        .letter-spacing-n1 { letter-spacing: -1.2px; }
-        .letter-spacing-1 { letter-spacing: 1px; }
-        .xx-small { font-size: 10px; }
-        .tracking-widest { letter-spacing: 2px; }
-        .archives-page { background-color: var(--bg-gray); }
-        .border-left-blue { border-left: 4px solid var(--primary-blue) !important; }
-        .mode-switcher-wrapper {
-          display: flex; background: #f1f3f5; border-radius: 100px;
-        }
-        .mode-btn {
-          flex: 1; border: none; background: transparent;
-          padding: 10px 12px; font-size: 11px; font-weight: 700;
-          color: #adb5bd; border-radius: 100px;
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-          display: flex; align-items: center; justify-content: center;
-        }
-        .mode-btn.active {
-          background: #fff; color: #0d6efd;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        }
-        .shadow-inner { box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); }
-      `}</style>
     </div>
   );
 }

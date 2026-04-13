@@ -7,6 +7,7 @@ import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Courses() {
   const { user } = useAuthStore();
@@ -62,7 +63,7 @@ export default function Courses() {
   const itemsPerPage = 5;
   const [currentPage, setCurrentPage] = useState(1);
 
-  const allStudents = useLiveQuery(() => db.students.orderBy('name').toArray());
+  const allStudents = useLiveQuery(() => db.students.orderBy('name').filter(s => s.isDeleted !== 1).toArray());
 
   const filteredStudents = useMemo(() => {
     if (!allStudents) return [];
@@ -225,24 +226,29 @@ export default function Courses() {
     }
   };
 
+  const [confirmDeleteCourseId, setConfirmDeleteCourseId] = useState<number | null>(null);
+
   const handleCloseModal = () => {
-    if (isDirty && !confirm('You have unsaved changes. Are you sure you want to close?')) return;
-    setShowEnrollModal({ show: false });
+    if (isDirty) {
+      setConfirmCloseEnroll(true);
+    } else {
+      setShowEnrollModal({ show: false });
+    }
   };
 
-  const handleDeleteCourse = async (id: number) => {
-    if (confirm('Delete this course and all its enrollments?')) {
-      const course = await db.courses.get(id);
-      if (!course) return;
+  const [confirmCloseEnroll, setConfirmCloseEnroll] = useState(false);
 
-      await db.transaction('rw', [db.courses, db.enrollments], async () => {
-        await db.courses.update(id, { isDeleted: 1, synced: 0 });
-        const enrollments = await db.enrollments.where('courseId').equals(course.serverId).toArray();
-        for (const enrollment of enrollments) {
-          await db.enrollments.update(enrollment.id!, { isDeleted: 1, synced: 0 });
-        }
-      });
-    }
+  const handleDeleteCourse = async (id: number) => {
+    const course = await db.courses.get(id);
+    if (!course) return;
+
+    await db.transaction('rw', [db.courses, db.enrollments], async () => {
+      await db.courses.update(id, { isDeleted: 1, synced: 0 });
+      const enrollments = await db.enrollments.where('courseId').equals(course.serverId).toArray();
+      for (const enrollment of enrollments) {
+        await db.enrollments.update(enrollment.id!, { isDeleted: 1, synced: 0 });
+      }
+    });
   };
 
   const [isExporting, setIsExporting] = useState<string | null>(null);
@@ -411,7 +417,7 @@ export default function Courses() {
                     </button>
                     <button
                       className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-danger d-flex align-items-center justify-content-center gap-1"
-                      onClick={() => handleDeleteCourse(course.id!)}
+                      onClick={() => setConfirmDeleteCourseId(course.id!)}
                     >
                       <Trash2 size={12} /> DELETE
                     </button>
@@ -609,6 +615,26 @@ export default function Courses() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteCourseId !== null}
+        title="Delete Course"
+        message="Delete this course and all its enrollments? This cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDeleteCourseId !== null) handleDeleteCourse(confirmDeleteCourseId); setConfirmDeleteCourseId(null); }}
+        onCancel={() => setConfirmDeleteCourseId(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmCloseEnroll}
+        title="Unsaved Changes"
+        message="You have unsaved enrollment changes. Are you sure you want to close without saving?"
+        confirmLabel="Discard Changes"
+        variant="warning"
+        onConfirm={() => { setConfirmCloseEnroll(false); setShowEnrollModal({ show: false }); }}
+        onCancel={() => setConfirmCloseEnroll(false)}
+      />
 
       <style>{`
         /* Styles moved to index.css */
