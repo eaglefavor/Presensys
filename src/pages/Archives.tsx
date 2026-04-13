@@ -323,6 +323,11 @@ export default function Archives() {
     if (data) setCourses(data);
   }, [user]);
 
+  // Load courses on mount so dropdowns are ready for all tabs
+  useEffect(() => {
+    if (user && courses.length === 0) loadCourses();
+  }, [user, courses.length, loadCourses]);
+
   const handleModeSwitch = (newMode: ArchiveMode) => {
     setMode(newMode);
     if (newMode !== 'student' && courses.length === 0) loadCourses();
@@ -346,10 +351,37 @@ export default function Archives() {
 
   // ── Shared attendance history fetch ───────────────────────────────────────
   const doStudentFetch = async (student: { serverId: string }): Promise<AttendanceDetail[]> => {
+    // Query local DB first (faster and works offline / before sync)
+    const localRecords = await db.attendanceRecords
+      .where('studentId').equals(student.serverId)
+      .filter(r => r.isDeleted !== 1)
+      .toArray();
+
+    if (localRecords.length > 0) {
+      const details: AttendanceDetail[] = [];
+      for (const record of localRecords) {
+        const session = await db.attendanceSessions.where('serverId').equals(record.sessionId).first();
+        if (!session || session.isDeleted === 1) continue;
+        const course = await db.courses.where('serverId').equals(session.courseId).first();
+        if (!course || course.isDeleted === 1) continue;
+        details.push({
+          status: record.status,
+          timestamp: new Date(record.timestamp).toISOString(),
+          session: { date: session.date, title: session.title },
+          course: { code: course.code, title: course.title },
+        });
+      }
+      if (details.length > 0) {
+        return details.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      }
+    }
+
+    // Fall back to Supabase for historical data not yet in local DB
     const { data: records, error } = await supabase
       .from('attendance_records')
       .select('status, marked_at, attendance_sessions (date, title, courses (code, title))')
       .eq('student_id', student.serverId)
+      .eq('is_deleted', 0)
       .order('marked_at', { ascending: false });
     if (error) { toast.error('Failed to fetch history from cloud.'); return []; }
     return (records || [])
@@ -358,7 +390,9 @@ export default function Archives() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((r: any) => ({
         status: r.status,
-        timestamp: r.marked_at,
+        timestamp: typeof r.marked_at === 'number'
+          ? new Date(r.marked_at).toISOString()
+          : String(r.marked_at),
         session: { date: r.attendance_sessions.date, title: r.attendance_sessions.title },
         course: { code: r.attendance_sessions.courses.code, title: r.attendance_sessions.courses.title },
       }));
@@ -514,6 +548,43 @@ export default function Archives() {
 
   // ── Shared compile logic ──────────────────────────────────────────────────
   const compileForCourse = async (courseId: string, sDate: string, eDate: string): Promise<CompilationRow[]> => {
+    // Query local DB first
+    const localSessions = await db.attendanceSessions
+      .where('courseId').equals(courseId)
+      .filter(s => s.isDeleted !== 1 && s.date >= sDate && s.date <= eDate)
+      .toArray();
+    const localEnrollments = await db.enrollments
+      .where('courseId').equals(courseId)
+      .filter(e => e.isDeleted !== 1)
+      .toArray();
+
+    if (localSessions.length > 0 && localEnrollments.length > 0) {
+      const totalSessions = localSessions.length;
+      const sessionIds = localSessions.map(s => s.serverId);
+      const allRecords = await db.attendanceRecords
+        .where('sessionId').anyOf(sessionIds)
+        .filter(r => r.isDeleted !== 1)
+        .toArray();
+      const rows: CompilationRow[] = [];
+      for (const enrollment of localEnrollments) {
+        const student = await db.students.where('serverId').equals(enrollment.studentId).first();
+        if (!student || student.isDeleted === 1) continue;
+        const sr = allRecords.filter(r => r.studentId === enrollment.studentId);
+        const presentCount  = sr.filter(r => r.status === 'present').length;
+        const absentCount   = sr.filter(r => r.status === 'absent').length;
+        const excusedCount  = sr.filter(r => r.status === 'excused').length;
+        rows.push({
+          name: student.name, regNumber: student.regNumber,
+          totalSessions, presentCount, absentCount, excusedCount,
+          percentage: totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0,
+        });
+      }
+      if (rows.length > 0) {
+        return rows.sort((a, b) => b.percentage - a.percentage);
+      }
+    }
+
+    // Fall back to Supabase for historical data not yet in local DB
     const { data: sessions, error: sessErr } = await supabase
       .from('attendance_sessions').select('id, date, title')
       .eq('course_id', courseId).eq('is_deleted', 0)
@@ -641,6 +712,43 @@ export default function Archives() {
     e.preventDefault();
     if (!sessionsCourseId) { toast.error('Select a course.'); return; }
     setLoading(true); setSessionsList([]); setExpandedSessionId(null); setRollCallMap({});
+
+    // Query local DB first
+    const localSessions = await db.attendanceSessions
+      .where('courseId').equals(sessionsCourseId)
+      .filter(s => s.isDeleted !== 1)
+      .toArray();
+    const localEnrollments = await db.enrollments
+      .where('courseId').equals(sessionsCourseId)
+      .filter(e => e.isDeleted !== 1)
+      .toArray();
+
+    if (localSessions.length > 0) {
+      const totalEnrolled = localEnrollments.length;
+      const sessionIds = localSessions.map(s => s.serverId);
+      const allRecords = await db.attendanceRecords
+        .where('sessionId').anyOf(sessionIds)
+        .filter(r => r.isDeleted !== 1)
+        .toArray();
+      const list: SessionRow[] = localSessions
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map(s => {
+          const recs = allRecords.filter(r => r.sessionId === s.serverId);
+          const presentCount = recs.filter(r => r.status === 'present').length;
+          const absentCount  = recs.filter(r => r.status === 'absent').length;
+          const excusedCount = recs.filter(r => r.status === 'excused').length;
+          return {
+            id: s.serverId, date: s.date, title: s.title, totalEnrolled,
+            presentCount, absentCount, excusedCount,
+            attendanceRate: totalEnrolled > 0 ? Math.round((presentCount / totalEnrolled) * 100) : 0,
+          };
+        });
+      setSessionsList(list);
+      setLoading(false);
+      return;
+    }
+
+    // Fall back to Supabase for historical data
     const [sessRes, enrollRes] = await Promise.all([
       supabase.from('attendance_sessions').select('id, date, title')
         .eq('course_id', sessionsCourseId).eq('is_deleted', 0)
@@ -679,6 +787,28 @@ export default function Archives() {
     setExpandedSessionId(sessionId);
     if (rollCallMap[sessionId]) return;
     setRollCallLoading(sessionId);
+
+    // Query local DB first
+    const localRecords = await db.attendanceRecords
+      .where('sessionId').equals(sessionId)
+      .filter(r => r.isDeleted !== 1)
+      .toArray();
+
+    if (localRecords.length > 0) {
+      const ORDER: Record<string, number> = { present: 0, excused: 1, absent: 2 };
+      const entries: RollCallEntry[] = [];
+      for (const record of localRecords) {
+        const student = await db.students.where('serverId').equals(record.studentId).first();
+        if (!student || student.isDeleted === 1) continue;
+        entries.push({ name: student.name, regNumber: student.regNumber, status: record.status });
+      }
+      entries.sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+      setRollCallMap(prev => ({ ...prev, [sessionId]: entries }));
+      setRollCallLoading(null);
+      return;
+    }
+
+    // Fall back to Supabase
     const { data: records } = await supabase
       .from('attendance_records')
       .select('status, students (name, reg_number)')
