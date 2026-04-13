@@ -31,6 +31,53 @@ export function exportToCSV(data: ExportRow[], filename: string, meta?: ExportMe
 }
 
 /**
+ * Export multiple sheets as a single XLSX (Excel) workbook.
+ * Each entry in `sheets` becomes one worksheet tab.
+ */
+export function exportToMultiSheetXLSX(
+  sheets: Array<{ name: string; data: ExportRow[] }>,
+  filename: string,
+  meta?: ExportMeta,
+) {
+  const wb = XLSX.utils.book_new();
+
+  for (const sheet of sheets) {
+    if (sheet.data.length === 0) continue;
+    const ws = XLSX.utils.json_to_sheet(sheet.data);
+    const maxWidths = Object.keys(sheet.data[0]).map(key => ({
+      wch: Math.min(
+        Math.max(key.length, ...sheet.data.map(r => String(r[key] ?? '').length)) + 2,
+        40,
+      ),
+    }));
+    ws['!cols'] = maxWidths;
+    // Excel sheet names: strip invalid chars, limit to 31 chars, ensure uniqueness
+    const sanitized = sheet.name.replace(/[[\]:?*\\/]/g, '').trim() || 'Sheet';
+    const baseName = sanitized.slice(0, 31);
+    let sheetName = baseName;
+    let counter = 2;
+    while (wb.SheetNames.includes(sheetName)) {
+      const suffix = `_${counter++}`;
+      sheetName = `${baseName.slice(0, 31 - suffix.length)}${suffix}`;
+    }
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  }
+
+  if (meta && (meta.faculty || meta.department || meta.level)) {
+    const metaData = [
+      { Field: 'Faculty', Value: meta.faculty || '' },
+      { Field: 'Department', Value: meta.department || '' },
+      { Field: 'Level', Value: meta.level || '' },
+      { Field: 'Generated', Value: new Date().toLocaleString() },
+    ];
+    const metaWs = XLSX.utils.json_to_sheet(metaData);
+    XLSX.utils.book_append_sheet(wb, metaWs, 'Info');
+  }
+
+  XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+/**
  * Export data as an XLSX (Excel) file download.
  */
 export function exportToXLSX(data: ExportRow[], filename: string, meta?: ExportMeta) {
