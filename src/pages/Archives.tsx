@@ -113,6 +113,9 @@ const StatusIcon = ({ status }: { status: string }) => {
   return <Archive size={18} />;
 };
 
+// Reg-number pattern: starts with digit OR looks like "XX/123" style codes
+const REG_NUMBER_PATTERN = /^\d|^[A-Z]{2,}\/\d/i;
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Archives() {
@@ -233,7 +236,7 @@ export default function Archives() {
   const handleQueryChange = async (value: string) => {
     setSearchQuery(value);
     if (value.length < 2) { setNameSuggestions([]); setShowSuggestions(false); return; }
-    const looksLikeReg = /^\d/.test(value) || /^[A-Z]{2,}\/\d/i.test(value);
+    const looksLikeReg = REG_NUMBER_PATTERN.test(value);
     if (!looksLikeReg) {
       const lo = value.toLowerCase();
       const matches = await db.students
@@ -504,8 +507,8 @@ export default function Archives() {
       const p = useAuthStore.getState().profile;
       return { faculty: p?.faculty, department: p?.department, level: p?.level };
     })();
-    const sDate = startDate || `${new Date().getFullYear()}-01-01`;
-    const eDate = endDate   || `${new Date().getFullYear()}-12-31`;
+    const sDate = startDate || activeSemester.startDate || `${new Date().getFullYear()}-01-01`;
+    const eDate = endDate   || activeSemester.endDate   || `${new Date().getFullYear()}-12-31`;
     const sheets: Array<{ name: string; data: ReturnType<typeof buildExportRows> }> = [];
     for (const course of courses) {
       const rows = await compileForCourse(course.id, sDate, eDate);
@@ -1222,7 +1225,7 @@ export default function Archives() {
                       <h5 className="fw-black text-dark text-uppercase letter-spacing-n1 mb-1">{atRiskTitle}</h5>
                       <p className="xx-small fw-bold text-muted uppercase tracking-widest mb-2">{atRiskStartDate} → {atRiskEndDate}</p>
                       <span className="badge bg-danger fw-black xx-small px-3 py-2">
-                        ⚠ {atRiskData.length} AT-RISK STUDENT{atRiskData.length !== 1 ? 'S' : ''} (&lt;{atRiskThreshold}%)
+                        ⚠ {atRiskData.length} AT-RISK STUDENT{atRiskData.length !== 1 ? 'S' : ''} ({'<'}{atRiskThreshold}%)
                       </span>
                     </div>
                     <div className="position-relative">

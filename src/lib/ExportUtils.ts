@@ -51,8 +51,14 @@ export function exportToMultiSheetXLSX(
       ),
     }));
     ws['!cols'] = maxWidths;
-    // Excel sheet names are max 31 chars
-    XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31));
+    // Excel sheet names are max 31 chars; ensure uniqueness by appending a counter
+    let sheetName = sheet.name.slice(0, 31);
+    let counter = 2;
+    while (wb.SheetNames.includes(sheetName)) {
+      const suffix = `_${counter++}`;
+      sheetName = `${sheet.name.slice(0, 31 - suffix.length)}${suffix}`;
+    }
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
   }
 
   if (meta && (meta.faculty || meta.department || meta.level)) {
