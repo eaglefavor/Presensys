@@ -47,6 +47,15 @@ export default function Archives() {
   // Load courses when compilation tab is opened
   const loadCourses = async () => {
     if (!user) return;
+    // Query local DB first — it holds all courses including unsynced ones
+    const localCourses = await db.courses
+      .filter(c => c.isDeleted !== 1)
+      .toArray();
+    if (localCourses.length > 0) {
+      setCourses(localCourses.map(c => ({ id: c.serverId, code: c.code, title: c.title })));
+      return;
+    }
+    // Fall back to Supabase when local DB is empty (e.g. first load on a new device)
     const { data } = await supabase
       .from('courses')
       .select('id, code, title')
