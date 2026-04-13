@@ -60,7 +60,7 @@ interface SemesterCourseRow {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const REG_NUMBER_PATTERN = /^\d|^[A-Z]{2,}\//i;
+const REG_NUMBER_PATTERN = /^(\d|[A-Z]{2,}\/)/i;
 
 // ─── sessionStorage helpers ───────────────────────────────────────────────────
 
@@ -487,7 +487,12 @@ export default function Archives() {
   const absenceStreak = (courseCode: string, attendance: AttendanceDetail[]) => {
     const recs = attendance
       .filter(r => r.course.code === courseCode)
-      .sort((a, b) => new Date(b.session.date).getTime() - new Date(a.session.date).getTime());
+      .sort((a, b) => {
+        // Use string comparison for ISO date strings (avoids Date allocation per call)
+        if (b.session.date > a.session.date) return 1;
+        if (b.session.date < a.session.date) return -1;
+        return 0;
+      });
     let streak = 0;
     for (const r of recs) { if (r.status === 'absent') streak++; else break; }
     return streak;
@@ -601,7 +606,10 @@ export default function Archives() {
   const handleExportSemester = async (meta?: { faculty?: string; department?: string; level?: string }) => {
     if (!activeSemester || courses.length === 0) { toast.error('No active semester or courses loaded.'); return; }
     setLoading(true);
-    const resolved = meta ?? (() => { const p = useAuthStore.getState().profile; return { faculty: p?.faculty, department: p?.department, level: p?.level }; })();
+    const resolved = meta ?? (() => {
+      const p = useAuthStore.getState().profile;
+      return { faculty: p?.faculty, department: p?.department, level: p?.level };
+    })();
     const sDate = startDate || activeSemester.startDate || `${new Date().getFullYear()}-01-01`;
     const eDate = endDate   || activeSemester.endDate   || `${new Date().getFullYear()}-12-31`;
     const sheets: Array<{ name: string; data: ReturnType<typeof buildExportRows> }> = [];
@@ -673,12 +681,12 @@ export default function Archives() {
     if (!activeSemester) { toast.error('No active semester.'); return; }
     setLoading(true); setSemesterRows([]); setSemesterLoaded(false);
 
-    const semCourses = courses.length > 0 ? courses : await (async () => {
-      const local = await db.courses
-        .where('semesterId').equals(activeSemester.serverId)
-        .filter(c => c.isDeleted !== 1).toArray();
-      return local.map(c => ({ id: c.serverId, code: c.code, title: c.title }));
-    })();
+    const semCourses = courses.length > 0
+      ? courses
+      : await db.courses
+          .where('semesterId').equals(activeSemester.serverId)
+          .filter(c => c.isDeleted !== 1).toArray()
+          .then(local => local.map(c => ({ id: c.serverId, code: c.code, title: c.title })));
 
     if (semCourses.length === 0) { toast.error('No courses for this semester.'); setLoading(false); return; }
     const sDate = activeSemester.startDate || `${new Date().getFullYear()}-01-01`;
@@ -1155,7 +1163,7 @@ export default function Archives() {
                               </div>
                               <div className="d-flex align-items-center gap-2 flex-shrink-0">
                                 {streak >= 3 && (
-                                  <span className="badge bg-danger xx-small fw-black px-2 py-1">🔴 {streak} missed</span>
+                                  <span className="badge bg-danger xx-small fw-black px-2 py-1" aria-label={`${streak} consecutive absences`}>⬤ {streak} missed</span>
                                 )}
                                 <span className="xx-small fw-black text-muted">{cs.present}/{cs.total}</span>
                                 <DonutChart present={cs.present} absent={cs.absent} excused={cs.excused} />
