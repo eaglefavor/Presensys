@@ -52,7 +52,7 @@ export function exportToMultiSheetXLSX(
     }));
     ws['!cols'] = maxWidths;
     // Excel sheet names: strip invalid chars, limit to 31 chars, ensure uniqueness
-    const sanitized = sheet.name.replace(/[\[\]:\/\\?*]/g, '').trim() || 'Sheet';
+    const sanitized = sheet.name.replace(/[[\]:?*\\/]/g, '').trim() || 'Sheet';
     const baseName = sanitized.slice(0, 31);
     let sheetName = baseName;
     let counter = 2;

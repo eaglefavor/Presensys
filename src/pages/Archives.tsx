@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
-  Search, Archive, History, BarChart3, Calendar, Download, Share2,
+  Search, Archive, BarChart3, Calendar, Download, Share2,
   FileText, FileSpreadsheet, AlertTriangle, BookOpen, ChevronDown,
   ChevronUp, X, CheckCircle2, Clock, Printer, Users, LayoutGrid,
 } from 'lucide-react';
 import { db } from '../db/db';
+import type { LocalStudent } from '../db/db';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -217,7 +218,7 @@ export default function Archives() {
   const [searchQuery, setSearchQuery] = useState('');
   const [nameSuggestions, setNameSuggestions] = useState<NameSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [studentResult, setStudentResult] = useState<any>(null);
+  const [studentResult, setStudentResult] = useState<LocalStudent | null>(null);
   const [studentAttendance, setStudentAttendance] = useState<AttendanceDetail[]>([]);
   const [studentCourseFilter, setStudentCourseFilter] = useState('');
   const [studentDateStart, setStudentDateStart] = useState('');
@@ -228,7 +229,7 @@ export default function Archives() {
 
   // Compare student
   const [compareQuery, setCompareQuery] = useState('');
-  const [compareResult, setCompareResult] = useState<any>(null);
+  const [compareResult, setCompareResult] = useState<LocalStudent | null>(null);
   const [compareAttendance, setCompareAttendance] = useState<AttendanceDetail[]>([]);
   const [showCompare, setShowCompare] = useState(false);
 
@@ -352,7 +353,9 @@ export default function Archives() {
       .order('marked_at', { ascending: false });
     if (error) { toast.error('Failed to fetch history from cloud.'); return []; }
     return (records || [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .filter((r: any) => r.attendance_sessions && r.attendance_sessions.courses)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .map((r: any) => ({
         status: r.status,
         timestamp: r.marked_at,
@@ -370,22 +373,24 @@ export default function Archives() {
     setShowCompare(false); setCompareResult(null); setCompareAttendance([]);
     setExpandedCourses(new Set());
 
-    let student: any = await db.students.where('regNumber').equals(searchQuery.trim()).first();
+    let student: LocalStudent | null = await db.students.where('regNumber').equals(searchQuery.trim()).first() ?? null;
     if (!student) {
       const lo = searchQuery.trim().toLowerCase();
-      student = await db.students.filter(s => s.isDeleted !== 1 && s.name.toLowerCase() === lo).first();
+      student = await db.students.filter(s => s.isDeleted !== 1 && s.name.toLowerCase() === lo).first() ?? null;
     }
     if (!student) {
       const { data } = await supabase.from('students').select('*')
         .eq('reg_number', searchQuery.trim()).maybeSingle();
-      if (data) student = { serverId: data.id, name: data.name, regNumber: data.reg_number };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (data) student = { serverId: (data as any).id, name: (data as any).name, regNumber: (data as any).reg_number, isDeleted: 0, synced: 1 };
     }
     if (!student) {
       const { data } = await supabase.from('students').select('*')
         .ilike('name', `%${searchQuery.trim()}%`).limit(1);
       if (data && data[0]) {
-        const d = data[0];
-        student = { serverId: d.id, name: d.name, regNumber: d.reg_number };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const d = data[0] as any;
+        student = { serverId: d.id, name: d.name, regNumber: d.reg_number, isDeleted: 0, synced: 1 };
       }
     }
     if (!student) {
@@ -422,15 +427,16 @@ export default function Archives() {
     e.preventDefault();
     if (!compareQuery.trim()) return;
     setLoading(true);
-    let student: any = await db.students.where('regNumber').equals(compareQuery.trim()).first();
+    let student: LocalStudent | null = await db.students.where('regNumber').equals(compareQuery.trim()).first() ?? null;
     if (!student) {
       const lo = compareQuery.trim().toLowerCase();
-      student = await db.students.filter(s => s.isDeleted !== 1 && s.name.toLowerCase() === lo).first();
+      student = await db.students.filter(s => s.isDeleted !== 1 && s.name.toLowerCase() === lo).first() ?? null;
     }
     if (!student) {
       const { data } = await supabase.from('students').select('*')
         .eq('reg_number', compareQuery.trim()).maybeSingle();
-      if (data) student = { serverId: data.id, name: data.name, regNumber: data.reg_number };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (data) student = { serverId: (data as any).id, name: (data as any).name, regNumber: (data as any).reg_number, isDeleted: 0, synced: 1 };
     }
     if (!student) { toast.error('Second student not found.'); setLoading(false); return; }
     setCompareResult(student);
@@ -516,17 +522,23 @@ export default function Archives() {
     if (sessErr || !sessions || sessions.length === 0) return [];
     const { data: records } = await supabase
       .from('attendance_records').select('student_id, status, session_id')
-      .in('session_id', sessions.map((s: any) => s.id)).eq('is_deleted', 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .in('session_id', (sessions as any[]).map(s => s.id)).eq('is_deleted', 0);
     const { data: enrollments } = await supabase
       .from('enrollments').select('student_id, students (id, name, reg_number)')
       .eq('course_id', courseId).eq('is_deleted', 0);
     if (!enrollments || enrollments.length === 0) return [];
     const totalSessions = sessions.length;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (enrollments as any[]).map(enr => {
       const student = enr.students;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sr = (records || []).filter((r: any) => r.student_id === student.id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const presentCount  = sr.filter((r: any) => r.status === 'present').length;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const absentCount   = sr.filter((r: any) => r.status === 'absent').length;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const excusedCount  = sr.filter((r: any) => r.status === 'excused').length;
       return {
         name: student.name, regNumber: student.reg_number,
@@ -641,11 +653,17 @@ export default function Archives() {
     const totalEnrolled = enrollRes.data?.length ?? 0;
     const { data: records } = await supabase
       .from('attendance_records').select('session_id, status')
-      .in('session_id', sessRes.data.map((s: any) => s.id)).eq('is_deleted', 0);
-    setSessionsList(sessRes.data.map((s: any) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .in('session_id', (sessRes.data as any[]).map(s => s.id)).eq('is_deleted', 0);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setSessionsList((sessRes.data as any[]).map(s => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const recs = (records || []).filter((r: any) => r.session_id === s.id);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const presentCount = recs.filter((r: any) => r.status === 'present').length;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const absentCount  = recs.filter((r: any) => r.status === 'absent').length;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const excusedCount = recs.filter((r: any) => r.status === 'excused').length;
       return {
         id: s.id, date: s.date, title: s.title, totalEnrolled,
@@ -667,6 +685,7 @@ export default function Archives() {
       .eq('session_id', sessionId).eq('is_deleted', 0);
     if (records) {
       const ORDER: Record<string, number> = { present: 0, excused: 1, absent: 2 };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const entries: RollCallEntry[] = (records as any[])
         .filter(r => r.students)
         .map(r => ({ name: r.students.name, regNumber: r.students.reg_number, status: r.status as RollCallEntry['status'] }))
@@ -706,10 +725,14 @@ export default function Archives() {
       let presentCount = 0; let absentCount = 0; let excusedCount = 0;
       if (sessions.length > 0) {
         const { data: recs } = await supabase.from('attendance_records').select('status')
-          .in('session_id', sessions.map((s: any) => s.id)).eq('is_deleted', 0);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .in('session_id', (sessions as any[]).map(s => s.id)).eq('is_deleted', 0);
         if (recs) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           presentCount = recs.filter((r: any) => r.status === 'present').length;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           absentCount  = recs.filter((r: any) => r.status === 'absent').length;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           excusedCount = recs.filter((r: any) => r.status === 'excused').length;
         }
       }
@@ -1211,6 +1234,26 @@ export default function Archives() {
                 {!showCompare && (
                   <>
                     <div className="mb-3">
+                      {/* Course filter chips */}
+                      {courseSummaries.length > 1 && (
+                        <div className="d-flex gap-2 flex-wrap mb-2">
+                          <button
+                            className={`btn btn-sm rounded-pill fw-black xx-small px-3 ${studentCourseFilter === '' ? 'btn-primary' : 'btn-light border'}`}
+                            onClick={() => { setStudentCourseFilter(''); setStudentPage(1); }}
+                          >
+                            ALL
+                          </button>
+                          {courseSummaries.map(cs => (
+                            <button
+                              key={cs.code}
+                              className={`btn btn-sm rounded-pill fw-black xx-small px-3 ${studentCourseFilter === cs.code ? 'btn-primary' : 'btn-light border'}`}
+                              onClick={() => { setStudentCourseFilter(cs.code); setStudentPage(1); }}
+                            >
+                              {cs.code}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="row g-2">
                         <div className="col-6">
                           <div className="d-flex align-items-center gap-1">
@@ -1237,7 +1280,7 @@ export default function Archives() {
                       )}
                     </div>
 
-                    {(studentDateStart || studentDateEnd) && (
+                    {(studentCourseFilter || studentDateStart || studentDateEnd) && (
                       <>
                         <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-2 px-1">
                           Filtered Timeline ({filteredStudentAttendance.length})
@@ -1390,7 +1433,7 @@ export default function Archives() {
                 {/* Sort controls */}
                 <div className="d-flex gap-2 mb-3 align-items-center flex-wrap">
                   <span className="xx-small fw-black text-muted uppercase">Sort:</span>
-                  {([['name', 'NAME'], ['percentage', '%'], ['absentCount', 'ABSENCES']] as [SortField, string][]).map(([field, label]) => (
+                  {([['name', 'NAME'], ['regNumber', 'REG #'], ['percentage', '%'], ['absentCount', 'ABSENCES']] as [SortField, string][]).map(([field, label]) => (
                     <button
                       key={field}
                       className={`btn btn-sm rounded-pill fw-black xx-small px-3 ${sortField === field ? 'btn-primary' : 'btn-light border'}`}
