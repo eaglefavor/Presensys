@@ -13,10 +13,25 @@ import {
   Menu,
   X,
   ChevronRight,
+  WifiOff,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
-import { realtimeSync, type SyncStatus } from '../lib/RealtimeSyncEngine';
+import { realtimeSync, RealtimeSyncEngine, type SyncStatus } from '../lib/RealtimeSyncEngine';
+
+/** Format an ISO timestamp as a human-readable "X ago" string. */
+function formatTimeAgo(isoStr: string): string {
+  const diffMs = Date.now() - new Date(isoStr).getTime();
+  const mins = Math.floor(diffMs / 60_000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+/** Stale threshold: show the freshness banner when the cache is older than this. */
+const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 const Layout: React.FC = () => {
   const activeSemester = useAppStore(state => state.activeSemester);
@@ -25,10 +40,37 @@ const Layout: React.FC = () => {
   const navigate = useNavigate();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() => RealtimeSyncEngine.getLastSyncedAt());
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Refresh "last synced" label each minute so the "X ago" stays current
+  useEffect(() => {
+    const id = setInterval(() => {
+      setLastSyncedAt(RealtimeSyncEngine.getLastSyncedAt());
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Track online/offline state for the freshness banner
+  useEffect(() => {
+    const onOnline = () => setIsOnline(true);
+    const onOffline = () => setIsOnline(false);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
 
   useEffect(() => {
     // Subscribe to the engine's status events for accurate real-time feedback
-    const unsubscribe = realtimeSync.onStatusChange(setSyncStatus);
+    const unsubscribe = realtimeSync.onStatusChange((status) => {
+      setSyncStatus(status);
+      if (status === 'synced') {
+        setLastSyncedAt(RealtimeSyncEngine.getLastSyncedAt());
+      }
+    });
 
     if (user && navigator.onLine) {
       realtimeSync.initialize(user.id);
@@ -70,6 +112,10 @@ const Layout: React.FC = () => {
     realtimeSync.sync();
   };
 
+  // Determine whether to show the stale-data banner
+  const isStale = !isOnline && lastSyncedAt != null &&
+    (Date.now() - new Date(lastSyncedAt).getTime()) > STALE_THRESHOLD_MS;
+
   return (
     <div className="app-container">
       <header className="app-header bg-white border-bottom sticky-top shadow-sm">
@@ -84,7 +130,12 @@ const Layout: React.FC = () => {
           </div>
 
           <div className="d-flex align-items-center gap-3">
-            <div className="sync-indicator position-relative" onClick={handleManualSync} style={{ cursor: 'pointer' }}>
+            <div
+              className="sync-indicator position-relative d-flex align-items-center gap-1"
+              onClick={handleManualSync}
+              style={{ cursor: 'pointer' }}
+              title={lastSyncedAt ? `Last synced ${formatTimeAgo(lastSyncedAt)}` : 'Never synced'}
+            >
               {syncStatus === 'syncing' && <RefreshCw size={18} className="text-primary spin" />}
               {(syncStatus === 'synced' || syncStatus === 'idle') && <CloudSync size={18} style={{ color: 'var(--primary-blue)' }} />}
               {syncStatus === 'offline' && <CloudOff size={18} className="text-muted" />}
@@ -105,6 +156,17 @@ const Layout: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Stale-data banner: shown when offline and last sync is older than STALE_THRESHOLD_MS */}
+      {isStale && (
+        <div className="d-flex align-items-center justify-content-center gap-2 px-3 py-2 bg-warning-subtle border-bottom border-warning-subtle">
+          <WifiOff size={13} className="text-warning-emphasis flex-shrink-0" />
+          <span className="xx-small fw-bold text-warning-emphasis">
+            Viewing cached data — connect to sync
+            {lastSyncedAt && <span className="opacity-75"> (last synced {formatTimeAgo(lastSyncedAt)})</span>}
+          </span>
+        </div>
+      )}
 
       {/* Sidebar Drawer */}
       <div className={`menu-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}></div>
@@ -138,6 +200,15 @@ const Layout: React.FC = () => {
               ))}
             </div>
           </nav>
+
+          {/* Last-synced footer */}
+          {lastSyncedAt && (
+            <div className="px-4 py-2 border-top">
+              <p className="xx-small text-muted mb-0 fw-bold">
+                Last synced: {formatTimeAgo(lastSyncedAt)}
+              </p>
+            </div>
+          )}
 
           <div className="p-3 mt-auto border-top bg-light">
             {profile?.role === 'admin' && (

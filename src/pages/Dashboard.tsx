@@ -30,20 +30,20 @@ export default function Dashboard() {
     realtimeSync.triggerSync();
   };
   
-  const studentCount = useLiveQuery(() => db.students.count());
+  const studentCount = useLiveQuery(() => db.students.filter(s => s.isDeleted !== 1).count());
   const courseCount = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).count() : 0,
+    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).count() : 0,
     [activeSemester]
   );
   
   const attendanceStats = useLiveQuery(async () => {
     if (!activeSemester) return null;
-    const courses = await db.courses.where('semesterId').equals(activeSemester.serverId).toArray();
+    const courses = await db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray();
     const statsList = [];
     for (const course of courses) {
-      const sessions = await db.attendanceSessions.where('courseId').equals(course.serverId).toArray();
+      const sessions = await db.attendanceSessions.where('courseId').equals(course.serverId).filter(s => s.isDeleted !== 1).toArray();
       const sessionIds = sessions.map(s => s.serverId);
-      const records = await db.attendanceRecords.where('sessionId').anyOf(sessionIds).toArray();
+      const records = await db.attendanceRecords.where('sessionId').anyOf(sessionIds).filter(r => r.isDeleted !== 1).toArray();
       const presentCount = records.filter(r => r.status === 'present').length;
       const totalPossible = records.length;
       const percentage = totalPossible > 0 ? (presentCount / totalPossible) * 100 : 100;
@@ -115,33 +115,38 @@ export default function Dashboard() {
         {/* Course List Section (Feed Style) */}
         <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 px-1">Active Performance</h6>
         <div className="d-flex flex-column gap-2 mb-4">
-          {attendanceStats?.map(course => (
-            <Link key={course.id} to="/attendance" className="text-decoration-none">
-              <div className="card border-0 bg-white shadow-sm overflow-hidden">
-                <div className="card-body p-3 d-flex align-items-center gap-3">
-                  <div className={`icon-box-small rounded-2 d-flex align-items-center justify-content-center ${course.percentage < 75 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-primary bg-opacity-10 text-primary'}`} style={{ width: '44px', height: '44px' }}>
-                    {course.percentage < 75 ? <AlertCircle size={20} /> : <BookOpen size={20} />}
-                  </div>
-                  <div className="flex-grow-1 overflow-hidden">
-                    <h6 className="fw-bold mb-0 text-dark text-truncate">{course.code}</h6>
-                    <div className="xx-small fw-bold text-muted">{course.totalSessions} Sessions Marked</div>
-                  </div>
-                  <div className="text-end">
-                    <div className={`fw-black ${course.percentage < 75 ? 'text-danger' : 'text-primary'}`}>{Math.round(course.percentage)}%</div>
-                    <div className="xx-small fw-bold text-muted uppercase">{course.percentage < 75 ? 'Warning' : 'Good'}</div>
-                  </div>
-                  <ChevronRight size={16} className="text-muted opacity-50" />
-                </div>
-                <div className="progress rounded-0" style={{ height: '3px' }}>
-                  <div className={`progress-bar ${course.percentage < 75 ? 'bg-danger' : 'bg-primary'}`} style={{ width: `${course.percentage}%` }}></div>
-                </div>
-              </div>
-            </Link>
-          ))}
-          {(!attendanceStats || attendanceStats.length === 0) && (
+          {attendanceStats == null ? (
+            <div className="text-center py-4">
+              <div className="spinner-border spinner-border-sm text-primary" role="status" />
+            </div>
+          ) : attendanceStats.length === 0 ? (
             <div className="text-center py-5 bg-white rounded-4 border-dashed">
               <p className="xx-small fw-bold text-muted uppercase mb-0">No course data available yet</p>
             </div>
+          ) : (
+            attendanceStats.map(course => (
+              <Link key={course.id} to="/attendance" className="text-decoration-none">
+                <div className="card border-0 bg-white shadow-sm overflow-hidden">
+                  <div className="card-body p-3 d-flex align-items-center gap-3">
+                    <div className={`icon-box-small rounded-2 d-flex align-items-center justify-content-center ${course.percentage < 75 ? 'bg-danger bg-opacity-10 text-danger' : 'bg-primary bg-opacity-10 text-primary'}`} style={{ width: '44px', height: '44px' }}>
+                      {course.percentage < 75 ? <AlertCircle size={20} /> : <BookOpen size={20} />}
+                    </div>
+                    <div className="flex-grow-1 overflow-hidden">
+                      <h6 className="fw-bold mb-0 text-dark text-truncate">{course.code}</h6>
+                      <div className="xx-small fw-bold text-muted">{course.totalSessions} Sessions Marked</div>
+                    </div>
+                    <div className="text-end">
+                      <div className={`fw-black ${course.percentage < 75 ? 'text-danger' : 'text-primary'}`}>{Math.round(course.percentage)}%</div>
+                      <div className="xx-small fw-bold text-muted uppercase">{course.percentage < 75 ? 'Warning' : 'Good'}</div>
+                    </div>
+                    <ChevronRight size={16} className="text-muted opacity-50" />
+                  </div>
+                  <div className="progress rounded-0" style={{ height: '3px' }}>
+                    <div className={`progress-bar ${course.percentage < 75 ? 'bg-danger' : 'bg-primary'}`} style={{ width: `${course.percentage}%` }}></div>
+                  </div>
+                </div>
+              </Link>
+            ))
           )}
         </div>
 

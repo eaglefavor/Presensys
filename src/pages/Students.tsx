@@ -257,8 +257,14 @@ export default function Students() {
       await db.transaction('rw', db.students, async () => {
         for (const s of validData) {
           const existing = await db.students.where('regNumber').equals(s.regNumber).first();
-          if (!existing) await db.students.add({ ...s, userId: user.id, synced: 0 });
-          else await db.students.update(existing.id!, { name: s.name, userId: user.id, synced: 0 });
+          if (!existing) {
+            await db.students.add({ ...s, userId: user.id, synced: 0 });
+          } else if (existing.isDeleted === 1) {
+            // Resurrect soft-deleted student: preserve their serverId (canonical UUID)
+            await db.students.update(existing.id!, { name: s.name, isDeleted: 0, userId: user.id, synced: 0 });
+          } else {
+            await db.students.update(existing.id!, { name: s.name, userId: user.id, synced: 0 });
+          }
         }
       });
       setShowImportModal(false);
@@ -324,41 +330,47 @@ export default function Students() {
         )}
 
         <div className="d-flex flex-column gap-2">
-          <AnimatePresence mode="popLayout">
-            {displayedStudents?.map(s => {
-              const isSelected = selectedIds.has(s.id!);
-              return (
-                <motion.div 
-                  key={s.serverId} 
-                  layout 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  className={`card border-0 shadow-sm rounded-3 cursor-pointer ${isSelected ? 'bg-primary-subtle ring-2 ring-primary' : 'bg-white'}`}
-                  onContextMenu={(e) => { e.preventDefault(); handleLongPress(s.id!); }}
-                  onClick={() => {
-                    if (isSelectionMode) toggleSelection(s.id!);
-                    else setSelectedStudent(s);
-                  }}
-                >
-                  <div className="card-body p-3 d-flex align-items-center gap-3">
-                    {isSelectionMode ? (
-                      <div className={`rounded-circle p-1 ${isSelected ? 'bg-primary text-white' : 'bg-light text-muted'}`}>
-                        {isSelected ? <CheckCircle2 size={24} /> : <div style={{width: 24, height: 24, border: '2px solid #dee2e6', borderRadius: '50%'}}></div>}
+          {students === undefined ? (
+            <div className="text-center py-5">
+              <div className="spinner-border spinner-border-sm text-primary" role="status" />
+            </div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {displayedStudents?.map(s => {
+                const isSelected = selectedIds.has(s.id!);
+                return (
+                  <motion.div 
+                    key={s.serverId} 
+                    layout 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className={`card border-0 shadow-sm rounded-3 cursor-pointer ${isSelected ? 'bg-primary-subtle ring-2 ring-primary' : 'bg-white'}`}
+                    onContextMenu={(e) => { e.preventDefault(); handleLongPress(s.id!); }}
+                    onClick={() => {
+                      if (isSelectionMode) toggleSelection(s.id!);
+                      else setSelectedStudent(s);
+                    }}
+                  >
+                    <div className="card-body p-3 d-flex align-items-center gap-3">
+                      {isSelectionMode ? (
+                        <div className={`rounded-circle p-1 ${isSelected ? 'bg-primary text-white' : 'bg-light text-muted'}`}>
+                          {isSelected ? <CheckCircle2 size={24} /> : <div style={{width: 24, height: 24, border: '2px solid #dee2e6', borderRadius: '50%'}}></div>}
+                        </div>
+                      ) : (
+                        <div className="avatar-circle flex-shrink-0 text-white fw-bold shadow-sm" style={{ backgroundColor: stringToColor(s.name) }}>{getInitials(s.name)}</div>
+                      )}
+                      <div className="flex-grow-1 overflow-hidden">
+                        <h6 className="fw-bold mb-0 text-dark text-truncate">{s.name}</h6>
+                        <div className="xx-small fw-bold text-muted font-monospace">{s.regNumber}</div>
                       </div>
-                    ) : (
-                      <div className="avatar-circle flex-shrink-0 text-white fw-bold shadow-sm" style={{ backgroundColor: stringToColor(s.name) }}>{getInitials(s.name)}</div>
-                    )}
-                    <div className="flex-grow-1 overflow-hidden">
-                      <h6 className="fw-bold mb-0 text-dark text-truncate">{s.name}</h6>
-                      <div className="xx-small fw-bold text-muted font-monospace">{s.regNumber}</div>
+                      {!isSelectionMode && <ChevronRight size={16} className="text-muted opacity-50" />}
                     </div>
-                    {!isSelectionMode && <ChevronRight size={16} className="text-muted opacity-50" />}
-                  </div>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          )}
         </div>
 
         {filteredStudents && filteredStudents.length > itemsPerPage && (
