@@ -15,7 +15,7 @@ export default function Attendance() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).toArray() : [],
+    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray() : [],
     [activeSemester]
   );
   
@@ -31,7 +31,7 @@ export default function Attendance() {
   }, [markSearch]);
 
   const sessions = useLiveQuery(
-    () => selectedCourseId ? db.attendanceSessions.where('courseId').equals(selectedCourseId).reverse().toArray() : [],
+    () => selectedCourseId ? db.attendanceSessions.where('courseId').equals(selectedCourseId).filter(s => s.isDeleted !== 1).reverse().toArray() : [],
     [selectedCourseId]
   );
 

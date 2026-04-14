@@ -30,20 +30,20 @@ export default function Dashboard() {
     realtimeSync.triggerSync();
   };
   
-  const studentCount = useLiveQuery(() => db.students.count());
+  const studentCount = useLiveQuery(() => db.students.filter(s => s.isDeleted !== 1).count());
   const courseCount = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).count() : 0,
+    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).count() : 0,
     [activeSemester]
   );
   
   const attendanceStats = useLiveQuery(async () => {
     if (!activeSemester) return null;
-    const courses = await db.courses.where('semesterId').equals(activeSemester.serverId).toArray();
+    const courses = await db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray();
     const statsList = [];
     for (const course of courses) {
-      const sessions = await db.attendanceSessions.where('courseId').equals(course.serverId).toArray();
+      const sessions = await db.attendanceSessions.where('courseId').equals(course.serverId).filter(s => s.isDeleted !== 1).toArray();
       const sessionIds = sessions.map(s => s.serverId);
-      const records = await db.attendanceRecords.where('sessionId').anyOf(sessionIds).toArray();
+      const records = await db.attendanceRecords.where('sessionId').anyOf(sessionIds).filter(r => r.isDeleted !== 1).toArray();
       const presentCount = records.filter(r => r.status === 'present').length;
       const totalPossible = records.length;
       const percentage = totalPossible > 0 ? (presentCount / totalPossible) * 100 : 100;
