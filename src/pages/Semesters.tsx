@@ -25,7 +25,7 @@ export default function Semesters() {
 
   const courseCounts = useLiveQuery(async () => {
     const counts: Record<string, number> = {};
-    const courses = await db.courses.toArray();
+    const courses = await db.courses.filter(c => c.isDeleted !== 1).toArray();
     courses.forEach(c => { counts[c.semesterId] = (counts[c.semesterId] || 0) + 1; });
     return counts;
   }, []);
@@ -123,35 +123,45 @@ export default function Semesters() {
 
       <div className="px-4 container-mobile">
         <div className="d-flex flex-column gap-2">
-          <AnimatePresence mode="popLayout">
-            {semesters?.map((s) => (
-              <motion.div key={s.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card border-0 bg-white cursor-pointer shadow-sm" onClick={() => setSelectedSemester(s)}>
-                <div className="card-body p-3 d-flex align-items-center gap-3">
-                  <div className={`icon-box-small rounded-2 d-flex align-items-center justify-content-center ${s.isActive ? 'bg-primary text-white' : 'bg-light text-muted'}`} style={{ width: '44px', height: '44px' }}>
-                    {s.isActive ? <LayoutDashboard size={20} /> : <Calendar size={20} />}
-                  </div>
-                  <div className="flex-grow-1 overflow-hidden">
-                    <h6 className="fw-bold mb-0 text-dark text-truncate uppercase">{s.name}</h6>
-                    <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1">
-                      {new Date(s.startDate).getFullYear()} <ArrowRight size={10} /> {new Date(s.endDate).getFullYear()}
-                      <span className="mx-1">•</span>
-                      <BookOpen size={10} className="text-primary" /> {courseCounts?.[s.serverId] || 0} Courses
+          {semesters === undefined ? (
+            <div className="text-center py-5">
+              <div className="spinner-border spinner-border-sm text-primary" role="status" />
+            </div>
+          ) : semesters.length === 0 ? (
+            <div className="text-center py-5 bg-white rounded-4 border-dashed border-2">
+              <p className="xx-small fw-bold text-muted uppercase tracking-widest mb-0">No academic cycles yet</p>
+            </div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {semesters.map((s) => (
+                <motion.div key={s.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card border-0 bg-white cursor-pointer shadow-sm" onClick={() => setSelectedSemester(s)}>
+                  <div className="card-body p-3 d-flex align-items-center gap-3">
+                    <div className={`icon-box-small rounded-2 d-flex align-items-center justify-content-center ${s.isActive ? 'bg-primary text-white' : 'bg-light text-muted'}`} style={{ width: '44px', height: '44px' }}>
+                      {s.isActive ? <LayoutDashboard size={20} /> : <Calendar size={20} />}
                     </div>
+                    <div className="flex-grow-1 overflow-hidden">
+                      <h6 className="fw-bold mb-0 text-dark text-truncate uppercase">{s.name}</h6>
+                      <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1">
+                        {new Date(s.startDate).getFullYear()} <ArrowRight size={10} /> {new Date(s.endDate).getFullYear()}
+                        <span className="mx-1">•</span>
+                        <BookOpen size={10} className="text-primary" /> {courseCounts?.[s.serverId] || 0} Courses
+                      </div>
+                    </div>
+                    {s.isActive ? (
+                      <span className="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill xx-small fw-bold px-2 py-1">ACTIVE</span>
+                    ) : (
+                      <button
+                        className="btn btn-outline-primary btn-sm rounded-pill xx-small fw-bold px-3"
+                        onClick={(e) => { e.stopPropagation(); handleSetActive(s.id!); }}
+                      >
+                        ACTIVATE
+                      </button>
+                    )}
                   </div>
-                  {s.isActive ? (
-                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill xx-small fw-bold px-2 py-1">ACTIVE</span>
-                  ) : (
-                    <button
-                      className="btn btn-outline-primary btn-sm rounded-pill xx-small fw-bold px-3"
-                      onClick={(e) => { e.stopPropagation(); handleSetActive(s.id!); }}
-                    >
-                      ACTIVATE
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
         </div>
       </div>
 

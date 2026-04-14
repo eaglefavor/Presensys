@@ -382,55 +382,59 @@ export default function Courses() {
 
       <div className="px-4 container-mobile">
         <div className="d-flex flex-column gap-3">
-          <AnimatePresence mode="popLayout">
-            {displayedCourses?.map(course => (
-              <motion.div key={course.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}>
-                <div className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
-                  <div className="card-body p-3 d-flex align-items-center gap-3">
-                    <div className="bg-primary bg-opacity-10 text-primary p-3 rounded-3 flex-shrink-0" style={{ width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Book size={24} />
-                    </div>
-                    <div className="flex-grow-1 overflow-hidden" onClick={() => setShowEnrollModal({ show: true, courseId: course.serverId, courseName: course.title })} style={{ cursor: 'pointer' }}>
-                      <h6 className="fw-black mb-0 text-dark text-truncate text-uppercase letter-spacing-n1">{course.code}</h6>
-                      <p className="xx-small fw-bold text-muted mb-0 text-truncate text-uppercase">{course.title}</p>
-                    </div>
-                  </div>
-                  <div className="p-2 border-top bg-light d-flex gap-2">
-                    <button
-                      className="btn btn-white border flex-grow-1 py-1 px-2 rounded-3 fw-bold xx-small text-primary d-flex align-items-center justify-content-center gap-1"
-                      onClick={() => setShowEnrollModal({ show: true, courseId: course.serverId, courseName: course.title })}
-                    >
-                      <Users size={12} /> ENROLL
-                    </button>
-                    <button
-                      className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-success d-flex align-items-center justify-content-center gap-1"
-                      onClick={() => handleExportExcel(course.serverId, course.code)}
-                      disabled={isExporting === course.serverId}
-                    >
-                      {isExporting === course.serverId ? <div className="spinner-border spinner-border-sm" style={{ width: 12, height: 12 }} /> : <Download size={12} />} EXPORT
-                    </button>
-                    <button
-                      className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-dark d-flex align-items-center justify-content-center gap-1"
-                      onClick={() => handleEditClick(course)}
-                    >
-                      <Edit2 size={12} /> EDIT
-                    </button>
-                    <button
-                      className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-danger d-flex align-items-center justify-content-center gap-1"
-                      onClick={() => setConfirmDeleteCourseId(course.id!)}
-                    >
-                      <Trash2 size={12} /> DELETE
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-
-          {courses?.length === 0 && (
+          {courses === undefined ? (
+            <div className="text-center py-5">
+              <div className="spinner-border spinner-border-sm text-primary" role="status" />
+            </div>
+          ) : courses.length === 0 ? (
             <div className="text-center py-5 bg-white rounded-4 border-dashed border-2">
               <p className="xx-small fw-black text-muted text-uppercase tracking-widest mb-0">No courses listed for this cycle</p>
             </div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {displayedCourses?.map(course => (
+                <motion.div key={course.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.98 }}>
+                  <div className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
+                    <div className="card-body p-3 d-flex align-items-center gap-3">
+                      <div className="bg-primary bg-opacity-10 text-primary p-3 rounded-3 flex-shrink-0" style={{ width: '56px', height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Book size={24} />
+                      </div>
+                      <div className="flex-grow-1 overflow-hidden" onClick={() => setShowEnrollModal({ show: true, courseId: course.serverId, courseName: course.title })} style={{ cursor: 'pointer' }}>
+                        <h6 className="fw-black mb-0 text-dark text-truncate text-uppercase letter-spacing-n1">{course.code}</h6>
+                        <p className="xx-small fw-bold text-muted mb-0 text-truncate text-uppercase">{course.title}</p>
+                      </div>
+                    </div>
+                    <div className="p-2 border-top bg-light d-flex gap-2">
+                      <button
+                        className="btn btn-white border flex-grow-1 py-1 px-2 rounded-3 fw-bold xx-small text-primary d-flex align-items-center justify-content-center gap-1"
+                        onClick={() => setShowEnrollModal({ show: true, courseId: course.serverId, courseName: course.title })}
+                      >
+                        <Users size={12} /> ENROLL
+                      </button>
+                      <button
+                        className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-success d-flex align-items-center justify-content-center gap-1"
+                        onClick={() => handleExportExcel(course.serverId, course.code)}
+                        disabled={isExporting === course.serverId}
+                      >
+                        {isExporting === course.serverId ? <div className="spinner-border spinner-border-sm" style={{ width: 12, height: 12 }} /> : <Download size={12} />} EXPORT
+                      </button>
+                      <button
+                        className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-dark d-flex align-items-center justify-content-center gap-1"
+                        onClick={() => handleEditClick(course)}
+                      >
+                        <Edit2 size={12} /> EDIT
+                      </button>
+                      <button
+                        className="btn btn-white border py-1 px-2 rounded-3 fw-bold xx-small text-danger d-flex align-items-center justify-content-center gap-1"
+                        onClick={() => setConfirmDeleteCourseId(course.id!)}
+                      >
+                        <Trash2 size={12} /> DELETE
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           )}
         </div>
 
