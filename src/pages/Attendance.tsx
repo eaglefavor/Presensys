@@ -47,7 +47,7 @@ export default function Attendance() {
   );
 
   const records = useLiveQuery(
-    () => activeSessionId ? db.attendanceRecords.where('sessionId').equals(activeSessionId).toArray() : [],
+    () => activeSessionId ? db.attendanceRecords.where('sessionId').equals(activeSessionId).filter(r => r.isDeleted !== 1).toArray() : [],
     [activeSessionId]
   );
 
@@ -84,7 +84,11 @@ export default function Attendance() {
 
   const updateRecord = async (studentId: string, status: 'present' | 'absent' | 'excused') => {
     if (!activeSessionId || !user) return;
-    const existing = await db.attendanceRecords.where('[sessionId+studentId]').equals([activeSessionId, studentId]).first();
+    // Exclude soft-deleted records so we never revive a tombstone by updating it
+    const existing = await db.attendanceRecords
+      .where('[sessionId+studentId]').equals([activeSessionId, studentId])
+      .filter(r => r.isDeleted !== 1)
+      .first();
     if (existing) {
       await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now(), synced: 0 });
     } else {

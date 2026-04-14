@@ -56,8 +56,11 @@ export class RealtimeSyncEngine {
   private isSyncing = false;
   private isInitialized = false;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private retryCount = 0;
   private readonly maxRetries = 3;
+  private readonly HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private currentStatus: SyncStatus = 'idle';
   private statusListeners: ((status: SyncStatus) => void)[] = [];
 
@@ -97,6 +100,14 @@ export class RealtimeSyncEngine {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     this.userId = null;
     this.isInitialized = false;
     this.isSyncing = false;
@@ -120,6 +131,11 @@ export class RealtimeSyncEngine {
     console.log('Sync: Initialized for user', userId);
     await this.sync();
     this.setupRealtimeSubscription();
+
+    // Periodic heartbeat: trigger a sync every 5 minutes so cross-device
+    // changes are picked up even when the user is not interacting with the app.
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(() => this.triggerSync(), this.HEARTBEAT_INTERVAL_MS);
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────────
@@ -178,7 +194,7 @@ export class RealtimeSyncEngine {
         this.retryCount++;
         const backoffMs = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
         console.log(`Sync: Retrying in ${backoffMs}ms (attempt ${this.retryCount}/${this.maxRetries})`);
-        setTimeout(() => this.sync(), backoffMs);
+        this.retryTimer = setTimeout(() => this.sync(), backoffMs);
       } else {
         console.error(`Sync: Max retries (${this.maxRetries}) reached.`);
         this.emitStatus('error');
