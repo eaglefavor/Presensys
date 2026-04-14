@@ -48,7 +48,7 @@ export default function Semesters() {
         synced: 0,
         userId: user.id,
         isDeleted: 0
-      } as any);
+      });
       setShowModal(false);
       setNewSemester({ name: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0] });
     } catch (error) {
@@ -96,7 +96,7 @@ export default function Semesters() {
         await db.courses.where('semesterId').equals(semester.serverId).modify({ isDeleted: 1, synced: 0 });
       }
 
-      await db.semesters.update(id, { isDeleted: 1, synced: 0 });
+      await db.semesters.update(id, { isDeleted: 1 });
     });
     // Call refreshActiveSemester after the transaction commits.
     await refreshActiveSemester();

@@ -3,13 +3,14 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   Plus, Calendar, UserCheck, UserX, Search, 
   CheckCircle, XCircle, HelpCircle, 
-  RotateCcw, Settings2, Book, ChevronRight, ArrowLeft, Clock, Download, Share2, FileText, FileSpreadsheet
+  RotateCcw, Settings2, Book, ChevronRight, ArrowLeft, Clock, Download, Share2, FileText, FileSpreadsheet, Pencil, Check
 } from 'lucide-react';
 import { db } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { exportToCSV, exportToXLSX, exportToPDF, exportToText, downloadText, shareData } from '../lib/ExportUtils';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Attendance() {
   const { user } = useAuthStore();
@@ -47,7 +48,7 @@ export default function Attendance() {
   );
 
   const records = useLiveQuery(
-    () => activeSessionId ? db.attendanceRecords.where('sessionId').equals(activeSessionId).toArray() : [],
+    () => activeSessionId ? db.attendanceRecords.where('sessionId').equals(activeSessionId).filter(r => r.isDeleted !== 1).toArray() : [],
     [activeSessionId]
   );
 
@@ -66,6 +67,14 @@ export default function Attendance() {
   const totalCoursePages = Math.ceil((courses?.length || 0) / itemsPerPage);
   const displayedCourses = courses?.slice((coursePage - 1) * itemsPerPage, coursePage * itemsPerPage);
 
+  // Session rename state
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+
+  // Confirm dialog state
+  const [confirmBulkMarkStatus, setConfirmBulkMarkStatus] = useState<'present' | 'absent' | null>(null);
+  const [confirmResetRecords, setConfirmResetRecords] = useState(false);
+
   const handleCreateSession = async () => {
     if (!selectedCourseId || !user) return;
     const newSession = {
@@ -77,16 +86,20 @@ export default function Attendance() {
       synced: 0,
       isDeleted: 0
     };
-    const id = await db.attendanceSessions.add(newSession as any);
+    const id = await db.attendanceSessions.add(newSession);
     const added = await db.attendanceSessions.get(id as number);
     if (added) setActiveSessionId(added.serverId);
   };
 
   const updateRecord = async (studentId: string, status: 'present' | 'absent' | 'excused') => {
     if (!activeSessionId || !user) return;
-    const existing = await db.attendanceRecords.where('[sessionId+studentId]').equals([activeSessionId, studentId]).first();
+    // Exclude soft-deleted records so we never revive a tombstone by updating it
+    const existing = await db.attendanceRecords
+      .where('[sessionId+studentId]').equals([activeSessionId, studentId])
+      .filter(r => r.isDeleted !== 1)
+      .first();
     if (existing) {
-      await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now(), synced: 0 });
+      await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now() });
     } else {
       await db.attendanceRecords.add({ 
         serverId: '',
@@ -97,15 +110,18 @@ export default function Attendance() {
         synced: 0, 
         userId: user.id,
         isDeleted: 0
-      } as any);
+      });
     }
     if (window.navigator.vibrate) window.navigator.vibrate(5);
   };
 
-  const handleBulkMark = async (status: 'present' | 'absent') => {
+  const handleBulkMark = (status: 'present' | 'absent') => {
     if (!activeSessionId || !user || !filteredEnrollments.length) return;
-    
-    if (!confirm(`Mark ${filteredEnrollments.length} students as ${status.toUpperCase()}?`)) return;
+    setConfirmBulkMarkStatus(status);
+  };
+
+  const doBulkMark = async (status: 'present' | 'absent') => {
+    if (!activeSessionId || !user || !filteredEnrollments.length) return;
 
     await db.transaction('rw', db.attendanceRecords, async () => {
       const now = Date.now();
@@ -113,7 +129,7 @@ export default function Attendance() {
       
       const existing = await db.attendanceRecords
         .where('sessionId').equals(activeSessionId)
-        .filter(r => studentIds.includes(r.studentId))
+        .filter(r => studentIds.includes(r.studentId) && r.isDeleted !== 1)
         .toArray();
       
       const existingIds = new Set(existing.map(r => r.studentId));
@@ -133,24 +149,33 @@ export default function Attendance() {
         }));
 
       if (toUpdate.length > 0) await db.attendanceRecords.bulkUpdate(toUpdate);
-      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd as any);
+      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd);
     });
   };
 
-  const handleResetRecords = async () => {
+  const handleResetRecords = () => {
     if (!activeSessionId || !filteredEnrollments.length) return;
-    if (!confirm('Clear attendance for these students?')) return;
+    setConfirmResetRecords(true);
+  };
 
+  const doResetRecords = async () => {
+    if (!activeSessionId) return;
     const studentIds = filteredEnrollments.map(s => s.serverId);
     const toClear = await db.attendanceRecords
         .where('sessionId').equals(activeSessionId)
-        .filter(r => studentIds.includes(r.studentId))
+        .filter(r => studentIds.includes(r.studentId) && r.isDeleted !== 1)
         .primaryKeys();
-    
     if (toClear.length > 0) {
-        // Actually we mark as deleted so it syncs deletion to cloud
         await db.attendanceRecords.bulkUpdate(toClear.map(k => ({ key: k as number, changes: { isDeleted: 1, synced: 0 } })));
     }
+  };
+
+  const handleRenameSession = async () => {
+    if (!renamingSessionId || !renameValue.trim()) { setRenamingSessionId(null); return; }
+    const session = await db.attendanceSessions.where('serverId').equals(renamingSessionId).first();
+    if (session) await db.attendanceSessions.update(session.id!, { title: renameValue.trim() });
+    setRenamingSessionId(null);
+    setRenameValue('');
   };
 
   const handleSessionExport = (format: 'csv' | 'xlsx' | 'pdf' | 'text' | 'share') => {
@@ -258,13 +283,37 @@ export default function Attendance() {
           <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 ps-1">Recent Sessions</h6>
           <div className="d-flex flex-column gap-2">
             {sessions?.map(session => (
-              <div key={session.serverId} className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4 transition-all active-scale" onClick={() => setActiveSessionId(session.serverId)}>
-                <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
-                <div className="flex-grow-1">
-                  <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
-                  <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1 mt-1"><Clock size={10} /> {new Date(session.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</div>
-                </div>
-                <ChevronRight size={16} className="text-muted opacity-50" />
+              <div key={session.serverId} className="card border-0 bg-white shadow-sm rounded-4">
+                {renamingSessionId === session.serverId ? (
+                  <div className="p-3 d-flex align-items-center gap-2">
+                    <input
+                      className="form-control form-control-sm rounded-3 fw-bold border-primary"
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRenameSession(); if (e.key === 'Escape') setRenamingSessionId(null); }}
+                      autoFocus
+                    />
+                    <button className="btn btn-primary btn-sm rounded-3 px-3 fw-bold" onClick={handleRenameSession}><Check size={14} /></button>
+                    <button className="btn btn-light btn-sm rounded-3 px-3 fw-bold border" onClick={() => setRenamingSessionId(null)}>✕</button>
+                  </div>
+                ) : (
+                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => setActiveSessionId(session.serverId)}>
+                    <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
+                    <div className="flex-grow-1">
+                      <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
+                      <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1 mt-1"><Clock size={10} /> {new Date(session.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</div>
+                    </div>
+                    <button
+                      className="btn btn-light btn-sm rounded-circle p-1 border-0 text-muted me-1"
+                      style={{ width: 30, height: 30 }}
+                      onClick={e => { e.stopPropagation(); setRenameValue(session.title); setRenamingSessionId(session.serverId); }}
+                      title="Rename session"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <ChevronRight size={16} className="text-muted opacity-50" />
+                  </div>
+                )}
               </div>
             ))}
             {sessions?.length === 0 && (
@@ -295,8 +344,32 @@ export default function Attendance() {
         <div className="d-flex justify-content-between align-items-start mb-3">
           <div className="d-flex align-items-center gap-3 overflow-hidden">
             <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={() => setActiveSessionId(null)}><ArrowLeft size={20} /></button>
-            <div className="overflow-hidden">
-              <h1 className="h6 fw-black mb-0 text-dark text-uppercase letter-spacing-n1 truncate">{currentSession?.title}</h1>
+            <div className="overflow-hidden flex-grow-1">
+              {renamingSessionId === activeSessionId ? (
+                <div className="d-flex align-items-center gap-2">
+                  <input
+                    className="form-control form-control-sm rounded-3 fw-bold border-primary"
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenameSession(); if (e.key === 'Escape') setRenamingSessionId(null); }}
+                    autoFocus
+                  />
+                  <button className="btn btn-primary btn-sm rounded-3 px-2 fw-bold flex-shrink-0" onClick={handleRenameSession}><Check size={13} /></button>
+                  <button className="btn btn-light btn-sm rounded-3 px-2 fw-bold border flex-shrink-0" onClick={() => setRenamingSessionId(null)}>✕</button>
+                </div>
+              ) : (
+                <div className="d-flex align-items-center gap-2">
+                  <h1 className="h6 fw-black mb-0 text-dark text-uppercase letter-spacing-n1 truncate">{currentSession?.title}</h1>
+                  <button
+                    className="btn btn-light btn-sm rounded-circle p-1 border-0 text-muted flex-shrink-0"
+                    style={{ width: 26, height: 26 }}
+                    onClick={() => { setRenameValue(currentSession?.title || ''); setRenamingSessionId(activeSessionId); }}
+                    title="Rename session"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                </div>
+              )}
               <p className="xx-small fw-black text-muted mb-0 uppercase tracking-widest">{stats.present + stats.absent + stats.excused} / {stats.total} MARKED</p>
             </div>
           </div>
@@ -344,7 +417,12 @@ export default function Attendance() {
                 <div className="card-body p-3 d-flex align-items-center gap-3">
                   <div className="flex-grow-1 overflow-hidden">
                     <h6 className="fw-bold mb-0 text-dark text-truncate text-uppercase small letter-spacing-n1">{student.name}</h6>
-                    <div className="xx-small fw-black text-muted font-monospace tracking-widest">{student.regNumber}</div>
+                    <div className="d-flex align-items-center gap-2 mt-1">
+                      <span className="xx-small fw-black text-muted font-monospace tracking-widest">{student.regNumber}</span>
+                      {!status && (
+                        <span className="badge rounded-2 fw-bold" style={{ fontSize: '7px', backgroundColor: 'rgba(108,117,125,0.1)', color: '#6c757d', border: '1px dashed #adb5bd' }}>UNMARKED</span>
+                      )}
+                    </div>
                   </div>
                   <div className="d-flex gap-1 bg-light p-1 rounded-3">
                     <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'present' ? 'bg-success text-white shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.serverId, 'present')}><CheckCircle size={20} /></button>
@@ -370,6 +448,28 @@ export default function Attendance() {
           </div>
         )}
       </div>
+
+      {/* Confirm: Bulk mark */}
+      <ConfirmDialog
+        open={confirmBulkMarkStatus !== null}
+        title={`MARK ALL ${confirmBulkMarkStatus?.toUpperCase()}`}
+        message={`Mark all ${filteredEnrollments.length} displayed student${filteredEnrollments.length !== 1 ? 's' : ''} as ${confirmBulkMarkStatus?.toUpperCase()}?`}
+        confirmLabel="Mark All"
+        variant={confirmBulkMarkStatus === 'present' ? 'primary' : 'danger'}
+        onConfirm={async () => { const s = confirmBulkMarkStatus!; setConfirmBulkMarkStatus(null); await doBulkMark(s); }}
+        onCancel={() => setConfirmBulkMarkStatus(null)}
+      />
+
+      {/* Confirm: Reset records */}
+      <ConfirmDialog
+        open={confirmResetRecords}
+        title="CLEAR ATTENDANCE"
+        message={`Clear attendance for the ${filteredEnrollments.length} displayed student${filteredEnrollments.length !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel="Clear"
+        variant="danger"
+        onConfirm={async () => { setConfirmResetRecords(false); await doResetRecords(); }}
+        onCancel={() => setConfirmResetRecords(false)}
+      />
 
     </div>
   );

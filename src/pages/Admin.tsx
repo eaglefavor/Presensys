@@ -5,8 +5,21 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 
+interface AdminStats {
+  total_users: number;
+  active_reps: number;
+  pending_users: number;
+}
+
+interface AccessCode {
+  id: number;
+  code: string;
+  is_used: boolean;
+  created_at: string;
+}
+
 export default function Admin() {
-  const [codes, setCodes] = useState<any[]>([]);
+  const [codes, setCodes] = useState<AccessCode[]>([]);
   const [stats, setStats] = useState({ totalUsers: 0, activeReps: 0, pendingUsers: 0 });
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
@@ -23,18 +36,19 @@ export default function Admin() {
       toast.error('Failed to load access codes.');
       return;
     }
-    if (data) setCodes(data);
+    if (data) setCodes(data as AccessCode[]);
   };
 
   const fetchStats = async () => {
-    const { count: total, error: e1 } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: verified, error: e2 } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'verified');
-    const { count: pending, error: e3 } = await supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('status', 'pending');
-    if (e1 || e2 || e3) {
+    const { data, error } = await supabase.rpc('get_admin_stats');
+    if (error) {
       toast.error('Failed to load user stats.');
       return;
     }
-    setStats({ totalUsers: total || 0, activeReps: verified || 0, pendingUsers: pending || 0 });
+    if (data) {
+      const s = data as AdminStats;
+      setStats({ totalUsers: s.total_users, activeReps: s.active_reps, pendingUsers: s.pending_users });
+    }
   };
 
   const generateCode = async () => {

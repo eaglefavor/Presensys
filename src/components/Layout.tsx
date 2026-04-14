@@ -81,14 +81,11 @@ const Layout: React.FC = () => {
     return unsubscribe;
   }, [user]);
 
-  // Count unsynced records across all tables
+  // Count unsynced records across all tables using an index-based count (fast)
   const unsyncedCount = useLiveQuery(async () => {
     const tables = [db.semesters, db.students, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords];
-    let total = 0;
-    for (const table of tables) {
-      total += await table.filter((r: any) => r.synced === 0).count();
-    }
-    return total;
+    const counts = await Promise.all(tables.map(t => t.where('synced').equals(0).count()));
+    return counts.reduce((a, b) => a + b, 0);
   }, [], 0);
 
   const navItems = [
@@ -139,7 +136,12 @@ const Layout: React.FC = () => {
               {syncStatus === 'syncing' && <RefreshCw size={18} className="text-primary spin" />}
               {(syncStatus === 'synced' || syncStatus === 'idle') && <CloudSync size={18} style={{ color: 'var(--primary-blue)' }} />}
               {syncStatus === 'offline' && <CloudOff size={18} className="text-muted" />}
-              {syncStatus === 'error' && <CloudOff size={18} className="text-danger" />}
+              {syncStatus === 'error' && (
+                <div className="d-flex flex-column align-items-center" style={{ gap: '1px' }}>
+                  <CloudOff size={16} className="text-danger" />
+                  <span style={{ fontSize: '7px', lineHeight: 1, letterSpacing: '0.5px' }} className="fw-bold text-danger">RETRY</span>
+                </div>
+              )}
               {unsyncedCount > 0 && (
                 <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style={{ fontSize: '8px', minWidth: '16px', padding: '2px 4px' }}>
                   {unsyncedCount > 99 ? '99+' : unsyncedCount}

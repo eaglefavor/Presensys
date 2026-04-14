@@ -5,10 +5,11 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import App from './App.tsx'
 import { useAppStore } from './store/useAppStore'
-import eruda from 'eruda'
 
-if (import.meta.env.MODE === 'development' || window.location.hostname.includes('vercel.app')) {
-  eruda.init();
+// Load the mobile dev-tools console only in development builds.
+// Dynamic import keeps eruda out of the production bundle entirely.
+if (import.meta.env.DEV) {
+  import('eruda').then(({ default: eruda }) => eruda.init());
 }
 
 const Root = () => {

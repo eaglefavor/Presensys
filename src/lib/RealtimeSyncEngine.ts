@@ -37,6 +37,9 @@ const LS_LAST_SYNCED_KEY = 'sync_last_synced_at';
 /** Max outbox attempts before a record is treated as permanently failing. */
 const MAX_OUTBOX_ATTEMPTS = 5;
 
+/** Max rows per pull page — avoids Supabase's 1 000-row default cap. */
+const PULL_PAGE_SIZE = 500;
+
 /** Network-aware debounce (ms) before a triggered sync fires. */
 const DEBOUNCE_MAP: Record<string, number> = {
   '4g': 2000,
@@ -56,8 +59,11 @@ export class RealtimeSyncEngine {
   private isSyncing = false;
   private isInitialized = false;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private retryCount = 0;
   private readonly maxRetries = 3;
+  private readonly HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private currentStatus: SyncStatus = 'idle';
   private statusListeners: ((status: SyncStatus) => void)[] = [];
 
@@ -97,6 +103,14 @@ export class RealtimeSyncEngine {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     this.userId = null;
     this.isInitialized = false;
     this.isSyncing = false;
@@ -120,6 +134,11 @@ export class RealtimeSyncEngine {
     console.log('Sync: Initialized for user', userId);
     await this.sync();
     this.setupRealtimeSubscription();
+
+    // Periodic heartbeat: trigger a sync every 5 minutes so cross-device
+    // changes are picked up even when the user is not interacting with the app.
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(() => this.triggerSync(), this.HEARTBEAT_INTERVAL_MS);
   }
 
   // ─── Private helpers ────────────────────────────────────────────────────────
@@ -178,7 +197,7 @@ export class RealtimeSyncEngine {
         this.retryCount++;
         const backoffMs = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
         console.log(`Sync: Retrying in ${backoffMs}ms (attempt ${this.retryCount}/${this.maxRetries})`);
-        setTimeout(() => this.sync(), backoffMs);
+        this.retryTimer = setTimeout(() => this.sync(), backoffMs);
       } else {
         console.error(`Sync: Max retries (${this.maxRetries}) reached.`);
         this.emitStatus('error');
@@ -206,25 +225,32 @@ export class RealtimeSyncEngine {
       const cursor = localStorage.getItem(cursorKey) ?? EPOCH;
       const isFreshSync = cursor === EPOCH;
 
-      let query = supabase
-        .from(tableName)
-        .select('*')
-        .eq('user_id', this.userId)
-        .gt('updated_at', cursor);
+      let offset = 0;
+      let maxUpdatedAt = '';
 
-      // On a fresh pull, skip tombstones to avoid importing delete-history
-      if (isFreshSync) {
-        query = query.eq('is_deleted', 0);
-      }
+      while (true) {
+        let query = supabase
+          .from(tableName)
+          .select('*')
+          .eq('user_id', this.userId)
+          .gt('updated_at', cursor)
+          .order('updated_at', { ascending: true })
+          .range(offset, offset + PULL_PAGE_SIZE - 1);
 
-      const { data, error } = await query;
+        // On a fresh pull, skip tombstones to avoid importing delete-history
+        if (isFreshSync) {
+          query = query.eq('is_deleted', 0);
+        }
 
-      if (error) {
-        console.error(`Sync: Error pulling ${tableName}`, error);
-        return false;
-      }
+        const { data, error } = await query;
 
-      if (data && data.length > 0) {
+        if (error) {
+          console.error(`Sync: Error pulling ${tableName}`, error);
+          return false;
+        }
+
+        if (!data || data.length === 0) break;
+
         await db.transaction('rw', dexieTable, async () => {
           for (const serverRow of data) {
             const localItem = await dexieTable.where('serverId').equals(serverRow.id).first();
@@ -248,21 +274,21 @@ export class RealtimeSyncEngine {
           }
         });
 
-        // Advance per-table cursor to max(updated_at) from the received batch.
-        // Using server-supplied timestamps eliminates client-clock skew entirely.
-        const maxUpdatedAt = (data as any[]).reduce((best: string, row: any) => {
+        // Advance per-table cursor to max(updated_at) from this batch.
+        const batchMax = (data as any[]).reduce((best: string, row: any) => {
           const ts: string = row.updated_at ?? '';
           return ts > best ? ts : best;
         }, '');
-        if (maxUpdatedAt) {
-          localStorage.setItem(cursorKey, maxUpdatedAt);
-        }
-      } else if (!isFreshSync) {
-        // No new records — the cursor is still valid; nothing to advance.
-        // (Avoid bumping to "now" here; use only server-supplied timestamps.)
-      } else {
-        // Fresh sync, zero records → mark as synced from epoch so we don't
-        // re-request everything on every subsequent sync.
+        if (batchMax > maxUpdatedAt) maxUpdatedAt = batchMax;
+
+        if (data.length < PULL_PAGE_SIZE) break; // last page
+        offset += PULL_PAGE_SIZE;
+      }
+
+      if (maxUpdatedAt) {
+        localStorage.setItem(cursorKey, maxUpdatedAt);
+      } else if (isFreshSync) {
+        // Fresh sync with zero records → mark as done so we don't re-request everything.
         localStorage.setItem(cursorKey, new Date().toISOString());
       }
 
@@ -275,29 +301,31 @@ export class RealtimeSyncEngine {
       pull('semesters', db.semesters, (s) => ({
         serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
         isActive: s.is_active, isArchived: s.is_archived,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at,
+        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
       })),
       pull('students', db.students, (s) => ({
         serverId: s.id, regNumber: s.reg_number, name: s.name,
         email: s.email, phone: s.phone,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at,
+        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
       })),
       pull('courses', db.courses, (c) => ({
         serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
-        userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at,
+        userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
       })),
       pull('enrollments', db.enrollments, (e) => ({
         serverId: e.id, studentId: e.student_id, courseId: e.course_id,
-        userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at,
+        userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
       })),
       pull('attendance_sessions', db.attendanceSessions, (s) => ({
         serverId: s.id, courseId: s.course_id, date: s.date, title: s.title,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at,
+        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
       })),
       pull('attendance_records', db.attendanceRecords, (r) => ({
         serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
-        status: r.status, timestamp: r.marked_at,
-        userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at,
+        status: r.status,
+        // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
+        timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
+        userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
       })),
     ]);
   }
@@ -372,7 +400,8 @@ export class RealtimeSyncEngine {
         session_id: item.sessionId,
         student_id: item.studentId,
         status: item.status,
-        marked_at: item.timestamp,
+        // Always push as ISO string — works with both BIGINT (legacy) and TIMESTAMPTZ columns
+        marked_at: new Date(item.timestamp).toISOString(),
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
@@ -698,16 +727,16 @@ export class RealtimeSyncEngine {
       if (toPurge.length > 0) await table.bulkDelete(toPurge);
     }
 
-    // Remove attendance records synced over 30 days ago (local storage management)
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    // Remove attendance records synced over 180 days ago (keeps an entire semester in cache)
+    const sixMonthsAgo = Date.now() - 180 * 24 * 60 * 60 * 1000;
     const oldRecordKeys: number[] = await db.attendanceRecords
-      .filter(r => r.synced === 1 && r.timestamp < thirtyDaysAgo)
+      .filter(r => r.synced === 1 && r.timestamp < sixMonthsAgo)
       .primaryKeys();
     if (oldRecordKeys.length > 0) await db.attendanceRecords.bulkDelete(oldRecordKeys);
 
-    // Remove sessions > 30 days old that have no local attendance records remaining
+    // Remove sessions > 180 days old that have no local attendance records remaining
     const oldSessions = await db.attendanceSessions
-      .filter(s => s.synced === 1 && new Date(s.date).getTime() < thirtyDaysAgo)
+      .filter(s => s.synced === 1 && new Date(s.date).getTime() < sixMonthsAgo)
       .toArray();
     for (const session of oldSessions) {
       const localCount = await db.attendanceRecords.where('sessionId').equals(session.serverId).count();
@@ -728,8 +757,10 @@ export class RealtimeSyncEngine {
     if (!this.userId) return;
     if (this.channel) this.channel.unsubscribe();
 
+    // Use a unique channel name per engine instance to avoid duplicate handlers
+    // when multiple browser tabs are open with the same account.
     this.channel = supabase
-      .channel('db_changes')
+      .channel(`db_changes_${this.userId}_${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_records', db.attendanceRecords, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_sessions', db.attendanceSessions, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('students', db.students, payload))
@@ -801,7 +832,11 @@ export class RealtimeSyncEngine {
       case 'attendance_sessions':
         return { ...base, courseId: r.course_id, date: r.date, title: r.title };
       case 'attendance_records':
-        return { ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status, timestamp: r.marked_at };
+        return {
+          ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status,
+          // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
+          timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
+        };
       default:
         return base;
     }

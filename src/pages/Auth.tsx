@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
-import { Mail, Lock, User, ChevronRight, Info, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, User, ChevronRight, Info, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function Auth() {
@@ -15,6 +15,7 @@ export default function Auth() {
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   useEffect(() => {
     setIsLogin(location.pathname !== '/signup');
@@ -24,6 +25,12 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+
+    if (!isLogin && password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      setLoading(false);
+      return;
+    }
 
     if (isLogin) {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -63,6 +70,25 @@ export default function Auth() {
     if (error) setError(error.message);
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      toast.error('Enter your email address above first.');
+      return;
+    }
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    setLoading(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('Password reset email sent! Check your inbox.');
+      setShowForgotPassword(false);
+    }
+  };
+
   return (
     <div className="auth-page animate-in">
       <div className="auth-hero text-center py-5 px-4 text-white shadow-lg mb-4">
@@ -92,102 +118,153 @@ export default function Auth() {
 
         <div className="auth-card card border-0 shadow-xl rounded-5 overflow-hidden mb-4">
           <div className="card-body p-4">
-            
-            {/* Google First Section */}
-            <div className="position-relative mb-4">
-              <button 
-                className="btn btn-google-premium w-100 py-3 rounded-4 shadow-sm"
-                onClick={handleGoogleLogin}
-              >
-                <div className="google-icon-box me-3">
-                  <svg viewBox="0 0 24 24" width="20" height="20">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                  </svg>
-                </div>
-                <span className="fw-bold">Continue with Google</span>
-                <span className="faster-tag">Faster</span>
-              </button>
-            </div>
 
-            <div className="separator mb-4">
-              <span className="separator-text px-3 text-uppercase">or email access</span>
-            </div>
-
-            <form onSubmit={handleAuth}>
-              {error && (
-                <div className="alert alert-danger border-0 rounded-3 small py-2 mb-3 d-flex align-items-center gap-2">
-                  <div className="bg-danger rounded-circle p-1" style={{width: '6px', height: '6px'}}></div>
-                  {error}
-                </div>
-              )}
-              
-              {!isLogin && (
-                <div className="mb-3">
-                  <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Full Name</label>
-                  <div className="input-group modern-input-unified">
-                    <span className="input-group-text"><User size={18} /></span>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      placeholder="John Doe"
-                      required={!isLogin}
-                      value={fullName}
-                      onChange={e => setFullName(e.target.value)}
-                    />
+            {showForgotPassword ? (
+              /* ── Forgot Password Panel ── */
+              <div>
+                <button
+                  type="button"
+                  className="btn btn-link text-muted fw-bold xx-small p-0 mb-3 d-flex align-items-center gap-1 text-decoration-none"
+                  onClick={() => setShowForgotPassword(false)}
+                >
+                  <ArrowLeft size={14} /> Back to sign in
+                </button>
+                <h5 className="fw-black text-dark mb-1 letter-spacing-n1">RESET PASSWORD</h5>
+                <p className="xx-small fw-bold text-muted text-uppercase tracking-widest mb-4">
+                  We'll send a reset link to your email
+                </p>
+                <form onSubmit={handleForgotPassword}>
+                  <div className="mb-4">
+                    <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">University Email</label>
+                    <div className="input-group modern-input-unified">
+                      <span className="input-group-text"><Mail size={18} /></span>
+                      <input
+                        type="email"
+                        className="form-control"
+                        placeholder="name@email.com"
+                        required
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-
-              <div className="mb-3">
-                <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">University Email</label>
-                <div className="input-group modern-input-unified">
-                  <span className="input-group-text"><Mail size={18} /></span>
-                  <input 
-                    type="email" 
-                    className="form-control" 
-                    placeholder="name@email.com"
-                    required
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                  />
-                </div>
+                  <button className="btn btn-primary-unified w-100 py-3 rounded-4 fw-bold shadow-lg d-flex align-items-center justify-content-center gap-2" disabled={loading}>
+                    {loading ? <div className="spinner-border spinner-border-sm" role="status" /> : <>Send Reset Link <ChevronRight size={18} /></>}
+                  </button>
+                </form>
               </div>
-
-              <div className="mb-4">
-                <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Password</label>
-                <div className="input-group modern-input-unified">
-                  <span className="input-group-text"><Lock size={18} /></span>
-                  <input 
-                    type="password" 
-                    className="form-control" 
-                    placeholder="••••••••"
-                    required
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                  />
+            ) : (
+              <>
+                {/* Google First Section */}
+                <div className="position-relative mb-4">
+                  <button 
+                    className="btn btn-google-premium w-100 py-3 rounded-4 shadow-sm"
+                    onClick={handleGoogleLogin}
+                  >
+                    <div className="google-icon-box me-3">
+                      <svg viewBox="0 0 24 24" width="20" height="20">
+                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                        <path fill="#FBBC05" d="M5.84 14.1c-.22-.66-.35-1.36-.35-2.1s.13-1.44.35-2.1V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l3.66-2.84z"/>
+                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.66l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+                      </svg>
+                    </div>
+                    <span className="fw-bold">Continue with Google</span>
+                    <span className="faster-tag">Faster</span>
+                  </button>
                 </div>
-              </div>
 
-              {!isLogin && (
-                <div className="bg-light p-3 rounded-4 mb-4 d-flex gap-3 align-items-start border border-light">
-                  <Info size={18} className="text-primary mt-1 flex-shrink-0" />
-                  <p className="xx-small text-muted mb-0 fw-bold">
-                    New accounts require an <strong>Access Code</strong> from the Admin for dashboard activation.
-                  </p>
+                <div className="separator mb-4">
+                  <span className="separator-text px-3 text-uppercase">or email access</span>
                 </div>
-              )}
 
-              <button className="btn btn-primary-unified w-100 py-3 rounded-4 fw-bold shadow-lg d-flex align-items-center justify-content-center gap-2" disabled={loading}>
-                {loading ? (
-                  <div className="spinner-border spinner-border-sm" role="status"></div>
-                ) : (
-                  <>{isLogin ? 'Sign In' : 'Create Account'} <ChevronRight size={18} /></>
-                )}
-              </button>
-            </form>
+                <form onSubmit={handleAuth}>
+                  {error && (
+                    <div className="alert alert-danger border-0 rounded-3 small py-2 mb-3 d-flex align-items-center gap-2">
+                      <div className="bg-danger rounded-circle p-1" style={{width: '6px', height: '6px'}}></div>
+                      {error}
+                    </div>
+                  )}
+                  
+                  {!isLogin && (
+                    <div className="mb-3">
+                      <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Full Name</label>
+                      <div className="input-group modern-input-unified">
+                        <span className="input-group-text"><User size={18} /></span>
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          placeholder="John Doe"
+                          required={!isLogin}
+                          value={fullName}
+                          onChange={e => setFullName(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">University Email</label>
+                    <div className="input-group modern-input-unified">
+                      <span className="input-group-text"><Mail size={18} /></span>
+                      <input 
+                        type="email" 
+                        className="form-control" 
+                        placeholder="name@email.com"
+                        required
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <label className="form-label x-small fw-bold text-uppercase text-muted ps-1 mb-1">Password</label>
+                    <div className="input-group modern-input-unified">
+                      <span className="input-group-text"><Lock size={18} /></span>
+                      <input 
+                        type="password" 
+                        className="form-control" 
+                        placeholder="••••••••"
+                        required
+                        minLength={isLogin ? undefined : 8}
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  {isLogin && (
+                    <div className="text-end mb-3">
+                      <button
+                        type="button"
+                        className="btn btn-link text-muted xx-small fw-bold p-0 text-decoration-none"
+                        onClick={() => setShowForgotPassword(true)}
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                  )}
+
+                  {!isLogin && (
+                    <div className="bg-light p-3 rounded-4 mb-4 d-flex gap-3 align-items-start border border-light">
+                      <Info size={18} className="text-primary mt-1 flex-shrink-0" />
+                      <p className="xx-small text-muted mb-0 fw-bold">
+                        New accounts require an <strong>Access Code</strong> from the Admin for dashboard activation.
+                      </p>
+                    </div>
+                  )}
+
+                  <button className="btn btn-primary-unified w-100 py-3 rounded-4 fw-bold shadow-lg d-flex align-items-center justify-content-center gap-2" disabled={loading}>
+                    {loading ? (
+                      <div className="spinner-border spinner-border-sm" role="status"></div>
+                    ) : (
+                      <>{isLogin ? 'Sign In' : 'Create Account'} <ChevronRight size={18} /></>
+                    )}
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </div>
       </div>

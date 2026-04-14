@@ -27,8 +27,16 @@ export const useAppStore = create<AppState>((set) => ({
         if (currentSemester) {
           console.log('Auto-Activating Semester:', currentSemester.name);
           await db.transaction('rw', db.semesters, async () => {
-            await db.semesters.toCollection().modify({ isActive: false });
-            await db.semesters.update(currentSemester.id!, { isActive: true, synced: 0 });
+            // Only touch the previously-active semester — not every row in the table.
+            // Modifying all rows would mark them all as unsynced and push redundant
+            // updates on every app launch.
+            const prevActive = await db.semesters
+              .filter(s => s.isActive && s.id !== currentSemester.id)
+              .first();
+            if (prevActive) {
+              await db.semesters.update(prevActive.id!, { isActive: false });
+            }
+            await db.semesters.update(currentSemester.id!, { isActive: true });
           });
           active = currentSemester;
         }

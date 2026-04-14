@@ -86,7 +86,7 @@ export default function Students() {
 
   const doStudentDelete = async (student: Student) => {
     await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
-      await db.students.update(student.id!, { isDeleted: 1, synced: 0 });
+      await db.students.update(student.id!, { isDeleted: 1 });
       await db.enrollments.where('studentId').equals(student.serverId).modify({ isDeleted: 1, synced: 0 });
       await db.attendanceRecords.where('studentId').equals(student.serverId).modify({ isDeleted: 1, synced: 0 });
     });
@@ -138,7 +138,7 @@ export default function Students() {
       toast.error('Reg Number must be exactly 10 digits.');
       return;
     }
-    await db.students.update(selectedStudent.id!, { name: editForm.name, regNumber: editForm.regNumber, userId: user?.id, synced: 0 });
+    await db.students.update(selectedStudent.id!, { name: editForm.name, regNumber: editForm.regNumber, userId: user?.id });
     setIsEditing(false);
     setSelectedStudent(null);
   };
@@ -261,9 +261,9 @@ export default function Students() {
             await db.students.add({ ...s, userId: user.id, synced: 0 });
           } else if (existing.isDeleted === 1) {
             // Resurrect soft-deleted student: preserve their serverId (canonical UUID)
-            await db.students.update(existing.id!, { name: s.name, isDeleted: 0, userId: user.id, synced: 0 });
+            await db.students.update(existing.id!, { name: s.name, isDeleted: 0, userId: user.id });
           } else {
-            await db.students.update(existing.id!, { name: s.name, userId: user.id, synced: 0 });
+            await db.students.update(existing.id!, { name: s.name, userId: user.id });
           }
         }
       });
