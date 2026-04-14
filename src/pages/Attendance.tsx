@@ -133,7 +133,7 @@ export default function Attendance() {
         .toArray();
       
       const existingIds = new Set(existing.map(r => r.studentId));
-      const toUpdate = existing.map(r => ({ key: r.id!, changes: { status, timestamp: now } }));
+      const toUpdate = existing.map(r => ({ key: r.id!, changes: { status, timestamp: now, synced: 0 } }));
       
       const toAdd = studentIds
         .filter((id: string) => !existingIds.has(id))
@@ -166,7 +166,7 @@ export default function Attendance() {
         .filter(r => studentIds.includes(r.studentId) && r.isDeleted !== 1)
         .primaryKeys();
     if (toClear.length > 0) {
-        await db.attendanceRecords.bulkUpdate(toClear.map(k => ({ key: k as number, changes: { isDeleted: 1 } })));
+        await db.attendanceRecords.bulkUpdate(toClear.map(k => ({ key: k as number, changes: { isDeleted: 1, synced: 0 } })));
     }
   };
 

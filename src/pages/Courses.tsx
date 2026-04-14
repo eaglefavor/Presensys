@@ -108,7 +108,7 @@ export default function Courses() {
     e.preventDefault();
     if (!activeSemester || !user) return;
     if (isEditing) {
-      await db.courses.update(courseForm.id, { code: courseForm.code, title: courseForm.title, synced: 0 });
+      await db.courses.update(courseForm.id, { code: courseForm.code, title: courseForm.title });
       setIsEditing(false);
     } else {
       await db.courses.add({
@@ -243,10 +243,10 @@ export default function Courses() {
     if (!course) return;
 
     await db.transaction('rw', [db.courses, db.enrollments], async () => {
-      await db.courses.update(id, { isDeleted: 1, synced: 0 });
+      await db.courses.update(id, { isDeleted: 1 });
       const enrollments = await db.enrollments.where('courseId').equals(course.serverId).toArray();
       for (const enrollment of enrollments) {
-        await db.enrollments.update(enrollment.id!, { isDeleted: 1, synced: 0 });
+        await db.enrollments.update(enrollment.id!, { isDeleted: 1 });
       }
     });
   };

@@ -39,17 +39,27 @@ export default function Dashboard() {
   const attendanceStats = useLiveQuery(async () => {
     if (!activeSemester) return null;
     const courses = await db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray();
-    const statsList = [];
-    for (const course of courses) {
-      const sessions = await db.attendanceSessions.where('courseId').equals(course.serverId).filter(s => s.isDeleted !== 1).toArray();
-      const sessionIds = sessions.map(s => s.serverId);
-      const records = await db.attendanceRecords.where('sessionId').anyOf(sessionIds).filter(r => r.isDeleted !== 1).toArray();
-      const presentCount = records.filter(r => r.status === 'present').length;
-      const totalPossible = records.length;
+    if (courses.length === 0) return [];
+
+    // Flat queries: fetch all sessions and records for all courses in two round-trips
+    const courseIds = courses.map(c => c.serverId);
+    const sessions = await db.attendanceSessions.where('courseId').anyOf(courseIds).filter(s => s.isDeleted !== 1).toArray();
+
+    const sessionIds = sessions.map(s => s.serverId);
+    const records = sessionIds.length > 0
+      ? await db.attendanceRecords.where('sessionId').anyOf(sessionIds).filter(r => r.isDeleted !== 1).toArray()
+      : [];
+
+    // Group in memory — O(n) per course with a Set lookup
+    return courses.map(course => {
+      const courseSessions = sessions.filter(s => s.courseId === course.serverId);
+      const courseSessionIdSet = new Set(courseSessions.map(s => s.serverId));
+      const courseRecords = records.filter(r => courseSessionIdSet.has(r.sessionId));
+      const presentCount = courseRecords.filter(r => r.status === 'present').length;
+      const totalPossible = courseRecords.length;
       const percentage = totalPossible > 0 ? (presentCount / totalPossible) * 100 : 100;
-      statsList.push({ ...course, percentage, totalSessions: sessions.length });
-    }
-    return statsList;
+      return { ...course, percentage, totalSessions: courseSessions.length };
+    });
   }, [activeSemester]);
 
   const avgAttendance = useMemo(() => {
