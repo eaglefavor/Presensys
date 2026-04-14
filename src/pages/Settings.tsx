@@ -61,8 +61,8 @@ export default function Settings() {
 
   const handlePasswordUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPassword || newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters.');
+    if (!newPassword || newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters.');
       return;
     }
     if (newPassword !== confirmPassword) {

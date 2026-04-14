@@ -377,6 +377,10 @@ export default function Archives() {
     }
 
     // Fall back to Supabase for historical data not yet in local DB
+    if (!navigator.onLine) {
+      toast.error('No local records found. Connect to the internet to load historical data.');
+      return [];
+    }
     const { data: records, error } = await supabase
       .from('attendance_records')
       .select('status, marked_at, attendance_sessions (date, title, courses (code, title))')
@@ -585,6 +589,7 @@ export default function Archives() {
     }
 
     // Fall back to Supabase for historical data not yet in local DB
+    if (!navigator.onLine) { return []; }
     const { data: sessions, error: sessErr } = await supabase
       .from('attendance_sessions').select('id, date, title')
       .eq('course_id', courseId).eq('is_deleted', 0)
@@ -749,6 +754,7 @@ export default function Archives() {
     }
 
     // Fall back to Supabase for historical data
+    if (!navigator.onLine) { toast.error('Session data requires an internet connection.'); setLoading(false); return; }
     const [sessRes, enrollRes] = await Promise.all([
       supabase.from('attendance_sessions').select('id, date, title')
         .eq('course_id', sessionsCourseId).eq('is_deleted', 0)
@@ -809,6 +815,7 @@ export default function Archives() {
     }
 
     // Fall back to Supabase
+    if (!navigator.onLine) { setRollCallLoading(null); return; }
     const { data: records } = await supabase
       .from('attendance_records')
       .select('status, students (name, reg_number)')
