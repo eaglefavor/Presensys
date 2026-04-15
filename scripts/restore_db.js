@@ -64,7 +64,7 @@ function runQuery(filePath) {
       res.on('data', (chunk) => { data += chunk; });
       res.on('end', () => {
         if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(data || 'OK');
+          resolve('Done');
         } else {
           reject(new Error(`HTTP ${res.statusCode}: ${data}`));
         }
