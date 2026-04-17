@@ -12,6 +12,9 @@
 -- Run this once in the Supabase SQL Editor.
 -- ============================================================
 
+-- Drop any existing version first so we can change the return type if needed.
+DROP FUNCTION IF EXISTS public.verify_access_code(TEXT);
+
 CREATE OR REPLACE FUNCTION public.verify_access_code(input_code TEXT)
 RETURNS jsonb
 LANGUAGE plpgsql
