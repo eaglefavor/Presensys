@@ -11,7 +11,7 @@
 SELECT au.id, au.email, p.role, p.status
 FROM auth.users au
 LEFT JOIN public.profiles p ON p.id = au.id
-WHERE au.email = 'you@example.com';  -- ← replace with your email
+WHERE au.email = 'd.chukwudebelu@stu.unizik.edu.ng';  -- ← replace with your email
 
 
 -- Step 2: Promote that user to admin + verified
@@ -21,7 +21,7 @@ SET role   = 'admin',
     status = 'verified',
     invalid_tries = 0
 WHERE id = (
-  SELECT id FROM auth.users WHERE email = 'you@example.com'  -- ← replace
+  SELECT id FROM auth.users WHERE email = 'd.chukwudebelu@stu.unizik.edu.ng'  -- ← replace
 );
 
 
