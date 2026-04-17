@@ -34,7 +34,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: true,
   
   setSession: async (session) => {
-    set({ session, user: session?.user ?? null });
+    // Keep loading=true while the profile is being fetched so that App never
+    // renders the route guard with a null profile (which would incorrectly show
+    // VerifyAccess to already-verified/admin accounts).
+    set({ session, user: session?.user ?? null, loading: !!session });
     
     if (session) {
       await get().fetchProfile();
