@@ -30,21 +30,29 @@ export default function VerifyAccess() {
         setMessage(error.message);
         setIsError(true);
       } else if (data.success) {
-        console.log('[VerifyAccess] Code accepted – refreshing profile…');
+        console.log('[VerifyAccess] Code accepted – updating profile…');
         setMessage('Account verified! Setting up your dashboard…');
         setIsError(false);
-        // Force a re-fetch of the profile to update the global state
-        await useAuthStore.getState().fetchProfile();
-        const refreshedStatus = useAuthStore.getState().profile?.status;
-        console.log('[VerifyAccess] Profile refreshed, status:', refreshedStatus);
-        if (refreshedStatus !== 'verified') {
-          // fetchProfile() did not update the status (stale cache, transient network
-          // error, etc.) – force a full page reload so the session bootstrap re-runs
-          // and correctly routes the now-verified user to the dashboard.
-          window.location.reload();
+        // Apply an optimistic update directly in the store rather than re-fetching
+        // from the DB.  A re-fetch can return stale 'pending' data when the Supabase
+        // read replica hasn't caught up with the RPC's UPDATE yet, which causes
+        // refreshedStatus !== 'verified' and triggers a reload loop.
+        // Trusting the SECURITY DEFINER RPC result is safe: if it returned
+        // { success: true }, the primary DB row is already committed as 'verified'.
+        const currentProfile = useAuthStore.getState().profile;
+        if (currentProfile) {
+          const verifiedProfile = { ...currentProfile, status: 'verified' as const, invalid_tries: 0 };
+          localStorage.setItem('user_profile', JSON.stringify(verifiedProfile));
+          useAuthStore.setState({ profile: verifiedProfile, profileVerified: true });
+          // App.tsx's reactive route guard now sees status === 'verified' and
+          // automatically switches to <Layout /> without any explicit navigation.
+        } else {
+          // Profile wasn't in the store (very unusual) — fall back to server fetch.
+          await useAuthStore.getState().fetchProfile();
+          if (useAuthStore.getState().profile?.status !== 'verified') {
+            window.location.reload();
+          }
         }
-        // If status is already 'verified', App.tsx's reactive route guard will
-        // automatically switch to <Layout /> without any explicit navigation.
       } else {
         console.warn('[VerifyAccess] Code rejected:', data.message);
         setMessage(data.message);
