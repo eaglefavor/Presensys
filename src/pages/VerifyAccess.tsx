@@ -31,9 +31,20 @@ export default function VerifyAccess() {
         setIsError(true);
       } else if (data.success) {
         console.log('[VerifyAccess] Code accepted – refreshing profile…');
+        setMessage('Account verified! Setting up your dashboard…');
+        setIsError(false);
         // Force a re-fetch of the profile to update the global state
         await useAuthStore.getState().fetchProfile();
-        console.log('[VerifyAccess] Profile refreshed, status:', useAuthStore.getState().profile?.status);
+        const refreshedStatus = useAuthStore.getState().profile?.status;
+        console.log('[VerifyAccess] Profile refreshed, status:', refreshedStatus);
+        if (refreshedStatus !== 'verified') {
+          // fetchProfile() did not update the status (stale cache, transient network
+          // error, etc.) – force a full page reload so the session bootstrap re-runs
+          // and correctly routes the now-verified user to the dashboard.
+          window.location.reload();
+        }
+        // If status is already 'verified', App.tsx's reactive route guard will
+        // automatically switch to <Layout /> without any explicit navigation.
       } else {
         console.warn('[VerifyAccess] Code rejected:', data.message);
         setMessage(data.message);
