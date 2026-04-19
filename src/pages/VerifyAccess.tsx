@@ -17,17 +17,17 @@ export default function VerifyAccess() {
     setMessage(null);
 
     try {
-      console.log('[VerifyAccess] Calling verify_access_code RPC with code:', code);
+      console.log('[VerifyAccess] Calling verify_access_code RPC…');
       const { data, error } = await supabase.rpc('verify_access_code', { input_code: code });
-      console.log('[VerifyAccess] RPC response → data:', data, '| error:', error);
+      console.log('[VerifyAccess] RPC response → error:', error, '| data:', data);
 
-      if (error) {
+      if (!data) {
+        console.error('[VerifyAccess] RPC returned null/undefined data. error:', error);
+        setMessage(error?.message ?? 'Unexpected server response. Please try again.');
+        setIsError(true);
+      } else if (error) {
         console.error('[VerifyAccess] RPC error:', error);
         setMessage(error.message);
-        setIsError(true);
-      } else if (!data) {
-        console.error('[VerifyAccess] RPC returned null/undefined data');
-        setMessage('Unexpected server response. Please try again.');
         setIsError(true);
       } else if (data.success) {
         console.log('[VerifyAccess] Code accepted – refreshing profile…');
