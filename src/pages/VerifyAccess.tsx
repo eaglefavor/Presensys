@@ -16,25 +16,42 @@ export default function VerifyAccess() {
     setLoading(true);
     setMessage(null);
 
-    const { data, error } = await supabase.rpc('verify_access_code', { input_code: code });
+    try {
+      console.log('[VerifyAccess] Calling verify_access_code RPC…');
+      const { data, error } = await supabase.rpc('verify_access_code', { input_code: code });
+      console.log('[VerifyAccess] RPC response → error:', error, '| data:', data);
 
-    if (error) {
-      setMessage(error.message);
-      setIsError(true);
-    } else {
-      if (data.success) {
+      if (!data) {
+        console.error('[VerifyAccess] RPC returned null/undefined data. error:', error);
+        setMessage(error?.message ?? 'Unexpected server response. Please try again.');
+        setIsError(true);
+      } else if (error) {
+        console.error('[VerifyAccess] RPC error:', error);
+        setMessage(error.message);
+        setIsError(true);
+      } else if (data.success) {
+        console.log('[VerifyAccess] Code accepted – refreshing profile…');
         // Force a re-fetch of the profile to update the global state
         await useAuthStore.getState().fetchProfile();
+        console.log('[VerifyAccess] Profile refreshed, status:', useAuthStore.getState().profile?.status);
       } else {
+        console.warn('[VerifyAccess] Code rejected:', data.message);
         setMessage(data.message);
         setIsError(true);
+        // Refresh the profile so the invalid_tries counter stays in sync with the DB
+        await useAuthStore.getState().fetchProfile();
         if (data.message.includes('terminated')) {
           // The profile will reflect 'terminated' status; sign the user out
           // so they cannot re-enter the code entry screen on reload.
           setTimeout(() => useAuthStore.getState().signOut(), 2000);
         }
       }
+    } catch (err) {
+      console.error('[VerifyAccess] Unexpected error in handleVerify:', err);
+      setMessage('An unexpected error occurred. Please try again.');
+      setIsError(true);
     }
+
     setLoading(false);
   };
 
