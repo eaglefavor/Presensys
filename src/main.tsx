@@ -6,11 +6,8 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js'
 import App from './App.tsx'
 import { useAppStore } from './store/useAppStore'
 
-// Load the mobile dev-tools console only in development builds.
-// Dynamic import keeps eruda out of the production bundle entirely.
-if (import.meta.env.DEV) {
-  import('eruda').then(({ default: eruda }) => eruda.init());
-}
+// Load the mobile dev-tools console so console output is visible in the browser.
+import('eruda').then(({ default: eruda }) => eruda.init());
 
 const Root = () => {
   const initialize = useAppStore(state => state.initialize);
