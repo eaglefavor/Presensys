@@ -37,25 +37,28 @@ CREATE POLICY "Users update own profile"
 -- ----------------------------------------------------------------
 -- 3. ACCESS_CODES — only admins can read/write
 -- ----------------------------------------------------------------
+
+-- Ensure is_admin() helper exists
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+      AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
 DROP POLICY IF EXISTS "Enable all access for now" ON access_codes;
 DROP POLICY IF EXISTS "Admins manage access codes" ON access_codes;
 
 CREATE POLICY "Admins manage access codes"
   ON access_codes FOR ALL
-  USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-        AND profiles.role = 'admin'
-    )
-  )
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-        AND profiles.role = 'admin'
-    )
-  );
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
 
 -- ----------------------------------------------------------------
 -- 4. CORE TABLES — replace permissive FOR ALL with split policies
