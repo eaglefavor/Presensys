@@ -40,6 +40,33 @@ function App() {
   const normalizedRole = profile?.role?.trim().toLowerCase();
   const normalizedStatus = profile?.status?.trim().toLowerCase();
 
+  // ─── Route-guard diagnostic logging ────────────────────────────────────────
+  useEffect(() => {
+    console.group('%c[App] Route-guard state', 'color:#16a085;font-weight:bold');
+    console.log('loading        :', loading);
+    console.log('session        :', session ? `✅ (user=${session.user?.email})` : '❌ null');
+    console.log('profileVerified:', profileVerified);
+    console.log('profile        :', profile ? { id: profile.id, role: profile.role, status: profile.status, invalid_tries: profile.invalid_tries } : null);
+    console.log('normalizedRole :', normalizedRole ?? 'undefined');
+    console.log('normalizedStatus:', normalizedStatus ?? 'undefined');
+    if (!loading) {
+      if (!session) {
+        console.log('→ ROUTE: /login (no session)');
+      } else if (normalizedRole === 'admin') {
+        console.log('→ ROUTE: <Layout /> (admin role)');
+      } else if (normalizedStatus === 'verified') {
+        console.log('→ ROUTE: <Layout /> (status=verified)');
+      } else {
+        console.log('→ ROUTE: <VerifyAccess /> — status is', normalizedStatus ?? 'undefined');
+        if (!profile) {
+          console.error('⚠️  profile is NULL — user will be stuck on VerifyAccess. Check if the profiles trigger ran.');
+        }
+      }
+    }
+    console.groupEnd();
+  }, [loading, session, profile, profileVerified, normalizedRole, normalizedStatus]);
+  // ────────────────────────────────────────────────────────────────────────────
+
   // Automatically sync active semester from DB to Store whenever it changes
   const activeSemesterFromDB = useLiveQuery(
     () => db.semesters.filter(s => s.isActive).first()
@@ -59,6 +86,11 @@ function App() {
     // VerifyAccess and overwrite it with stale "pending" replica data,
     // sending the user back to the Activation Required page.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.group('%c[App] onAuthStateChange event', 'color:#2471a3;font-weight:bold');
+      console.log('event  :', event);
+      console.log('session:', session ? `✅ user=${session.user?.email}` : '❌ null');
+      console.groupEnd();
+
       if (event === 'TOKEN_REFRESHED') {
         // Token was silently refreshed; the user and profile are unchanged.
         // Only update the stored session tokens — avoid triggering a full
