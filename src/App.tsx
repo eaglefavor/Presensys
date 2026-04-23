@@ -37,6 +37,8 @@ function PageLoader() {
 function App() {
   const { session, profile, profileVerified, loading, setSession } = useAuthStore();
   const setActiveSemester = useAppStore(state => state.setActiveSemester);
+  const normalizedRole = profile?.role?.trim().toLowerCase();
+  const normalizedStatus = profile?.status?.trim().toLowerCase();
 
   // Automatically sync active semester from DB to Store whenever it changes
   const activeSemesterFromDB = useLiveQuery(
@@ -94,8 +96,8 @@ function App() {
           {/* Protected Routes */}
           <Route path="/" element={
             !session ? <Navigate to="/login" /> :
-              profile?.role?.toLowerCase() === 'admin' ? <Layout /> :
-                profile?.status?.toLowerCase() === 'verified' ? <Layout /> :
+              normalizedRole === 'admin' ? <Layout /> :
+                normalizedStatus === 'verified' ? <Layout /> :
                   <VerifyAccess />
           }>
             <Route index element={<Dashboard />} />
@@ -107,7 +109,7 @@ function App() {
             <Route path="settings" element={<Settings />} />
 
             {/* Admin only route — requires server-confirmed profile to prevent localStorage spoofing */}
-            {profileVerified && profile?.role === 'admin' && (
+            {profileVerified && normalizedRole === 'admin' && (
               <Route path="admin" element={<Admin />} />
             )}
           </Route>

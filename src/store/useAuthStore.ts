@@ -69,7 +69,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .from('profiles')
       .select('*')
       .eq('id', user.id)
-      .single();
+      .limit(1)
+      .maybeSingle();
     
     if (error) {
       // Offline or network failure — keep the cached profile for offline use but
