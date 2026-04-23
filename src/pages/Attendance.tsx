@@ -5,7 +5,7 @@ import {
   CheckCircle, XCircle, HelpCircle, 
   RotateCcw, Settings2, Book, ChevronRight, ArrowLeft, Clock, Download, Share2, FileText, FileSpreadsheet, Pencil, Check
 } from 'lucide-react';
-import { db } from '../db/db';
+import { db, type LocalAttendanceRecord } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -74,6 +74,7 @@ export default function Attendance() {
   // Confirm dialog state
   const [confirmBulkMarkStatus, setConfirmBulkMarkStatus] = useState<'present' | 'absent' | null>(null);
   const [confirmResetRecords, setConfirmResetRecords] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Record<string, 'present' | 'absent' | 'excused' | 'reset'>>({});
 
   const handleCreateSession = async () => {
     if (!selectedCourseId || !user) return;
@@ -93,25 +94,7 @@ export default function Attendance() {
 
   const updateRecord = async (studentId: string, status: 'present' | 'absent' | 'excused') => {
     if (!activeSessionId || !user) return;
-    // Exclude soft-deleted records so we never revive a tombstone by updating it
-    const existing = await db.attendanceRecords
-      .where('[sessionId+studentId]').equals([activeSessionId, studentId])
-      .filter(r => r.isDeleted !== 1)
-      .first();
-    if (existing) {
-      await db.attendanceRecords.update(existing.id!, { status, timestamp: Date.now() });
-    } else {
-      await db.attendanceRecords.add({ 
-        serverId: '',
-        sessionId: activeSessionId, 
-        studentId, 
-        status, 
-        timestamp: Date.now(), 
-        synced: 0, 
-        userId: user.id,
-        isDeleted: 0
-      });
-    }
+    setPendingChanges(prev => ({ ...prev, [studentId]: status }));
     if (window.navigator.vibrate) window.navigator.vibrate(5);
   };
 
@@ -122,35 +105,11 @@ export default function Attendance() {
 
   const doBulkMark = async (status: 'present' | 'absent') => {
     if (!activeSessionId || !user || !filteredEnrollments.length) return;
-
-    await db.transaction('rw', db.attendanceRecords, async () => {
-      const now = Date.now();
-      const studentIds = filteredEnrollments.map((s: any) => s.serverId);
-      
-      const existing = await db.attendanceRecords
-        .where('sessionId').equals(activeSessionId)
-        .filter(r => studentIds.includes(r.studentId) && r.isDeleted !== 1)
-        .toArray();
-      
-      const existingIds = new Set(existing.map(r => r.studentId));
-      const toUpdate = existing.map(r => ({ key: r.id!, changes: { status, timestamp: now, synced: 0 } }));
-      
-      const toAdd = studentIds
-        .filter((id: string) => !existingIds.has(id))
-        .map((studentId: string) => ({
-          serverId: '',
-          sessionId: activeSessionId,
-          studentId,
-          status,
-          timestamp: now,
-          synced: 0,
-          userId: user.id,
-          isDeleted: 0
-        }));
-
-      if (toUpdate.length > 0) await db.attendanceRecords.bulkUpdate(toUpdate);
-      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd);
+    const newPending = { ...pendingChanges };
+    filteredEnrollments.forEach((s) => {
+      newPending[s.serverId] = status;
     });
+    setPendingChanges(newPending);
   };
 
   const handleResetRecords = () => {
@@ -160,14 +119,57 @@ export default function Attendance() {
 
   const doResetRecords = async () => {
     if (!activeSessionId) return;
-    const studentIds = filteredEnrollments.map(s => s.serverId);
-    const toClear = await db.attendanceRecords
-        .where('sessionId').equals(activeSessionId)
-        .filter(r => studentIds.includes(r.studentId) && r.isDeleted !== 1)
-        .primaryKeys();
-    if (toClear.length > 0) {
-        await db.attendanceRecords.bulkUpdate(toClear.map(k => ({ key: k as number, changes: { isDeleted: 1, synced: 0 } })));
-    }
+    const newPending = { ...pendingChanges };
+    filteredEnrollments.forEach((s) => {
+      newPending[s.serverId] = 'reset';
+    });
+    setPendingChanges(newPending);
+  };
+
+
+  const handleSaveAttendance = async () => {
+    if (!activeSessionId || !user) return;
+    if (Object.keys(pendingChanges).length === 0) return;
+
+    const now = Date.now();
+    await db.transaction('rw', db.attendanceRecords, async () => {
+      const existing = await db.attendanceRecords.where('sessionId').equals(activeSessionId).toArray();
+      const existingMap = new Map(existing.map(r => [r.studentId, r]));
+
+      const toUpdate: { key: number, changes: Record<string, unknown> }[] = [];
+      const toAdd: Omit<LocalAttendanceRecord, 'id'>[] = [];
+
+      for (const [studentId, status] of Object.entries(pendingChanges)) {
+        const existingRecord = existingMap.get(studentId);
+        if (status === 'reset') {
+          if (existingRecord && existingRecord.isDeleted !== 1) {
+            toUpdate.push({ key: existingRecord.id!, changes: { isDeleted: 1, synced: 0, timestamp: now } });
+          }
+        } else {
+          if (existingRecord) {
+            if (existingRecord.status !== status || existingRecord.isDeleted === 1) {
+              toUpdate.push({ key: existingRecord.id!, changes: { status, isDeleted: 0, synced: 0, timestamp: now } });
+            }
+          } else {
+            toAdd.push({
+              serverId: '',
+              sessionId: activeSessionId,
+              studentId,
+              status,
+              timestamp: now,
+              synced: 0,
+              userId: user.id,
+              isDeleted: 0
+            });
+          }
+        }
+      }
+
+      if (toUpdate.length > 0) await db.attendanceRecords.bulkUpdate(toUpdate);
+      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd);
+    });
+
+    setPendingChanges({});
   };
 
   const handleRenameSession = async () => {
@@ -184,13 +186,13 @@ export default function Attendance() {
     const profile = useAuthStore.getState().profile;
     const meta = { faculty: profile?.faculty, department: profile?.department, level: profile?.level };
     
-    const exportData = enrollments.map((student: any, idx: number) => {
-      const record = activeRecords.find(r => r.studentId === student.serverId);
+    const exportData = enrollments.map((student: { serverId: string, name: string, regNumber: string }, idx: number) => {
+      const status = combinedRecords.get(student.serverId);
       return {
         'S/N': idx + 1,
         'Name': student.name,
         'Reg Number': student.regNumber,
-        'Status': record?.status?.toUpperCase() || 'UNMARKED',
+        'Status': status?.toUpperCase() || 'UNMARKED',
       };
     });
 
@@ -205,6 +207,35 @@ export default function Attendance() {
       case 'share': { const text = exportToText(exportData, title, meta); shareData(text, title); break; }
     }
   };
+
+  const combinedRecords = useMemo(() => {
+    const map = new Map<string, 'present' | 'absent' | 'excused' | null>();
+    const active = records?.filter(r => r.isDeleted !== 1) || [];
+    active.forEach(r => map.set(r.studentId, r.status));
+    for (const [studentId, status] of Object.entries(pendingChanges)) {
+      if (status === 'reset') {
+        map.delete(studentId);
+      } else {
+        map.set(studentId, status as 'present' | 'absent' | 'excused');
+      }
+    }
+    return map;
+  }, [records, pendingChanges]);
+
+  const stats = useMemo(() => {
+    let present = 0, absent = 0, excused = 0;
+    combinedRecords.forEach(status => {
+      if (status === 'present') present++;
+      else if (status === 'absent') absent++;
+      else if (status === 'excused') excused++;
+    });
+    return {
+      present,
+      absent,
+      excused,
+      total: enrollments?.length || 0
+    };
+  }, [combinedRecords, enrollments]);
 
   if (!activeSemester) return (
     <div className="text-center py-5 mt-5 px-4 animate-in">
@@ -297,7 +328,7 @@ export default function Attendance() {
                     <button className="btn btn-light btn-sm rounded-3 px-3 fw-bold border" onClick={() => setRenamingSessionId(null)}>✕</button>
                   </div>
                 ) : (
-                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => setActiveSessionId(session.serverId)}>
+                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => { setActiveSessionId(session.serverId); setPendingChanges({}); }}>
                     <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
                     <div className="flex-grow-1">
                       <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
@@ -329,21 +360,16 @@ export default function Attendance() {
 
   // View 3: Marking Mode
   const currentSession = sessions?.find(s => s.serverId === activeSessionId);
-  const activeRecords = records?.filter(r => r.isDeleted !== 1) || [];
   
-  const stats = {
-    present: activeRecords.filter(r => r.status === 'present').length,
-    absent: activeRecords.filter(r => r.status === 'absent').length,
-    excused: activeRecords.filter(r => r.status === 'excused').length,
-    total: enrollments?.length || 0
-  };
+
+
 
   return (
     <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm sticky-top" style={{ zIndex: 100 }}>
         <div className="d-flex justify-content-between align-items-start mb-3">
           <div className="d-flex align-items-center gap-3 overflow-hidden">
-            <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={() => setActiveSessionId(null)}><ArrowLeft size={20} /></button>
+            <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={() => { setActiveSessionId(null); setPendingChanges({}); }}><ArrowLeft size={20} /></button>
             <div className="overflow-hidden flex-grow-1">
               {renamingSessionId === activeSessionId ? (
                 <div className="d-flex align-items-center gap-2">
@@ -384,7 +410,21 @@ export default function Attendance() {
         </div>
 
         {/* Search & Bulk Bar */}
+
+        {Object.keys(pendingChanges).length > 0 && (
+          <div className="d-flex justify-content-between align-items-center bg-warning bg-opacity-10 text-warning-emphasis p-3 rounded-4 mb-3 border border-warning border-opacity-50">
+            <div className="d-flex align-items-center gap-2">
+              <span className="fw-bold small">{Object.keys(pendingChanges).length} unsaved change(s)</span>
+            </div>
+            <div className="d-flex gap-2">
+              <button className="btn btn-sm btn-light border fw-bold" onClick={() => setPendingChanges({})}>Discard</button>
+              <button className="btn btn-sm btn-warning fw-bold px-3" onClick={handleSaveAttendance}>Save Changes</button>
+            </div>
+          </div>
+        )}
+
         <div className="d-flex gap-2">
+
             <div className="modern-input-unified p-1 d-flex align-items-center bg-light shadow-inner flex-grow-1">
                 <Search size={16} className="text-muted ms-2" />
                 <input type="text" className="form-control border-0 bg-transparent py-1 small fw-bold" placeholder="Find student..." value={markSearch} onChange={e => setMarkSearch(e.target.value)} />
@@ -409,9 +449,8 @@ export default function Attendance() {
 
       <div className="px-4 container-mobile d-flex flex-column gap-2">
         <AnimatePresence mode="popLayout">
-          {filteredEnrollments.map((student: any) => {
-            const record = activeRecords.find(r => r.studentId === student.serverId);
-            const status = record?.status;
+          {filteredEnrollments.map((student: { serverId: string, name: string, regNumber: string }) => {
+            const status = combinedRecords.get(student.serverId);
             return (
               <motion.div key={student.serverId} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
                 <div className="card-body p-3 d-flex align-items-center gap-3">
