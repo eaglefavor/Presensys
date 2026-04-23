@@ -50,16 +50,22 @@ function App() {
   }, [activeSemesterFromDB, setActiveSemester]);
 
   useEffect(() => {
-    // Check initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    }).catch(() => {
-      useAuthStore.setState({ loading: false });
-    });
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
+    // onAuthStateChange fires INITIAL_SESSION on registration (equivalent to
+    // getSession), so we don't need a separate getSession call.  Using both
+    // caused two concurrent fetchProfile requests; on slow 3G the second
+    // request could arrive after the optimistic "verified" update in
+    // VerifyAccess and overwrite it with stale "pending" replica data,
+    // sending the user back to the Activation Required page.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') {
+        // Token was silently refreshed; the user and profile are unchanged.
+        // Only update the stored session tokens — avoid triggering a full
+        // profile re-fetch (with loading:true) that could race with / overwrite
+        // a recently-verified profile status.
+        useAuthStore.setState({ session, user: session?.user ?? null });
+      } else {
+        setSession(session);
+      }
     });
 
     return () => subscription.unsubscribe();
