@@ -279,19 +279,23 @@ export default function Archives() {
     const semCourses = await db.courses
       .where('semesterId').equals(activeSemester.serverId)
       .filter(c => c.isDeleted !== 1).toArray();
-    let totalPresent = 0; let totalRecords = 0; let totalSessions = 0;
-    for (const course of semCourses) {
-      const sessions = await db.attendanceSessions
-        .where('courseId').equals(course.serverId)
-        .filter(s => s.isDeleted !== 1).toArray();
-      totalSessions += sessions.length;
-      if (sessions.length > 0) {
-        const recs = await db.attendanceRecords
-          .where('sessionId').anyOf(sessions.map(s => s.serverId))
-          .filter(r => r.isDeleted !== 1).toArray();
-        totalPresent += recs.filter(r => r.status === 'present').length;
-        totalRecords  += recs.length;
-      }
+
+    const courseIds = semCourses.map(c => c.serverId);
+    const sessions = await db.attendanceSessions
+      .where('courseId').anyOf(courseIds)
+      .filter(s => s.isDeleted !== 1).toArray();
+
+    const totalSessions = sessions.length;
+    let totalPresent = 0;
+    let totalRecords = 0;
+
+    if (sessions.length > 0) {
+      const sessionIds = sessions.map(s => s.serverId);
+      const recs = await db.attendanceRecords
+        .where('sessionId').anyOf(sessionIds)
+        .filter(r => r.isDeleted !== 1).toArray();
+      totalPresent = recs.filter(r => r.status === 'present').length;
+      totalRecords = recs.length;
     }
     return {
       studentCount, totalSessions,
@@ -358,12 +362,20 @@ export default function Archives() {
       .toArray();
 
     if (localRecords.length > 0) {
+      const sessionIds = [...new Set(localRecords.map(r => r.sessionId))];
+      const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1).toArray();
+      const sessionMap = new Map(sessions.map(s => [s.serverId, s]));
+
+      const courseIds = [...new Set(sessions.map(s => s.courseId))];
+      const courses = await db.courses.where('serverId').anyOf(courseIds).filter(c => c.isDeleted !== 1).toArray();
+      const courseMap = new Map(courses.map(c => [c.serverId, c]));
+
       const details: AttendanceDetail[] = [];
       for (const record of localRecords) {
-        const session = await db.attendanceSessions.where('serverId').equals(record.sessionId).first();
-        if (!session || session.isDeleted === 1) continue;
-        const course = await db.courses.where('serverId').equals(session.courseId).first();
-        if (!course || course.isDeleted === 1) continue;
+        const session = sessionMap.get(record.sessionId);
+        if (!session) continue;
+        const course = courseMap.get(session.courseId);
+        if (!course) continue;
         details.push({
           status: record.status,
           timestamp: new Date(record.timestamp).toISOString(),
@@ -569,10 +581,15 @@ export default function Archives() {
         .where('sessionId').anyOf(sessionIds)
         .filter(r => r.isDeleted !== 1)
         .toArray();
+
+      const studentIds = localEnrollments.map(e => e.studentId);
+      const students = await db.students.where('serverId').anyOf(studentIds).filter(s => s.isDeleted !== 1).toArray();
+      const studentMap = new Map(students.map(s => [s.serverId, s]));
+
       const rows: CompilationRow[] = [];
       for (const enrollment of localEnrollments) {
-        const student = await db.students.where('serverId').equals(enrollment.studentId).first();
-        if (!student || student.isDeleted === 1) continue;
+        const student = studentMap.get(enrollment.studentId);
+        if (!student) continue;
         const sr = allRecords.filter(r => r.studentId === enrollment.studentId);
         const presentCount  = sr.filter(r => r.status === 'present').length;
         const absentCount   = sr.filter(r => r.status === 'absent').length;
@@ -802,10 +819,14 @@ export default function Archives() {
 
     if (localRecords.length > 0) {
       const ORDER: Record<string, number> = { present: 0, excused: 1, absent: 2 };
+      const studentIds = localRecords.map(r => r.studentId);
+      const students = await db.students.where('serverId').anyOf(studentIds).filter(s => s.isDeleted !== 1).toArray();
+      const studentMap = new Map(students.map(s => [s.serverId, s]));
+
       const entries: RollCallEntry[] = [];
       for (const record of localRecords) {
-        const student = await db.students.where('serverId').equals(record.studentId).first();
-        if (!student || student.isDeleted === 1) continue;
+        const student = studentMap.get(record.studentId);
+        if (!student) continue;
         entries.push({ name: student.name, regNumber: student.regNumber, status: record.status });
       }
       entries.sort((a, b) => ORDER[a.status] - ORDER[b.status]);
