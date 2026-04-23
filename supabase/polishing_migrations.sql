@@ -6,25 +6,28 @@
 
 -- ────────────────────────────────────────────────────────────
 -- 3.3  Admin-only RLS policy on profiles
---      Allows admins to read every user profile so that
---      aggregate stats can be computed without a SECURITY
---      DEFINER function workaround.
+--      Allows admins to read every user profile.
+--      Uses a SECURITY DEFINER function to avoid infinite recursion.
 -- ────────────────────────────────────────────────────────────
 
--- Drop the legacy policy if it exists to avoid name collision.
-DROP POLICY IF EXISTS "Admins can read all profiles" ON public.profiles;
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid()
+      AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
+GRANT EXECUTE ON FUNCTION public.is_admin() TO authenticated;
+
+DROP POLICY IF EXISTS "Admins can read all profiles" ON public.profiles;
 CREATE POLICY "Admins can read all profiles"
   ON public.profiles
   FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1
-      FROM public.profiles AS p
-      WHERE p.id = auth.uid()
-        AND p.role = 'admin'
-    )
-  );
+  USING (public.is_admin());
 
 
 -- ────────────────────────────────────────────────────────────
