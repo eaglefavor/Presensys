@@ -244,10 +244,7 @@ export default function Courses() {
 
     await db.transaction('rw', [db.courses, db.enrollments], async () => {
       await db.courses.update(id, { isDeleted: 1 });
-      const enrollments = await db.enrollments.where('courseId').equals(course.serverId).toArray();
-      for (const enrollment of enrollments) {
-        await db.enrollments.update(enrollment.id!, { isDeleted: 1 });
-      }
+      await db.enrollments.where('courseId').equals(course.serverId).modify({ isDeleted: 1 });
     });
   };
 
