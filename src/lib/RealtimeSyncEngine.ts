@@ -699,10 +699,25 @@ export class RealtimeSyncEngine {
 
     const brokenSessions = await db.attendanceSessions
       .filter(s => !this.isValidUUID(s.courseId)).toArray();
-    for (const session of brokenSessions) {
-      const course = await db.courses.get(Number(session.courseId));
-      if (course && this.isValidUUID(course.serverId)) {
-        await db.attendanceSessions.update(session.id!, { courseId: course.serverId, synced: 0 });
+
+    if (brokenSessions.length > 0) {
+      const uniqueCourseIds = Array.from(new Set(brokenSessions.map(s => Number(s.courseId))));
+      const courses = await db.courses.where('id').anyOf(uniqueCourseIds).toArray();
+      const courseMap = new Map(courses.map(c => [c.id, c]));
+
+      const updates = [];
+      for (const session of brokenSessions) {
+        const course = courseMap.get(Number(session.courseId));
+        if (course && this.isValidUUID(course.serverId)) {
+          updates.push({
+            key: session.id!,
+            changes: { courseId: course.serverId, synced: 0 }
+          });
+        }
+      }
+
+      if (updates.length > 0) {
+        await Promise.all(updates.map(u => db.attendanceSessions.update(u.key, u.changes)));
       }
     }
   }
