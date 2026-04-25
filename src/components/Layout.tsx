@@ -115,7 +115,7 @@ const Layout: React.FC = () => {
 
   return (
     <div className="app-container">
-      <header className="app-header bg-white border-bottom sticky-top shadow-sm">
+      <header className="app-header bg-white border-bottom sticky-top shadow-sm" style={{ paddingTop: "env(safe-area-inset-top)" }}>
         <div className="container-mobile d-flex align-items-center justify-content-between px-3 h-100">
           <div className="d-flex align-items-center gap-2">
             {!isMainNavPage ? (
@@ -172,7 +172,7 @@ const Layout: React.FC = () => {
 
       {/* Sidebar Drawer */}
       <div className={`menu-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}></div>
-      <aside className={`side-menu bg-white shadow-2xl ${isMenuOpen ? 'open' : ''}`}>
+      <aside className={`side-menu bg-white shadow-2xl ${isMenuOpen ? 'open' : ''}`} style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
         <div className="d-flex flex-column h-100">
           <div className="p-4 bg-white border-bottom d-flex justify-content-between align-items-start">
             <div>

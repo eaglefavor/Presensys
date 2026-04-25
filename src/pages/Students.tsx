@@ -207,7 +207,7 @@ export default function Students() {
       const match = line.match(regNoRegex);
       if (match) {
         const regNumber = match[0];
-        let name = line.replace(regNumber, '').replace(/[,\t]/g, '').trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
+        const name = line.replace(regNumber, '').replace(/[,\t]/g, '').trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
         if (name.length > 2) results.push({
           serverId: '',
           regNumber, 
@@ -228,7 +228,7 @@ export default function Students() {
     if (!user) return;
     setIsSaving(true);
     try {
-      let dataToSave = importMode === 'manual' 
+      const dataToSave = importMode === 'manual'
         ? manualRows.filter(r => r.name.trim() && r.regNumber.trim()).map(r => ({ serverId: '', name: r.name, regNumber: r.regNumber, isDeleted: 0, synced: 0 } as Student)) 
         : parsedStudents;
       

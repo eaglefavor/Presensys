@@ -16,6 +16,7 @@ body {
   margin: 0;
   padding: 0;
   font-weight: 400;
+  -webkit-overflow-scrolling: touch;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -29,6 +30,8 @@ h1, h2, h3, h4, h5, h6 {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Inputs & Forms (Simplistic & Professional) */
@@ -106,7 +109,9 @@ input, textarea {
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
     overflow: hidden;
     position: relative;
-  }
+    padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
 }
 
 /* Typography & Utilities */
@@ -181,4 +186,20 @@ input, textarea {
   .sticky-top, .mode-switcher-wrapper, .archives-form { display: none !important; }
   .archives-print-area { display: block !important; }
   body { background: white; }
+}
+/* Prevent iOS Safari from auto-zooming on inputs */
+input, textarea, select {
+  font-size: 16px !important;
+}
+
+/* Prevent iOS default styling */
+input, textarea, select, button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* Fix checkboxes and radios that might disappear due to appearance: none */
+input[type="checkbox"], input[type="radio"] {
+  -webkit-appearance: auto;
+  appearance: auto;
 }
