@@ -1,0 +1,10 @@
+--- src/pages/Archives.tsx
++++ src/pages/Archives.tsx
+@@ -361,6 +361,7 @@
+       .toArray();
+
+     if (localRecords.length > 0) {
++      // N+1 Optimization: Batch fetch all sessions and courses instead of querying in the loop
+       const sessionIds = [...new Set(localRecords.map(r => r.sessionId))];
+       const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1).toArray();
+       const sessionMap = new Map(sessions.map(s => [s.serverId, s]));
