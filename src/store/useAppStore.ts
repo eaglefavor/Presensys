@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { db, type Semester } from '../db/db';
+import { db, type Semester } from '../db/db.ts';
 
 interface AppState {
   activeSemester: Semester | null;
