@@ -3,35 +3,35 @@ import assert from 'node:assert';
 import { shareData } from './ExportUtils.ts';
 
 describe('shareData', () => {
-  let originalNavigator: any;
+  let originalDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
-    originalNavigator = global.navigator;
-    // We can redefine property 'navigator' on global to mock it
-    Object.defineProperty(global, 'navigator', {
+    originalDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+    Object.defineProperty(globalThis, 'navigator', {
       value: {
         share: undefined,
         clipboard: {
-            writeText: undefined
-        }
+          writeText: undefined,
+        },
       },
       writable: true,
-      configurable: true
+      configurable: true,
     });
   });
 
   afterEach(() => {
-    Object.defineProperty(global, 'navigator', {
-      value: originalNavigator,
-      writable: true,
-      configurable: true
-    });
+    if (originalDescriptor) {
+      Object.defineProperty(globalThis, 'navigator', originalDescriptor);
+    } else {
+      // Property didn't exist originally — remove it
+      delete (globalThis as Record<string, unknown>).navigator;
+    }
   });
 
   test('returns true when navigator.share succeeds', async () => {
     let shared = false;
     // @ts-ignore
-    global.navigator.share = async (data) => {
+    globalThis.navigator.share = async (data: ShareData) => {
       shared = true;
       assert.strictEqual(data?.title, 'Test Title');
       assert.strictEqual(data?.text, 'Test Text');
@@ -44,7 +44,7 @@ describe('shareData', () => {
 
   test('returns false when navigator.share throws AbortError (user cancelled)', async () => {
     // @ts-ignore
-    global.navigator.share = async () => {
+    globalThis.navigator.share = async () => {
       const error = new Error('User cancelled');
       error.name = 'AbortError';
       throw error;
@@ -52,7 +52,7 @@ describe('shareData', () => {
 
     let clipboardCalled = false;
     // @ts-ignore
-    global.navigator.clipboard = {
+    globalThis.navigator.clipboard = {
       writeText: async () => {
         clipboardCalled = true;
       }
@@ -67,7 +67,7 @@ describe('shareData', () => {
     // navigator.share is undefined from beforeEach
     let clipboardText = '';
     // @ts-ignore
-    global.navigator.clipboard = {
+    globalThis.navigator.clipboard = {
       writeText: async (text: string) => {
         clipboardText = text;
       }
@@ -80,13 +80,13 @@ describe('shareData', () => {
 
   test('falls back to clipboard when navigator.share throws non-AbortError', async () => {
     // @ts-ignore
-    global.navigator.share = async () => {
+    globalThis.navigator.share = async () => {
       throw new Error('NotSupportedError');
     };
 
     let clipboardText = '';
     // @ts-ignore
-    global.navigator.clipboard = {
+    globalThis.navigator.clipboard = {
       writeText: async (text: string) => {
         clipboardText = text;
       }
@@ -99,12 +99,12 @@ describe('shareData', () => {
 
   test('returns false when both navigator.share and clipboard.writeText fail', async () => {
     // @ts-ignore
-    global.navigator.share = async () => {
+    globalThis.navigator.share = async () => {
       throw new Error('NotSupportedError');
     };
 
     // @ts-ignore
-    global.navigator.clipboard = {
+    globalThis.navigator.clipboard = {
       writeText: async () => {
         throw new Error('Clipboard denied');
       }
