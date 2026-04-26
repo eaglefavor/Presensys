@@ -1,12 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
 import { exportToCSV } from './ExportUtils.ts';
 
 describe('exportToCSV', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let originalDocument: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let originalURLCreateObjectURL: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let originalURLRevokeObjectURL: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let originalBlob: any;
 
   let downloadedContent: string | null = null;
@@ -25,6 +28,7 @@ describe('exportToCSV', () => {
     originalBlob = globalThis.Blob;
 
     // Mock URL methods
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.URL.createObjectURL = (_blob: any) => {
       return 'mock-url';
     };
@@ -48,14 +52,18 @@ describe('exportToCSV', () => {
         appendChild: () => {},
         removeChild: () => {},
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
 
     // Mock Blob to capture content
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.Blob = class MockBlob {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       constructor(content: any[], options: any) {
         downloadedContent = content[0];
         downloadedMimeType = options?.type;
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } as any;
   });
 
@@ -99,6 +107,7 @@ describe('exportToCSV', () => {
   });
 
   test('should handle empty data array gracefully', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any[] = [];
     exportToCSV(data, 'empty');
 
