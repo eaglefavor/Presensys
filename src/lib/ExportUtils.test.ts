@@ -33,8 +33,8 @@ describe('shareData', () => {
     // @ts-ignore
     global.navigator.share = async (data) => {
       shared = true;
-      assert.strictEqual(data.title, 'Test Title');
-      assert.strictEqual(data.text, 'Test Text');
+      assert.strictEqual(data?.title, 'Test Title');
+      assert.strictEqual(data?.text, 'Test Text');
     };
 
     const result = await shareData('Test Text', 'Test Title');
