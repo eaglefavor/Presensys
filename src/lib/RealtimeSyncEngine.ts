@@ -753,9 +753,22 @@ export class RealtimeSyncEngine {
     const oldSessions = await db.attendanceSessions
       .filter(s => s.synced === 1 && new Date(s.date).getTime() < sixMonthsAgo)
       .toArray();
-    for (const session of oldSessions) {
-      const localCount = await db.attendanceRecords.where('sessionId').equals(session.serverId).count();
-      if (localCount === 0) await db.attendanceSessions.delete(session.id!);
+
+    if (oldSessions.length > 0) {
+      const oldServerIds = oldSessions.map(s => s.serverId);
+      const existingSessionIds = await db.attendanceRecords
+        .where('sessionId')
+        .anyOf(oldServerIds)
+        .uniqueKeys();
+
+      const existingSessionIdSet = new Set(existingSessionIds);
+      const sessionIdsToDelete = oldSessions
+        .filter(s => !existingSessionIdSet.has(s.serverId))
+        .map(s => s.id!);
+
+      if (sessionIdsToDelete.length > 0) {
+        await db.attendanceSessions.bulkDelete(sessionIdsToDelete);
+      }
     }
 
     // Purge completed outbox entries older than 7 days
