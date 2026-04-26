@@ -1,3 +1,4 @@
+
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
 import { exportToCSV } from './ExportUtils.ts';
@@ -52,19 +53,16 @@ describe('exportToCSV', () => {
         appendChild: () => {},
         removeChild: () => {},
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
     // Mock Blob to capture content
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     globalThis.Blob = class MockBlob {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       constructor(content: any[], options: any) {
         downloadedContent = content[0];
         downloadedMimeType = options?.type;
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
+    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 
   afterEach(() => {
