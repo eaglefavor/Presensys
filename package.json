@@ -13,6 +13,7 @@
     "db:deploy": "node scripts/deploy_sql.js"
   },
   "dependencies": {
+    "@google/genai": "^1.50.1",
     "@supabase/supabase-js": "^2.89.0",
     "@types/uuid": "^10.0.0",
     "bootstrap": "^5.3.8",
@@ -28,6 +29,7 @@
     "react-dom": "^19.2.0",
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.11.0",
+    "react-webcam": "^7.2.0",
     "uuid": "^13.0.0",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.9"
