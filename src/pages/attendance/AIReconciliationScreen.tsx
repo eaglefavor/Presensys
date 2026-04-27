@@ -69,8 +69,8 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         if (images.length === 2) {
            if (isSlowNetwork) {
                // Tradeoff: we need cross-image correlation, but network is slow.
-               // 1.5 flash handles basic multi-image well and is often well-cached/faster than 2.5 heavy
-               modelName = "gemini-1.5-flash";
+               // Use lite model for slow network conditions
+               modelName = "gemini-2.5-flash-lite";
            } else {
                // Ideal condition: fast network, complex task (2 images)
                modelName = "gemini-2.5-flash";
@@ -78,8 +78,8 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         } else {
            // Single image
            if (!isSlowNetwork) {
-               // We have good network, let's use 1.5 flash for single-page which is extremely fast and robust for basic OCR
-               modelName = "gemini-1.5-flash";
+               // We have good network, use lite model for single-page which is fast and robust for basic OCR
+               modelName = "gemini-2.5-flash-lite";
            }
            // if slow network, keep default 2.5-flash-lite
         }
