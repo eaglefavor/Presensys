@@ -1,5 +1,6 @@
 import Dexie, { type Table } from 'dexie';
 import { v4 as uuidv4 } from 'uuid';
+import { safeStorage } from '../lib/safeStorage';
 
 export interface LocalSemester {
   id?: number;
@@ -119,6 +120,8 @@ export class PresensysDB extends Dexie {
   outbox!: Table<LocalOutboxEntry>;
 
   private onChangeListeners: (() => void)[] = [];
+  /** When > 0, notifyChange() calls are suppressed; decremented by batchWrite. */
+  private suppressNotifyDepth = 0;
 
   constructor() {
     super('PresensysDB');
@@ -141,7 +144,7 @@ export class PresensysDB extends Dexie {
       const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
       await Promise.all(tables.map(t => tx.table(t).clear()));
       // Clear legacy single-cursor key; per-table cursors (sync_cursor_*) are the new standard
-      localStorage.removeItem('last_sync_timestamp');
+      safeStorage.removeItem('last_sync_timestamp');
     });
 
     // Version 13 – add outbox table (non-destructive; data rows unchanged)
@@ -247,7 +250,32 @@ export class PresensysDB extends Dexie {
     this.onChangeListeners.push(callback);
   }
 
-  private notifyChange() {
+  /**
+   * Execute `fn` while suppressing all intermediate `notifyChange` calls.
+   * A single `notifyChange` fires after `fn` resolves.
+   *
+   * Use this wrapper for bulk imports (100+ students, bulk attendance mark, etc.)
+   * to prevent flooding the sync-engine debounce queue with one notification per
+   * row — which can cause visible lag during large batch operations. (2.5)
+   *
+   * @example
+   * await db.batchWrite(async () => {
+   *   await db.students.bulkAdd(newStudents);
+   * });
+   */
+  async batchWrite(fn: () => Promise<void>): Promise<void> {
+    this.suppressNotifyDepth++;
+    try {
+      await fn();
+    } finally {
+      this.suppressNotifyDepth--;
+      // Fire exactly one notification regardless of how many writes occurred.
+      this.notifyChange();
+    }
+  }
+
+  notifyChange() {
+    if (this.suppressNotifyDepth > 0) return;
     this.onChangeListeners.forEach(l => l());
   }
 }

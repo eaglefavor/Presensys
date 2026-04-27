@@ -2,7 +2,11 @@ import { create } from 'zustand';
 import { supabase } from '../lib/supabase';
 import { db } from '../db/db';
 import { realtimeSync } from '../lib/RealtimeSyncEngine';
+import { safeStorage } from '../lib/safeStorage';
+import toast from 'react-hot-toast';
 import type { Session, User } from '@supabase/supabase-js';
+
+const isDev = import.meta.env.DEV;
 
 interface Profile {
   id: string;
@@ -27,8 +31,9 @@ interface AuthState {
 }
 
 // ─── Debug helper ─────────────────────────────────────────────────────────────
-// Call window.__presensysDebug() in Eruda console to dump full auth state.
-function exposeDebugGlobal() {
+// Only exposed in development builds to prevent information leakage in
+// production (6.2). Call window.__presensysDebug() in Eruda to dump state.
+if (isDev) {
   (window as unknown as Record<string, unknown>)['__presensysDebug'] = () => {
     const s = useAuthStore.getState();
     console.group('%c[PRESENSYS DEBUG] Full Auth State', 'color:#e67e22;font-weight:bold;font-size:14px');
@@ -42,8 +47,9 @@ function exposeDebugGlobal() {
   };
   console.log('%c[PRESENSYS] Debug helper ready — call window.__presensysDebug() in Eruda console', 'color:#27ae60;font-size:12px');
 }
-exposeDebugGlobal();
 // ──────────────────────────────────────────────────────────────────────────────
+
+const SYNC_TABLES = ['semesters', 'students', 'courses', 'enrollments', 'attendance_sessions', 'attendance_records'];
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   session: null,
@@ -53,62 +59,59 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: true,
   
   setSession: async (session) => {
-    console.group('%c[AuthStore] setSession called', 'color:#2980b9;font-weight:bold');
-    console.log('session present :', !!session);
-    console.log('user email      :', session?.user?.email ?? 'none');
-    console.log('user id         :', session?.user?.id ?? 'none');
-    console.log('expires_at      :', session?.expires_at ?? 'n/a');
+    if (isDev) {
+      console.group('%c[AuthStore] setSession called', 'color:#2980b9;font-weight:bold');
+      console.log('session present :', !!session);
+      console.log('user email      :', session?.user?.email ?? 'none');
+      console.log('user id         :', session?.user?.id ?? 'none');
+      console.log('expires_at      :', session?.expires_at ?? 'n/a');
+    }
 
-    // Keep loading=true while the profile is being fetched so that App never
-    // renders the route guard with a null profile (which would incorrectly show
-    // VerifyAccess to already-verified/admin accounts).
     set({ session, user: session?.user ?? null, loading: !!session });
-    console.log('→ store updated: loading=', !!session);
+
+    if (isDev) console.log('→ store updated: loading=', !!session);
     
     if (session) {
-      console.log('→ calling fetchProfile…');
-      console.groupEnd();
+      if (isDev) { console.log('→ calling fetchProfile…'); console.groupEnd(); }
       await get().fetchProfile();
     } else {
       set({ loading: false, profile: null, profileVerified: false });
-      console.log('→ no session — cleared profile, loading=false');
-      console.groupEnd();
+      if (isDev) { console.log('→ no session — cleared profile, loading=false'); console.groupEnd(); }
     }
   },
 
   fetchProfile: async () => {
     const { user } = get();
-    console.group('%c[AuthStore] fetchProfile called', 'color:#8e44ad;font-weight:bold');
-    console.log('user.id :', user?.id ?? 'null — aborting');
+    if (isDev) {
+      console.group('%c[AuthStore] fetchProfile called', 'color:#8e44ad;font-weight:bold');
+      console.log('user.id :', user?.id ?? 'null — aborting');
+    }
 
     if (!user) {
-      console.groupEnd();
+      if (isDev) console.groupEnd();
       return;
     }
 
     // Seed the UI with a cached profile while the server request is in-flight.
-    // We intentionally do NOT set profileVerified here — security-sensitive
-    // UI (e.g. the Admin route) must wait for the server confirmation below.
-    const cachedRaw = localStorage.getItem('user_profile');
+    const cachedRaw = safeStorage.getItem('user_profile');
     if (cachedRaw) {
       try {
-        const parsed = JSON.parse(cachedRaw);
-        console.log('cache hit — cached profile:', { id: parsed.id, role: parsed.role, status: parsed.status, invalid_tries: parsed.invalid_tries });
+        const parsed = JSON.parse(cachedRaw) as Profile;
         if (parsed.id === user.id) {
           set({ profile: parsed });
-          console.log('→ cache applied to store (profileVerified still false)');
+          if (isDev) console.log('→ cache applied (profileVerified still false)');
         } else {
-          console.warn('cache mismatch — cached id', parsed.id, 'vs user.id', user.id, '— ignoring cache');
+          if (isDev) console.warn('cache mismatch — ignoring');
+          safeStorage.removeItem('user_profile');
         }
       } catch (e) {
-        console.warn('cache parse error — removing:', e);
-        localStorage.removeItem('user_profile');
+        if (isDev) console.warn('cache parse error — removing:', e);
+        safeStorage.removeItem('user_profile');
       }
-    } else {
-      console.log('no cached profile found');
     }
 
-    console.log('→ querying profiles table for id =', user.id);
+    if (isDev) console.log('→ querying profiles table for id =', user.id);
+
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -116,49 +119,55 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .limit(1)
       .maybeSingle();
     
-    console.log('← profiles query result:');
-    console.log('  error :', error ?? 'none');
-    console.log('  data  :', data);
+    if (isDev) { console.log('← profiles query result:'); console.log('  error :', error ?? 'none'); console.log('  data  :', data); }
 
     if (error) {
-      // Offline or network failure — keep the cached profile for offline use but
-      // mark loading as done. profileVerified stays false so the Admin route
-      // does not render on stale cached data.
-      console.warn('fetchProfile error — keeping cached profile, loading=false, profileVerified stays false');
-      console.warn('error details:', error.message, '| code:', error.code, '| hint:', (error as { hint?: string }).hint);
+      // Offline or network failure — keep the cached profile for offline use.
+      if (isDev) console.warn('fetchProfile error — keeping cached profile, loading=false');
       set({ loading: false });
+      // Inform the user so they know they are running on cached data (5.2).
+      if (!navigator.onLine) {
+        toast('Running offline — using cached profile.', { icon: '📶', duration: 4000 });
+      }
     } else if (data === null) {
-      console.error('⚠️ fetchProfile: profiles query returned NULL — no profile row found for this user!');
-      console.error('This means the handle_new_user() trigger may not have created a profile row.');
-      console.error('The user will be stuck on VerifyAccess indefinitely.');
-      localStorage.removeItem('user_profile');
+      if (isDev) console.error('⚠️ fetchProfile: no profile row found for this user!');
+      safeStorage.removeItem('user_profile');
       set({ profile: null, profileVerified: true, loading: false });
     } else {
       const p = data as Profile;
-      console.log('✅ profile fetched — role:', p.role, '| status:', p.status, '| invalid_tries:', p.invalid_tries);
-      localStorage.setItem('user_profile', JSON.stringify(data));
+      if (isDev) console.log('✅ profile fetched — role:', p.role, '| status:', p.status);
+
+      // Account suspension check (8.6): if the admin has terminated this account,
+      // clear local data immediately and redirect to a locked-out page.
+      if (p.status === 'terminated') {
+        if (isDev) console.warn('Account terminated — clearing local data.');
+        toast.error('Your account has been suspended. Please contact your administrator.');
+        safeStorage.removeItem('user_profile');
+        await get().signOut();
+        return;
+      }
+
+      safeStorage.setItem('user_profile', JSON.stringify(data));
       set({ profile: p, profileVerified: true, loading: false });
     }
-    console.groupEnd();
+    if (isDev) console.groupEnd();
   },
 
   signOut: async () => {
-    console.log('%c[AuthStore] signOut called', 'color:#e74c3c;font-weight:bold');
+    if (isDev) console.log('%c[AuthStore] signOut called', 'color:#e74c3c;font-weight:bold');
     await supabase.auth.signOut();
-    localStorage.removeItem('user_profile'); // Clear cache on logout
+    safeStorage.removeItem('user_profile');
 
     // Stop the sync engine and unsubscribe from realtime before clearing data
     realtimeSync.cleanup();
 
-    // Clear all sync-related localStorage keys to prevent cross-account data bleed
-    const SYNC_TABLES = ['semesters', 'students', 'courses', 'enrollments', 'attendance_sessions', 'attendance_records'];
-    SYNC_TABLES.forEach(t => localStorage.removeItem(`sync_cursor_${t}`));
-    localStorage.removeItem('last_sync_timestamp');
-    localStorage.removeItem('sync_status');
-    localStorage.removeItem('sync_last_synced_at');
+    // Clear all sync-related storage keys to prevent cross-account data bleed
+    SYNC_TABLES.forEach(t => safeStorage.removeItem(`sync_cursor_${t}`));
+    safeStorage.removeItem('last_sync_timestamp');
+    safeStorage.removeItem('sync_status');
+    safeStorage.removeItem('sync_last_synced_at');
 
     // CRITICAL: Wipe local data to prevent cross-account leakage and force re-sync on next login.
-    // Include outbox so stale pending writes are never replayed by the next user.
     await db.transaction('rw', [db.semesters, db.students, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords, db.outbox], async () => {
       await db.semesters.clear();
       await db.students.clear();
@@ -170,6 +179,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
 
     set({ session: null, user: null, profile: null, profileVerified: false });
-    window.location.href = '/login'; // Force full reload to reset all states
+    window.location.href = '/login';
   }
 }));

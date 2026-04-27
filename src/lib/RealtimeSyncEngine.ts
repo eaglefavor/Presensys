@@ -9,7 +9,9 @@ import {
   type LocalOutboxEntry,
 } from '../db/db';
 import { supabase } from './supabase';
-import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import type { Table } from 'dexie';
+import { safeStorage } from './safeStorage';
 
 type TableName =
   | 'semesters'
@@ -48,6 +50,88 @@ const DEBOUNCE_MAP: Record<string, number> = {
   'slow-2g': 15000,
 };
 
+/** Timeout (ms) applied to every individual Supabase pull/push request. */
+const REQUEST_TIMEOUT_MS = 30_000;
+
+/** How long (ms) isSyncing may be true before the watchdog force-resets it. */
+const SYNC_WATCHDOG_MS = 60_000;
+
+/** Extra delay (ms) added to triggerSync debounce when another tab is syncing. */
+const REMOTE_SYNC_BACKOFF_MS = 6_000;
+
+// ─── Shared server→local field mapping ───────────────────────────────────────
+// Single source of truth used by both pullChanges (paginated pull) and
+// handleRealtimeEvent (CDC push-down).  Any schema column rename only needs
+// to be updated here.
+
+type ServerRow = Record<string, unknown>;
+type LocalRow  = Record<string, unknown>;
+type MapFnTable = Record<TableName, (r: ServerRow) => LocalRow>;
+
+const SERVER_TO_LOCAL: MapFnTable = {
+  semesters: (r) => ({
+    serverId: r['id'], name: r['name'],
+    startDate: r['start_date'], endDate: r['end_date'],
+    isActive: r['is_active'], isArchived: r['is_archived'],
+    userId: r['user_id'], isDeleted: r['is_deleted'],
+    updatedAt: r['updated_at'], createdAt: r['created_at'],
+  }),
+  students: (r) => ({
+    serverId: r['id'], regNumber: r['reg_number'], name: r['name'],
+    email: r['email'], phone: r['phone'],
+    userId: r['user_id'], isDeleted: r['is_deleted'],
+    updatedAt: r['updated_at'], createdAt: r['created_at'],
+  }),
+  courses: (r) => ({
+    serverId: r['id'], code: r['code'], title: r['title'],
+    semesterId: r['semester_id'],
+    userId: r['user_id'], isDeleted: r['is_deleted'],
+    updatedAt: r['updated_at'], createdAt: r['created_at'],
+  }),
+  enrollments: (r) => ({
+    serverId: r['id'], studentId: r['student_id'], courseId: r['course_id'],
+    userId: r['user_id'], isDeleted: r['is_deleted'],
+    updatedAt: r['updated_at'], createdAt: r['created_at'],
+  }),
+  attendance_sessions: (r) => ({
+    serverId: r['id'], courseId: r['course_id'],
+    date: r['date'], title: r['title'],
+    userId: r['user_id'], isDeleted: r['is_deleted'],
+    updatedAt: r['updated_at'], createdAt: r['created_at'],
+  }),
+  attendance_records: (r) => ({
+    serverId: r['id'], sessionId: r['session_id'], studentId: r['student_id'],
+    status: r['status'],
+    // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
+    timestamp: typeof r['marked_at'] === 'number'
+      ? r['marked_at']
+      : new Date(r['marked_at'] as string).getTime(),
+    userId: r['user_id'], isDeleted: r['is_deleted'],
+    updatedAt: r['updated_at'], createdAt: r['created_at'],
+  }),
+};
+
+// ─── Helper: request timeout ─────────────────────────────────────────────────
+
+/**
+ * Wraps a promise with a hard timeout. If the promise does not settle within
+ * `ms` milliseconds, the returned promise rejects with a TimeoutError.
+ * This prevents a stalled network request from holding `isSyncing = true`
+ * indefinitely.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => {
+        const err = new Error(`Sync request timed out after ${ms}ms`);
+        err.name = 'TimeoutError';
+        reject(err);
+      }, ms),
+    ),
+  ]);
+}
+
 
 
 
@@ -61,8 +145,12 @@ export class RealtimeSyncEngine {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+  private rateLimitUntil = 0; // epoch-ms; skip sync attempts until this time
+  private remoteSyncActive = false; // true when another tab is currently syncing
+  private syncBroadcast: BroadcastChannel | null = null;
   private retryCount = 0;
-  private readonly maxRetries = 3;
+  private readonly maxRetries = 5; // raised from 3 to reduce false-positive error states
   private readonly HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private currentStatus: SyncStatus = 'idle';
   private statusListeners: ((status: SyncStatus) => void)[] = [];
@@ -72,15 +160,34 @@ export class RealtimeSyncEngine {
     db.onLocalChange(() => this.triggerSync());
 
     // Restore persisted status so the UI shows correct state after a page reload
-    const saved = localStorage.getItem(LS_STATUS_KEY) as SyncStatus | null;
+    const saved = safeStorage.getItem(LS_STATUS_KEY) as SyncStatus | null;
     if (saved) this.currentStatus = saved;
+
+    // ── Multi-tab coordination (8.3) ──────────────────────────────────────
+    // When another tab broadcasts that it is syncing, we hold off our own
+    // debounced sync to avoid concurrent conflicting writes to the server.
+    try {
+      this.syncBroadcast = new BroadcastChannel('presensys_sync');
+      this.syncBroadcast.onmessage = (ev: MessageEvent<{ type: string }>) => {
+        if (ev.data?.type === 'sync_start') {
+          this.remoteSyncActive = true;
+          // Auto-clear the lock after SYNC_WATCHDOG_MS + a small buffer
+          setTimeout(() => { this.remoteSyncActive = false; }, SYNC_WATCHDOG_MS + 5_000);
+        } else if (ev.data?.type === 'sync_end') {
+          this.remoteSyncActive = false;
+        }
+      };
+    } catch {
+      // BroadcastChannel not available (e.g. some private-browsing modes) — ignore.
+      this.syncBroadcast = null;
+    }
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
 
   /** Returns persisted last-synced ISO string (or null if never synced). */
   static getLastSyncedAt(): string | null {
-    return localStorage.getItem(LS_LAST_SYNCED_KEY);
+    return safeStorage.getItem(LS_LAST_SYNCED_KEY);
   }
 
   /** Subscribe to sync-status changes.  Returns an unsubscribe function. */
@@ -111,19 +218,32 @@ export class RealtimeSyncEngine {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    if (this.watchdogTimer) {
+      clearTimeout(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    if (this.syncBroadcast) {
+      try { this.syncBroadcast.close(); } catch { /* ignore */ }
+      this.syncBroadcast = null;
+    }
     this.userId = null;
     this.isInitialized = false;
     this.isSyncing = false;
     this.retryCount = 0;
+    this.remoteSyncActive = false;
+    this.rateLimitUntil = 0;
     this.emitStatus('idle');
   }
 
   /** Debounce a sync trigger (called on every local DB change). */
   triggerSync() {
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    const delay = this.remoteSyncActive
+      ? this.getDebounceDelay() + REMOTE_SYNC_BACKOFF_MS
+      : this.getDebounceDelay();
     this.debounceTimer = setTimeout(() => {
       this.sync();
-    }, this.getDebounceDelay());
+    }, delay);
   }
 
   async initialize(userId: string) {
@@ -145,16 +265,16 @@ export class RealtimeSyncEngine {
 
   private emitStatus(status: SyncStatus) {
     this.currentStatus = status;
-    localStorage.setItem(LS_STATUS_KEY, status);
+    safeStorage.setItem(LS_STATUS_KEY, status);
     if (status === 'synced') {
-      localStorage.setItem(LS_LAST_SYNCED_KEY, new Date().toISOString());
+      safeStorage.setItem(LS_LAST_SYNCED_KEY, new Date().toISOString());
     }
     this.statusListeners.forEach(l => l(status));
   }
 
   private getDebounceDelay(): number {
-    const conn = (navigator as any).connection;
-    const effectiveType = conn?.effectiveType || '4g';
+    const conn = (navigator as Navigator & { connection?: { effectiveType?: string } }).connection;
+    const effectiveType = conn?.effectiveType ?? '4g';
     return DEBOUNCE_MAP[effectiveType] ?? 2000;
   }
 
@@ -176,8 +296,31 @@ export class RealtimeSyncEngine {
 
   async sync() {
     if (!this.userId || !navigator.onLine || this.isSyncing) return;
+
+    // Respect rate-limit back-off window (8.1)
+    if (Date.now() < this.rateLimitUntil) {
+      const waitMs = this.rateLimitUntil - Date.now();
+      console.log(`Sync: Rate-limited — retrying in ${Math.round(waitMs / 1000)}s`);
+      this.retryTimer = setTimeout(() => this.sync(), waitMs);
+      return;
+    }
+
     this.isSyncing = true;
     this.emitStatus('syncing');
+
+    // Notify other tabs that we are syncing (8.3)
+    try { this.syncBroadcast?.postMessage({ type: 'sync_start' }); } catch { /* ignore */ }
+
+    // Watchdog: if isSyncing stays true for > SYNC_WATCHDOG_MS, force-reset it (2.6)
+    if (this.watchdogTimer) clearTimeout(this.watchdogTimer);
+    this.watchdogTimer = setTimeout(() => {
+      if (this.isSyncing) {
+        console.error('Sync: Watchdog triggered — isSyncing stuck. Force-resetting.');
+        this.isSyncing = false;
+        this.emitStatus('error');
+        try { this.syncBroadcast?.postMessage({ type: 'sync_end' }); } catch { /* ignore */ }
+      }
+    }, SYNC_WATCHDOG_MS);
 
     try {
       // 1. Pull first so parents exist before children are pushed
@@ -195,8 +338,10 @@ export class RealtimeSyncEngine {
       console.error('Sync: Failed', error);
       if (this.retryCount < this.maxRetries) {
         this.retryCount++;
-        const backoffMs = Math.min(1000 * Math.pow(2, this.retryCount), 30000);
-        console.log(`Sync: Retrying in ${backoffMs}ms (attempt ${this.retryCount}/${this.maxRetries})`);
+        // ±20 % jitter prevents thundering-herd when many clients recover simultaneously (2.2)
+        const jitter = 1 + (Math.random() * 0.4 - 0.2);
+        const backoffMs = Math.min(1000 * Math.pow(2, this.retryCount) * jitter, 30_000);
+        console.log(`Sync: Retrying in ${Math.round(backoffMs)}ms (attempt ${this.retryCount}/${this.maxRetries})`);
         this.retryTimer = setTimeout(() => this.sync(), backoffMs);
       } else {
         console.error(`Sync: Max retries (${this.maxRetries}) reached.`);
@@ -204,6 +349,11 @@ export class RealtimeSyncEngine {
       }
     } finally {
       this.isSyncing = false;
+      if (this.watchdogTimer) {
+        clearTimeout(this.watchdogTimer);
+        this.watchdogTimer = null;
+      }
+      try { this.syncBroadcast?.postMessage({ type: 'sync_end' }); } catch { /* ignore */ }
     }
   }
 
@@ -218,22 +368,24 @@ export class RealtimeSyncEngine {
 
     const pull = async (
       tableName: TableName,
-      dexieTable: any,
-      mapToLocal: (serverRow: any) => Record<string, unknown>,
+      dexieTable: Table<LocalRow, number>,
     ): Promise<boolean> => {
+      const mapToLocal = SERVER_TO_LOCAL[tableName];
       const cursorKey = TABLE_CURSOR_KEY(tableName);
-      const cursor = localStorage.getItem(cursorKey) ?? EPOCH;
+      const cursor = safeStorage.getItem(cursorKey) ?? EPOCH;
       const isFreshSync = cursor === EPOCH;
 
       let offset = 0;
       let maxUpdatedAt = '';
 
       while (true) {
+        // Use .gte (>=) instead of .gt (>) to avoid silently skipping rows that
+        // share the exact same updated_at timestamp as the page boundary (2.1).
         let query = supabase
           .from(tableName)
           .select('*')
           .eq('user_id', this.userId)
-          .gt('updated_at', cursor)
+          .gte('updated_at', cursor)
           .order('updated_at', { ascending: true })
           .range(offset, offset + PULL_PAGE_SIZE - 1);
 
@@ -242,9 +394,13 @@ export class RealtimeSyncEngine {
           query = query.eq('is_deleted', 0);
         }
 
-        const { data, error } = await query;
+        const { data, error } = await withTimeout(
+          query as unknown as Promise<{ data: ServerRow[] | null; error: { code?: string; message?: string } | null }>,
+          REQUEST_TIMEOUT_MS,
+        );
 
         if (error) {
+          this.handleSupabaseError(error as { code?: string; message?: string });
           console.error(`Sync: Error pulling ${tableName}`, error);
           return false;
         }
@@ -253,21 +409,26 @@ export class RealtimeSyncEngine {
 
         await db.transaction('rw', dexieTable, async () => {
           for (const serverRow of data) {
-            const localItem = await dexieTable.where('serverId').equals(serverRow.id).first();
+            const localItem = await dexieTable.where('serverId').equals(serverRow['id'] as string).first() as (LocalRow & { id?: number; synced?: number; updatedAt?: string }) | undefined;
             const mapped = mapToLocal(serverRow);
 
             if (localItem) {
+              const serverTs: string = (serverRow['updated_at'] as string) ?? '';
+              const localTs: string = (localItem.updatedAt as string) ?? '';
+
               if (localItem.synced === 0) {
                 // Pending local write exists.  Apply Last-Write-Wins: compare timestamps.
-                const serverTs: string = serverRow.updated_at ?? '';
-                const localTs: string = localItem.updatedAt ?? '';
                 if (serverTs <= localTs) {
                   // Local change is newer or same age → keep local, push will overwrite server
                   continue;
                 }
                 // Server is strictly newer → server wins, accept server state
+              } else {
+                // Already synced. Skip the write if timestamps are equal to avoid
+                // a redundant DB round-trip (dedup for .gte overlap) (2.1).
+                if (serverTs === localTs) continue;
               }
-              await dexieTable.update(localItem.id, { ...mapped, synced: 1 });
+              await dexieTable.update(localItem.id!, { ...mapped, synced: 1 });
             } else {
               await dexieTable.add({ ...mapped, synced: 1 });
             }
@@ -275,8 +436,8 @@ export class RealtimeSyncEngine {
         });
 
         // Advance per-table cursor to max(updated_at) from this batch.
-        const batchMax = (data as any[]).reduce((best: string, row: any) => {
-          const ts: string = row.updated_at ?? '';
+        const batchMax = (data as ServerRow[]).reduce((best: string, row: ServerRow) => {
+          const ts = (row['updated_at'] as string) ?? '';
           return ts > best ? ts : best;
         }, '');
         if (batchMax > maxUpdatedAt) maxUpdatedAt = batchMax;
@@ -286,10 +447,10 @@ export class RealtimeSyncEngine {
       }
 
       if (maxUpdatedAt) {
-        localStorage.setItem(cursorKey, maxUpdatedAt);
+        safeStorage.setItem(cursorKey, maxUpdatedAt);
       } else if (isFreshSync) {
         // Fresh sync with zero records → mark as done so we don't re-request everything.
-        localStorage.setItem(cursorKey, new Date().toISOString());
+        safeStorage.setItem(cursorKey, new Date().toISOString());
       }
 
       return true;
@@ -298,35 +459,12 @@ export class RealtimeSyncEngine {
     // Pull all tables independently — a failure in one does NOT block the others,
     // and only that table's cursor stays behind.
     await Promise.allSettled([
-      pull('semesters', db.semesters, (s) => ({
-        serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
-        isActive: s.is_active, isArchived: s.is_archived,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('students', db.students, (s) => ({
-        serverId: s.id, regNumber: s.reg_number, name: s.name,
-        email: s.email, phone: s.phone,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('courses', db.courses, (c) => ({
-        serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
-        userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
-      })),
-      pull('enrollments', db.enrollments, (e) => ({
-        serverId: e.id, studentId: e.student_id, courseId: e.course_id,
-        userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
-      })),
-      pull('attendance_sessions', db.attendanceSessions, (s) => ({
-        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('attendance_records', db.attendanceRecords, (r) => ({
-        serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
-        status: r.status,
-        // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
-        timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
-        userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
-      })),
+      pull('semesters',           db.semesters          as unknown as Table<LocalRow, number>),
+      pull('students',            db.students           as unknown as Table<LocalRow, number>),
+      pull('courses',             db.courses            as unknown as Table<LocalRow, number>),
+      pull('enrollments',         db.enrollments        as unknown as Table<LocalRow, number>),
+      pull('attendance_sessions', db.attendanceSessions as unknown as Table<LocalRow, number>),
+      pull('attendance_records',  db.attendanceRecords  as unknown as Table<LocalRow, number>),
     ]);
   }
 
@@ -418,6 +556,8 @@ export class RealtimeSyncEngine {
    * 2. Records that have exceeded MAX_OUTBOX_ATTEMPTS in the outbox are skipped
    *    to prevent an infinite retry loop for permanently broken items.
    * 3. Foreign-key validity is checked via mapFn returning null (unchanged).
+   * 4. Orphan synced=0 rows with no outbox entry get a synthetic entry so the
+   *    retry counter always has somewhere to increment (2.3).
    */
   private async pushTable<T extends {
     id?: number;
@@ -427,7 +567,7 @@ export class RealtimeSyncEngine {
     updatedAt?: string;
   }>(
     tableName: TableName,
-    table: any,
+    table: Table<T, number>,
     mapFn: (item: T) => Record<string, unknown> | null,
   ) {
     const unsynced: T[] = await table.filter((i: T) => i.synced === 0).toArray();
@@ -441,6 +581,28 @@ export class RealtimeSyncEngine {
       .toArray();
     for (const entry of outboxEntries) {
       outboxAttempts.set(entry.serverId, { entry, id: entry.id! });
+    }
+
+    // ── Synthesise outbox entries for orphan records (2.3) ────────────────────
+    // If a synced=0 row has no outbox entry (e.g. app crashed between the data
+    // write and the outbox write), create one now so the attempt counter can
+    // be incremented on failure.
+    const now = new Date().toISOString();
+    for (const record of unsynced) {
+      if (!outboxAttempts.has(record.serverId)) {
+        const newId = await db.outbox.add({
+          tableName,
+          serverId: record.serverId,
+          operation: record.isDeleted === 1 ? 'delete' : 'upsert',
+          attempts: 0,
+          done: 0,
+          createdAt: now,
+        });
+        outboxAttempts.set(record.serverId, {
+          entry: { tableName, serverId: record.serverId, operation: 'upsert', attempts: 0, done: 0, createdAt: now },
+          id: newId as number,
+        });
+      }
     }
 
     // Skip records that have permanently failed
@@ -462,7 +624,7 @@ export class RealtimeSyncEngine {
         .select('id')
         .in('id', tombstones.map(t => t.serverId));
 
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set((serverRows ?? []).map((r: ServerRow) => r['id'] as string));
 
       // Records that were created and deleted entirely offline → just purge locally
       const toPurgeLocally = tombstones.filter(t => !existsOnServer.has(t.serverId));
@@ -497,7 +659,7 @@ export class RealtimeSyncEngine {
     updatedAt?: string;
   }>(
     tableName: TableName,
-    table: any,
+    table: Table<T, number>,
     records: T[],
     mapFn: (item: T) => Record<string, unknown> | null,
     outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }>,
@@ -511,10 +673,17 @@ export class RealtimeSyncEngine {
       return;
     }
 
-    const { data, error } = await supabase.from(tableName).upsert(payload).select();
+    const { data, error } = await withTimeout(
+      supabase.from(tableName).upsert(payload).select() as unknown as Promise<{
+        data: ServerRow[] | null;
+        error: { code?: string; message?: string } | null;
+      }>,
+      REQUEST_TIMEOUT_MS,
+    );
 
     if (error) {
       console.error(`Sync: Error pushing to ${tableName}`, error);
+      this.handleSupabaseError(error as { code?: string; message?: string });
       // Increment attempt counter for each failed record
       for (const record of records) {
         const ob = outboxAttempts.get(record.serverId);
@@ -526,20 +695,38 @@ export class RealtimeSyncEngine {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
 
-      for (const serverItem of data as any[]) {
-        const localItem = records.find(u => u.serverId === serverItem.id);
+      for (const serverItem of data) {
+        const localItem = records.find(u => u.serverId === (serverItem['id'] as string));
         if (!localItem) continue;
         updates.push({
           key: localItem.id!,
-          changes: { synced: 1, updatedAt: serverItem.updated_at },
+          changes: { synced: 1, updatedAt: serverItem['updated_at'] as string },
         });
-        const ob = outboxAttempts.get(serverItem.id);
+        const ob = outboxAttempts.get(serverItem['id'] as string);
         if (ob) doneOutboxIds.push(ob.id);
       }
 
       if (updates.length > 0) await table.bulkUpdate(updates);
       // Mark outbox entries as done
       await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
+    }
+  }
+
+  /**
+   * Detect and handle server-side error codes.
+   * - 429 (rate limit): sets a back-off window so subsequent calls wait (8.1).
+   */
+  private handleSupabaseError(error: { code?: string; message?: string }) {
+    const isRateLimit =
+      error.code === '429' ||
+      error.message?.includes('429') ||
+      error.message?.toLowerCase().includes('too many requests');
+
+    if (isRateLimit) {
+      // Back off for 60 seconds before retrying — longer than the normal retry window.
+      const backoffMs = 60_000;
+      this.rateLimitUntil = Date.now() + backoffMs;
+      console.warn(`Sync: Rate limited by server. Backing off for ${backoffMs / 1000}s.`);
     }
   }
 
@@ -565,6 +752,25 @@ export class RealtimeSyncEngine {
       outboxAttempts.set(entry.serverId, { entry, id: entry.id! });
     }
 
+    // Synthesise outbox entries for orphans (2.3)
+    const now = new Date().toISOString();
+    for (const record of unsynced) {
+      if (!outboxAttempts.has(record.serverId)) {
+        const newId = await db.outbox.add({
+          tableName: 'students',
+          serverId: record.serverId,
+          operation: record.isDeleted === 1 ? 'delete' : 'upsert',
+          attempts: 0,
+          done: 0,
+          createdAt: now,
+        });
+        outboxAttempts.set(record.serverId, {
+          entry: { tableName: 'students', serverId: record.serverId, operation: 'upsert', attempts: 0, done: 0, createdAt: now },
+          id: newId as number,
+        });
+      }
+    }
+
     const eligible = unsynced.filter(r => {
       const ob = outboxAttempts.get(r.serverId);
       return !ob || ob.entry.attempts < MAX_OUTBOX_ATTEMPTS;
@@ -579,7 +785,7 @@ export class RealtimeSyncEngine {
       const { data: serverRows } = await supabase
         .from('students').select('id')
         .in('id', tombstones.map(t => t.serverId));
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set((serverRows ?? []).map((r: ServerRow) => r['id'] as string));
 
       const toPurge = tombstones.filter(t => !existsOnServer.has(t.serverId));
       if (toPurge.length > 0) await db.students.bulkDelete(toPurge.map(t => t.id!));
@@ -618,10 +824,13 @@ export class RealtimeSyncEngine {
       updated_at: item.updatedAt,
     }));
 
-    const { data, error } = await supabase
-      .from('students')
-      .upsert(payload, { onConflict: 'id', ignoreDuplicates: false })
-      .select();
+    const { data, error } = await withTimeout(
+      supabase.from('students').upsert(payload, { onConflict: 'id', ignoreDuplicates: false }).select() as unknown as Promise<{
+        data: ServerRow[] | null;
+        error: { code?: string; message?: string } | null;
+      }>,
+      REQUEST_TIMEOUT_MS,
+    );
 
     if (error) {
       if (error.code === '23505') {
@@ -633,7 +842,7 @@ export class RealtimeSyncEngine {
             .upsert(item, { onConflict: 'id' })
             .select();
 
-          if (singleError?.code === '23505') {
+          if ((singleError as { code?: string } | null)?.code === '23505') {
             // Another device created the same reg_number with a different UUID.
             // Re-home the local record to use the server's canonical UUID.
             const { data: serverRecord } = await supabase
@@ -642,27 +851,28 @@ export class RealtimeSyncEngine {
             if (serverRecord) {
               const localItem = liveRecords.find(u => u.serverId === item.id);
               if (localItem) {
-                await db.students.update(localItem.id!, { serverId: serverRecord.id, synced: 1 });
+                await db.students.update(localItem.id!, { serverId: (serverRecord as ServerRow)['id'] as string, synced: 1 });
               }
             }
           } else if (!singleError && singleData?.[0]) {
-            const localItem = liveRecords.find(u => u.serverId === singleData[0].id);
+            const localItem = liveRecords.find(u => u.serverId === (singleData[0] as ServerRow)['id'] as string);
             if (localItem) {
-              await db.students.update(localItem.id!, { synced: 1, updatedAt: singleData[0].updated_at });
+              await db.students.update(localItem.id!, { synced: 1, updatedAt: (singleData[0] as ServerRow)['updated_at'] as string });
             }
           }
         }
       } else {
         console.error('Sync: Error pushing to students', error);
+        this.handleSupabaseError(error as { code?: string; message?: string });
       }
     } else if (data) {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
-      for (const serverItem of data as any[]) {
-        const localItem = liveRecords.find(u => u.serverId === serverItem.id);
+      for (const serverItem of data) {
+        const localItem = liveRecords.find(u => u.serverId === (serverItem as ServerRow)['id'] as string);
         if (localItem) {
-          updates.push({ key: localItem.id!, changes: { synced: 1, updatedAt: serverItem.updated_at } });
-          const ob = outboxAttempts.get(serverItem.id);
+          updates.push({ key: localItem.id!, changes: { synced: 1, updatedAt: (serverItem as ServerRow)['updated_at'] as string } });
+          const ob = outboxAttempts.get((serverItem as ServerRow)['id'] as string);
           if (ob) doneOutboxIds.push(ob.id);
         }
       }
@@ -789,39 +999,55 @@ export class RealtimeSyncEngine {
     // when multiple browser tabs are open with the same account.
     this.channel = supabase
       .channel(`db_changes_${this.userId}_${Date.now()}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_records', db.attendanceRecords, payload))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_sessions', db.attendanceSessions, payload))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'students', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('students', db.students, payload))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'courses', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('courses', db.courses, payload))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'semesters', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('semesters', db.semesters, payload))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('enrollments', db.enrollments, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_records', db.attendanceRecords as unknown as Table<LocalRow, number>, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_sessions', db.attendanceSessions as unknown as Table<LocalRow, number>, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'students', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('students', db.students as unknown as Table<LocalRow, number>, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'courses', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('courses', db.courses as unknown as Table<LocalRow, number>, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'semesters', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('semesters', db.semesters as unknown as Table<LocalRow, number>, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('enrollments', db.enrollments as unknown as Table<LocalRow, number>, payload))
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           // Channel connected or reconnected → run a catch-up pull to close
           // any gap in coverage while the WebSocket was down.
           console.log('Sync: Realtime channel connected/reconnected, running catch-up pull.');
           this.pullChanges().catch(e => console.error('Sync: Catch-up pull failed', e));
+
+          // Reset heartbeat timer so the next periodic sync fires from now,
+          // not from whenever the timer last started before the disconnect (2.4).
+          if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+          }
+          this.heartbeatTimer = setInterval(() => {
+            if (navigator.onLine) this.sync();
+          }, this.HEARTBEAT_INTERVAL_MS);
         }
       });
   }
 
-  private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
+  private async handleRealtimeEvent(
+    tableName: string,
+    table: Table<LocalRow, number>,
+    payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+  ) {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
-      const localItem = await table.where('serverId').equals(newRecord.id).first();
+      const localItem = await table.where('serverId').equals((newRecord as ServerRow)['id'] as string).first() as (LocalRow & { id?: number; synced?: number; updatedAt?: string }) | undefined;
 
       if (localItem && localItem.synced === 0) {
         // Pending local write: apply LWW
-        const serverTs: string = newRecord.updated_at ?? '';
-        const localTs: string = localItem.updatedAt ?? '';
+        const serverTs: string = ((newRecord as ServerRow)['updated_at'] as string) ?? '';
+        const localTs: string = (localItem.updatedAt as string) ?? '';
         if (serverTs <= localTs) return; // local is newer, do nothing
       }
 
-      const mapped = this.mapServerToLocal(tableName, newRecord);
+      // Use consolidated SERVER_TO_LOCAL map
+      const mapFn = SERVER_TO_LOCAL[tableName as TableName];
+      if (!mapFn) return;
+      const mapped = mapFn(newRecord as ServerRow);
 
       if (localItem) {
-        await table.update(localItem.id, { ...mapped, synced: 1 });
+        await table.update(localItem.id!, { ...mapped, synced: 1 });
       } else {
         // Heavy tables: only insert via periodic pull to avoid bloating local storage
         const isHeavy = tableName === 'attendance_records' || tableName === 'attendance_sessions';
@@ -832,41 +1058,12 @@ export class RealtimeSyncEngine {
     } else if (eventType === 'DELETE') {
       // Physical deletes from Supabase CDC should be treated as soft-deletes locally.
       // The app uses tombstones; hard-deleting would bypass the purge and leave data inconsistencies.
-      const localItem = await table.where('serverId').equals(oldRecord.id).first();
+      const localItem = await table.where('serverId').equals((oldRecord as ServerRow)['id'] as string).first() as (LocalRow & { id?: number; synced?: number }) | undefined;
       if (!localItem) return;
       if (localItem.synced === 0) return; // unsynced local change takes precedence
 
       // Mark as soft-deleted + synced (will be purged by meticulousPurge on next sync)
-      await table.update(localItem.id, { isDeleted: 1, synced: 1 });
-    }
-  }
-
-  private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
-    const base = {
-      serverId: r.id,
-      userId: r.user_id,
-      isDeleted: r.is_deleted,
-      updatedAt: r.updated_at,
-    };
-    switch (tableName) {
-      case 'semesters':
-        return { ...base, name: r.name, startDate: r.start_date, endDate: r.end_date, isActive: r.is_active, isArchived: r.is_archived };
-      case 'students':
-        return { ...base, regNumber: r.reg_number, name: r.name, email: r.email, phone: r.phone };
-      case 'courses':
-        return { ...base, code: r.code, title: r.title, semesterId: r.semester_id };
-      case 'enrollments':
-        return { ...base, studentId: r.student_id, courseId: r.course_id };
-      case 'attendance_sessions':
-        return { ...base, courseId: r.course_id, date: r.date, title: r.title };
-      case 'attendance_records':
-        return {
-          ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status,
-          // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
-          timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
-        };
-      default:
-        return base;
+      await table.update(localItem.id!, { isDeleted: 1, synced: 1 });
     }
   }
 }
