@@ -48,7 +48,7 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         setError(null);
 
         // Get API Key from environment OR fallback to provided token for local test
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyAcNX2uM_6i1Oh0JXYlZ7rZXndNWYsdsU4';
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyCWow9UKM4rGWZuKB05Prc_WW64vm1ITho';
 
         const ai = new GoogleGenAI({ apiKey });
 
