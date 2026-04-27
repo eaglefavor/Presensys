@@ -185,6 +185,18 @@ export default function Attendance() {
     setRenameValue('');
   };
 
+  const handleSessionSelect = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setPendingChanges({});
+    setAttendanceMode('choosing');
+  };
+
+  const handleCancelSession = () => {
+    setActiveSessionId(null);
+    setPendingChanges({});
+    setAttendanceMode(null);
+  };
+
   const handleSessionExport = (format: 'csv' | 'xlsx' | 'pdf' | 'text' | 'share') => {
     if (!enrollments || !activeSessionId || !currentSession) return;
     const selectedCourse = courses?.find(c => c.serverId === selectedCourseId);
@@ -333,7 +345,7 @@ export default function Attendance() {
                     <button className="btn btn-light btn-sm rounded-3 px-3 fw-bold border" onClick={() => setRenamingSessionId(null)}>✕</button>
                   </div>
                 ) : (
-                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => { setActiveSessionId(session.serverId); setPendingChanges({}); setAttendanceMode('choosing'); }}>
+                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => handleSessionSelect(session.serverId)}>
                     <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
                     <div className="flex-grow-1">
                       <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
@@ -367,7 +379,7 @@ export default function Attendance() {
   if (attendanceMode === 'choosing') {
     return (
       <AIOptionScreen
-        onCancel={() => { setActiveSessionId(null); setPendingChanges({}); setAttendanceMode(null); }}
+        onCancel={() => handleCancelSession()}
         onSelectManual={() => setAttendanceMode('manual')}
         onSelectAI={() => setAttendanceMode('ai-camera')}
       />
@@ -410,7 +422,7 @@ export default function Attendance() {
       <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm sticky-top" style={{ zIndex: 100 }}>
         <div className="d-flex justify-content-between align-items-start mb-3">
           <div className="d-flex align-items-center gap-3 overflow-hidden">
-            <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={() => { setActiveSessionId(null); setPendingChanges({}); setAttendanceMode(null); }}><ArrowLeft size={20} /></button>
+            <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={handleCancelSession}><ArrowLeft size={20} /></button>
             <div className="overflow-hidden flex-grow-1">
               {renamingSessionId === activeSessionId ? (
                 <div className="d-flex align-items-center gap-2">
