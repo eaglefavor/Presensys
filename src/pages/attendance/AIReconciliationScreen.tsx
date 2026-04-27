@@ -47,10 +47,16 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         setLoading(true);
         setError(null);
 
-        // Get API Key from environment OR fallback to provided token for local test
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyCWow9UKM4rGWZuKB05Prc_WW64vm1ITho';
+        // Get API Keys from environment and fallbacks
+        const envKeysString = import.meta.env.VITE_GEMINI_API_KEYS || import.meta.env.VITE_GEMINI_API_KEY || '';
+        let apiKeys = envKeysString.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
 
-        const ai = new GoogleGenAI({ apiKey });
+        // Provide a default fallback if absolutely nothing is configured (safe fallback)
+        if (apiKeys.length === 0) {
+            apiKeys = ['AIzaSyCWow9UKM4rGWZuKB05Prc_WW64vm1ITho'];
+        }
+        // Shuffle keys to distribute load
+        apiKeys = apiKeys.sort(() => Math.random() - 0.5);
 
         // Dynamic model selection based on network quality and image count (task complexity).
         //
@@ -111,25 +117,60 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         const imageParts = parseImagesForGemini(images);
 
-        const prompt = `
-          You are a data extraction tool. Attached are ${images.length} image(s) of a university attendance sheet (front and potentially back).
-          Extract all 10-digit Registration Numbers and their corresponding Names.
+        const enrollmentsContext = enrollments.map(e => `${e.regNumber}: ${e.name}`).join('\n');
 
-          CRITICAL RULES:
-          1. Merge the data from all images into a single list.
-          2. Ignore duplicate Registration Numbers (e.g., if ink bled through the paper).
-          3. Ignore reversed text or bleed-through.
-          4. Return STRICTLY a valid JSON array of objects with keys "regNumber" (string) and "name" (string).
-          5. Do not include markdown blocks like \`\`\`json or \`\`\`. Output ONLY the raw JSON array.
+        const prompt = `
+          You are an advanced data extraction and reconciliation tool. Attached are ${images.length} image(s) of a university attendance sheet (front and potentially back).
+          Your task is to extract all handwritten 10-digit Registration Numbers and their corresponding Names, but with a CRITICAL cross-referencing step against a known database.
+
+          --- DATABASE CONTEXT ---
+          Here is the list of enrolled students (Registration Number: Name):
+          ${enrollmentsContext}
+          ------------------------
+
+          --- REGISTRATION NUMBER SEGMENTATION ---
+          Understand that the 10-digit Registration Numbers are segmented:
+          - First 4 digits: Admission Date / Year (e.g., "2023").
+          - Next 3 digits: Static Course / Department Code (e.g., "104", "105").
+          - Last 3 digits: Unique Dynamic Student Identifier (e.g., "001", "003").
+
+          CRITICAL RULES & WORKFLOW:
+          1. Read the handwritten registration numbers and names from the images.
+          2. CROSS-REFERENCE: For every handwritten entry, cross-reference it against the provided DATABASE CONTEXT.
+             If handwriting is messy or unclear, heavily rely on the unique last 3 digits and the student's name to accurately infer the full 10-digit Registration Number.
+          3. If the first 7 digits are ambiguous, assume they match the common patterns found in the database.
+          4. Merge the data from all images into a single list.
+          5. Ignore duplicate Registration Numbers (e.g., if ink bled through the paper).
+          6. Ignore reversed text or bleed-through.
+          7. Output the best-matched Registration Number from the database if a clear correlation is found.
+          8. Return STRICTLY a valid JSON array of objects with keys "regNumber" (string) and "name" (string).
+          9. Do not include markdown blocks like \`\`\`json or \`\`\`. Output ONLY the raw JSON array.
         `;
 
-        const response = await ai.models.generateContent({
-            model: modelName,
-            contents: [
-                prompt,
-                ...imageParts
-            ]
-        });
+        let response = null;
+        let lastError = null;
+
+        for (const apiKey of apiKeys) {
+          try {
+            const ai = new GoogleGenAI({ apiKey });
+            response = await ai.models.generateContent({
+                model: modelName,
+                contents: [
+                    prompt,
+                    ...imageParts
+                ]
+            });
+            // If successful, break out of the loop
+            break;
+          } catch (e: unknown) {
+            console.warn(`API key failed (${(e instanceof Error ? e.message : 'unknown error') || 'unknown error'}). Trying next key...`);
+            lastError = e;
+          }
+        }
+
+        if (!response) {
+          throw lastError || new Error("All available API keys failed or were rate-limited.");
+        }
 
         let text = response.text || "[]";
 
@@ -173,17 +214,41 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         // 2. The Matching Logic
         const processedRecords: ExtractedRecord[] = uniqueData.map(item => {
-           const match = enrollments.find(e =>
+           // Direct Match
+           let match = enrollments.find(e =>
                e.regNumber.toUpperCase() === item.regNumber ||
                e.regNumber.replace(/[^A-Za-z0-9]/g, '').toUpperCase() === item.regNumber
            );
+
+           // Fuzzy Match / Segmented Fallback
+           if (!match && item.regNumber.length >= 3) {
+               const last3 = item.regNumber.slice(-3);
+               const fuzzyMatches = enrollments.filter(e => {
+                   const eClean = e.regNumber.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                   return eClean.endsWith(last3);
+               });
+
+               // If exactly one student has these last 3 digits, we can confidently assume it's them.
+               if (fuzzyMatches.length === 1) {
+                   match = fuzzyMatches[0];
+               } else if (fuzzyMatches.length > 1 && item.name) {
+                   // If multiple share the last 3, check if the name matches partially
+                   const ocrNameParts = item.name.toLowerCase().split(/\s+/);
+                   match = fuzzyMatches.find(e => {
+                       const dbName = e.name.toLowerCase();
+                       // Consider it a match if any significant part of the OCR name is in the DB name
+                       return ocrNameParts.some((part: string) => part.length > 2 && dbName.includes(part));
+                   });
+               }
+           }
 
            if (match) {
                return {
                    ...item,
                    status: 'matched',
                    matchedServerId: match.serverId,
-                   name: match.name // Prefer DB name over OCR name
+                   name: match.name, // Prefer DB name over OCR name
+                   regNumber: match.regNumber // Prefer DB regNumber to fix typos
                };
            } else {
                return {
