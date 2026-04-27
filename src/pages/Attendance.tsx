@@ -11,6 +11,9 @@ import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { exportToCSV, exportToXLSX, exportToPDF, exportToText, downloadText, shareData } from '../lib/ExportUtils';
 import ConfirmDialog from '../components/ConfirmDialog';
+import AIOptionScreen from './attendance/AIOptionScreen';
+import AICameraScreen from './attendance/AICameraScreen';
+import AIReconciliationScreen from './attendance/AIReconciliationScreen';
 
 export default function Attendance() {
   const { user } = useAuthStore();
@@ -75,6 +78,8 @@ export default function Attendance() {
   const [confirmBulkMarkStatus, setConfirmBulkMarkStatus] = useState<'present' | 'absent' | null>(null);
   const [confirmResetRecords, setConfirmResetRecords] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, 'present' | 'absent' | 'excused' | 'reset'>>({});
+  const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | null>(null);
+  const [aiImages, setAiImages] = useState<string[]>([]);
 
   const handleCreateSession = async () => {
     if (!selectedCourseId || !user) return;
@@ -89,7 +94,7 @@ export default function Attendance() {
     };
     const id = await db.attendanceSessions.add(newSession);
     const added = await db.attendanceSessions.get(id as number);
-    if (added) setActiveSessionId(added.serverId);
+    if (added) { setActiveSessionId(added.serverId); setAttendanceMode('choosing'); }
   };
 
   const updateRecord = async (studentId: string, status: 'present' | 'absent' | 'excused') => {
@@ -178,6 +183,18 @@ export default function Attendance() {
     if (session) await db.attendanceSessions.update(session.id!, { title: renameValue.trim() });
     setRenamingSessionId(null);
     setRenameValue('');
+  };
+
+  const handleSessionSelect = (sessionId: string) => {
+    setActiveSessionId(sessionId);
+    setPendingChanges({});
+    setAttendanceMode('choosing');
+  };
+
+  const handleCancelSession = () => {
+    setActiveSessionId(null);
+    setPendingChanges({});
+    setAttendanceMode(null);
   };
 
   const handleSessionExport = (format: 'csv' | 'xlsx' | 'pdf' | 'text' | 'share') => {
@@ -328,7 +345,7 @@ export default function Attendance() {
                     <button className="btn btn-light btn-sm rounded-3 px-3 fw-bold border" onClick={() => setRenamingSessionId(null)}>✕</button>
                   </div>
                 ) : (
-                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => { setActiveSessionId(session.serverId); setPendingChanges({}); }}>
+                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => handleSessionSelect(session.serverId)}>
                     <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
                     <div className="flex-grow-1">
                       <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
@@ -358,7 +375,43 @@ export default function Attendance() {
     );
   }
 
-  // View 3: Marking Mode
+  // View 3: Marking Mode (AI option selection / camera / reconciliation)
+  if (attendanceMode === 'choosing') {
+    return (
+      <AIOptionScreen
+        onCancel={() => handleCancelSession()}
+        onSelectManual={() => setAttendanceMode('manual')}
+        onSelectAI={() => setAttendanceMode('ai-camera')}
+      />
+    );
+  }
+
+  if (attendanceMode === 'ai-camera') {
+    return (
+      <AICameraScreen
+        onCancel={() => setAttendanceMode('choosing')}
+        onSubmit={(images) => { setAiImages(images); setAttendanceMode('ai-reconciling'); }}
+      />
+    );
+  }
+
+  if (attendanceMode === 'ai-reconciling') {
+    return (
+      <AIReconciliationScreen
+        images={aiImages}
+        enrollments={enrollments || []}
+        onCancel={() => setAttendanceMode('ai-camera')}
+        onSave={(matchedIds) => {
+          const newPending: Record<string, 'present' | 'absent' | 'excused' | 'reset'> = {};
+          matchedIds.forEach(id => { newPending[id] = 'present'; });
+          setPendingChanges(newPending);
+          setAttendanceMode('manual');
+        }}
+      />
+    );
+  }
+
+  // View 4: Manual Marking Mode
   const currentSession = sessions?.find(s => s.serverId === activeSessionId);
   
 
@@ -369,7 +422,7 @@ export default function Attendance() {
       <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm sticky-top" style={{ zIndex: 100 }}>
         <div className="d-flex justify-content-between align-items-start mb-3">
           <div className="d-flex align-items-center gap-3 overflow-hidden">
-            <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={() => { setActiveSessionId(null); setPendingChanges({}); }}><ArrowLeft size={20} /></button>
+            <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={handleCancelSession}><ArrowLeft size={20} /></button>
             <div className="overflow-hidden flex-grow-1">
               {renamingSessionId === activeSessionId ? (
                 <div className="d-flex align-items-center gap-2">
