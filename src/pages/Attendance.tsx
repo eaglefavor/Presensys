@@ -11,6 +11,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { exportToCSV, exportToXLSX, exportToPDF, exportToText, downloadText, shareData } from '../lib/ExportUtils';
 import ConfirmDialog from '../components/ConfirmDialog';
+import toast from 'react-hot-toast';
 import AIOptionScreen from './attendance/AIOptionScreen';
 import AICameraScreen from './attendance/AICameraScreen';
 import AIReconciliationScreen from './attendance/AIReconciliationScreen';
@@ -42,10 +43,16 @@ export default function Attendance() {
   const enrollments = useLiveQuery(
     async () => {
       if (!selectedCourseId) return [];
-      const enrollmentList = await db.enrollments.where('courseId').equals(selectedCourseId).toArray();
-      const activeEnrollments = enrollmentList.filter(e => e.isDeleted !== 1);
-      const studentIds = activeEnrollments.map(e => e.studentId);
-      return db.students.where('serverId').anyOf(studentIds).toArray();
+      try {
+        const enrollmentList = await db.enrollments.where('courseId').equals(selectedCourseId).toArray();
+        const activeEnrollments = enrollmentList.filter(e => e.isDeleted !== 1);
+        const studentIds = activeEnrollments.map(e => e.studentId);
+        return await db.students.where('serverId').anyOf(studentIds).toArray();
+      } catch (err) {
+        console.error("Enrollment fetch error:", err);
+        toast.error("Failed to load students.");
+        return [];
+      }
     },
     [selectedCourseId]
   );
@@ -179,10 +186,16 @@ export default function Attendance() {
 
   const handleRenameSession = async () => {
     if (!renamingSessionId || !renameValue.trim()) { setRenamingSessionId(null); return; }
-    const session = await db.attendanceSessions.where('serverId').equals(renamingSessionId).first();
+    try {
+      const session = await db.attendanceSessions.where('serverId').equals(renamingSessionId).first();
     if (session) await db.attendanceSessions.update(session.id!, { title: renameValue.trim() });
-    setRenamingSessionId(null);
-    setRenameValue('');
+    } catch (err) {
+      console.error("Session rename error:", err);
+      toast.error("Failed to rename session.");
+    } finally {
+      setRenamingSessionId(null);
+      setRenameValue('');
+    }
   };
 
   const handleSessionSelect = (sessionId: string) => {

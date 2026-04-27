@@ -17,9 +17,9 @@ export default function VerifyAccess() {
   // Log the state every time the auth state changes
   useEffect(() => {
     console.group('%c[VerifyAccess] Component rendered / state updated', 'color:#d35400;font-weight:bold');
-    console.log('session      :', session ? `✅ user=${session.user?.email}` : '❌ null');
-    console.log('profileVerified:', profileVerified);
-    console.log('profile      :', profile
+    if (import.meta.env.DEV) console.log('session      :', session ? `✅ user=${session.user?.email}` : '❌ null');
+    if (import.meta.env.DEV) console.log('profileVerified:', profileVerified);
+    if (import.meta.env.DEV) console.log('profile      :', profile
       ? { id: profile.id, role: profile.role, status: profile.status, invalid_tries: profile.invalid_tries }
       : '⚠️ NULL — profile row missing?');
     if (profile?.status === 'terminated') {
@@ -27,7 +27,7 @@ export default function VerifyAccess() {
     } else if (profile?.status === 'verified') {
       console.warn('⚠️ Profile is VERIFIED but VerifyAccess is still showing — route guard may be stale!');
     } else {
-      console.log('status is:', profile?.status ?? 'unknown (profile null)');
+      if (import.meta.env.DEV) console.log('status is:', profile?.status ?? 'unknown (profile null)');
     }
     console.groupEnd();
   }, [session, profileVerified, profile]);
@@ -38,19 +38,19 @@ export default function VerifyAccess() {
     setMessage(null);
 
     console.group('%c[VerifyAccess] handleVerify — submitting code', 'color:#c0392b;font-weight:bold');
-    console.log('code entered :', code);
-    console.log('profile before RPC:', profile
+    if (import.meta.env.DEV) console.log('code entered :', code);
+    if (import.meta.env.DEV) console.log('profile before RPC:', profile
       ? { id: profile.id, role: profile.role, status: profile.status, invalid_tries: profile.invalid_tries }
       : 'NULL');
-    console.log('session user id:', session?.user?.id ?? 'null');
+    if (import.meta.env.DEV) console.log('session user id:', session?.user?.id ?? 'null');
 
     try {
-      console.log('[VerifyAccess] Calling verify_access_code RPC…');
+      if (import.meta.env.DEV) console.log('[VerifyAccess] Calling verify_access_code RPC…');
       const { data, error } = await supabase.rpc('verify_access_code', { input_code: code });
-      console.log('[VerifyAccess] RPC raw response:');
-      console.log('  error:', error);
-      console.log('  data :', data);
-      console.log('  typeof data:', typeof data);
+      if (import.meta.env.DEV) console.log('[VerifyAccess] RPC raw response:');
+      if (import.meta.env.DEV) console.log('  error:', error);
+      if (import.meta.env.DEV) console.log('  data :', data);
+      if (import.meta.env.DEV) console.log('  typeof data:', typeof data);
 
       if (!data) {
         console.error('[VerifyAccess] data is null/undefined/falsy!');
@@ -63,7 +63,7 @@ export default function VerifyAccess() {
         setMessage(error.message);
         setIsError(true);
       } else if (data.success) {
-        console.log('%c[VerifyAccess] ✅ Code accepted! data.message:', 'color:#27ae60', data.message);
+        if (import.meta.env.DEV) console.log('%c[VerifyAccess] ✅ Code accepted! data.message:', 'color:#27ae60', data.message);
         setMessage('Account verified! Setting up your dashboard…');
         setIsError(false);
         // Apply an optimistic update directly in the store rather than re-fetching
@@ -73,13 +73,13 @@ export default function VerifyAccess() {
         // Trusting the SECURITY DEFINER RPC result is safe: if it returned
         // { success: true }, the primary DB row is already committed as 'verified'.
         const currentProfile = useAuthStore.getState().profile;
-        console.log('[VerifyAccess] currentProfile before optimistic update:', currentProfile);
+        if (import.meta.env.DEV) console.log('[VerifyAccess] currentProfile before optimistic update:', currentProfile);
         if (currentProfile) {
           const verifiedProfile = { ...currentProfile, status: 'verified' as const, invalid_tries: 0 };
-          console.log('[VerifyAccess] → applying optimistic update:', verifiedProfile);
+          if (import.meta.env.DEV) console.log('[VerifyAccess] → applying optimistic update:', verifiedProfile);
           localStorage.setItem('user_profile', JSON.stringify(verifiedProfile));
           useAuthStore.setState({ profile: verifiedProfile, profileVerified: true });
-          console.log('[VerifyAccess] → store updated. App route guard should now render <Layout />');
+          if (import.meta.env.DEV) console.log('[VerifyAccess] → store updated. App route guard should now render <Layout />');
           // App.tsx's reactive route guard now sees status === 'verified' and
           // automatically switches to <Layout /> without any explicit navigation.
         } else {
@@ -87,7 +87,7 @@ export default function VerifyAccess() {
           // Profile wasn't in the store (very unusual) — fall back to server fetch.
           await useAuthStore.getState().fetchProfile();
           const refreshedStatus = useAuthStore.getState().profile?.status;
-          console.log('[VerifyAccess] after fallback fetch, profile.status =', refreshedStatus);
+          if (import.meta.env.DEV) console.log('[VerifyAccess] after fallback fetch, profile.status =', refreshedStatus);
           if (refreshedStatus !== 'verified') {
             console.warn('[VerifyAccess] still not verified after fetch — forcing reload');
             window.location.reload();
@@ -95,13 +95,13 @@ export default function VerifyAccess() {
         }
       } else {
         console.warn('%c[VerifyAccess] ❌ Code rejected — data.success=false', 'color:#e74c3c', 'message:', data.message);
-        console.log('[VerifyAccess] full rejection data:', data);
+        if (import.meta.env.DEV) console.log('[VerifyAccess] full rejection data:', data);
         setMessage(data.message);
         setIsError(true);
         // Refresh the profile so the invalid_tries counter stays in sync with the DB
         await useAuthStore.getState().fetchProfile();
         const updatedProfile = useAuthStore.getState().profile;
-        console.log('[VerifyAccess] profile after rejection refetch:', updatedProfile
+        if (import.meta.env.DEV) console.log('[VerifyAccess] profile after rejection refetch:', updatedProfile
           ? { status: updatedProfile.status, invalid_tries: updatedProfile.invalid_tries }
           : 'null');
         if (data.message.includes('terminated')) {

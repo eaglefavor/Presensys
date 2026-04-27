@@ -43,21 +43,21 @@ function App() {
   // ─── Route-guard diagnostic logging ────────────────────────────────────────
   useEffect(() => {
     console.group('%c[App] Route-guard state', 'color:#16a085;font-weight:bold');
-    console.log('loading        :', loading);
-    console.log('session        :', session ? `✅ (user=${session.user?.email})` : '❌ null');
-    console.log('profileVerified:', profileVerified);
-    console.log('profile        :', profile ? { id: profile.id, role: profile.role, status: profile.status, invalid_tries: profile.invalid_tries } : null);
-    console.log('normalizedRole :', normalizedRole ?? 'undefined');
-    console.log('normalizedStatus:', normalizedStatus ?? 'undefined');
+    if (import.meta.env.DEV) console.log('loading        :', loading);
+    if (import.meta.env.DEV) console.log('session        :', session ? `✅ (user=${session.user?.email})` : '❌ null');
+    if (import.meta.env.DEV) console.log('profileVerified:', profileVerified);
+    if (import.meta.env.DEV) console.log('profile        :', profile ? { id: profile.id, role: profile.role, status: profile.status, invalid_tries: profile.invalid_tries } : null);
+    if (import.meta.env.DEV) console.log('normalizedRole :', normalizedRole ?? 'undefined');
+    if (import.meta.env.DEV) console.log('normalizedStatus:', normalizedStatus ?? 'undefined');
     if (!loading) {
       if (!session) {
-        console.log('→ ROUTE: /login (no session)');
+        if (import.meta.env.DEV) console.log('→ ROUTE: /login (no session)');
       } else if (normalizedRole === 'admin') {
-        console.log('→ ROUTE: <Layout /> (admin role)');
+        if (import.meta.env.DEV) console.log('→ ROUTE: <Layout /> (admin role)');
       } else if (normalizedStatus === 'verified') {
-        console.log('→ ROUTE: <Layout /> (status=verified)');
+        if (import.meta.env.DEV) console.log('→ ROUTE: <Layout /> (status=verified)');
       } else {
-        console.log('→ ROUTE: <VerifyAccess /> — status is', normalizedStatus ?? 'undefined');
+        if (import.meta.env.DEV) console.log('→ ROUTE: <VerifyAccess /> — status is', normalizedStatus ?? 'undefined');
         if (!profile) {
           console.error('⚠️  profile is NULL — user will be stuck on VerifyAccess. Check if the profiles trigger ran.');
         }
@@ -87,8 +87,8 @@ function App() {
     // sending the user back to the Activation Required page.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.group('%c[App] onAuthStateChange event', 'color:#2471a3;font-weight:bold');
-      console.log('event  :', event);
-      console.log('session:', session ? `✅ user=${session.user?.email}` : '❌ null');
+      if (import.meta.env.DEV) console.log('event  :', event);
+      if (import.meta.env.DEV) console.log('session:', session ? `✅ user=${session.user?.email}` : '❌ null');
       console.groupEnd();
 
       if (event === 'TOKEN_REFRESHED') {

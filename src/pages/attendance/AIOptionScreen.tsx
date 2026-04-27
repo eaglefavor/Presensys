@@ -1,14 +1,15 @@
-import { Camera, MousePointerClick, Zap, AlertTriangle, ArrowLeft } from 'lucide-react';
+import { Camera, MousePointerClick, Zap, ArrowLeft } from 'lucide-react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 interface Props {
   onCancel: () => void;
   onSelectManual: () => void;
-  onSelectAI: () => void;
+  // onSelectAI is currently disabled
+  onSelectAI?: () => void;
 }
 
-export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }: Props) {
-  const { isOnline, isSlow } = useNetworkStatus();
+export default function AIOptionScreen({ onCancel, onSelectManual }: Props) {
+  const { isOnline } = useNetworkStatus();
 
   return (
     <div className="d-flex flex-column h-100 bg-white">
@@ -54,15 +55,8 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }:
         <div className="position-relative">
           <button
             className={`btn ${!isOnline ? 'btn-outline-secondary' : 'btn-outline-primary border-2'} p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all`}
-            onClick={() => {
-              if (isOnline) {
-                if (isSlow) {
-                  alert("Network seems slow. Upload may take longer than usual.");
-                }
-                onSelectAI();
-              }
-            }}
-            disabled={!isOnline}
+            onClick={() => {}}
+            disabled={true} style={{ opacity: 0.6 }}
           >
             <div className="d-flex justify-content-between align-items-center w-100">
               <div className="bg-warning bg-opacity-10 text-warning p-3 rounded-circle">
@@ -70,7 +64,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }:
               </div>
               <div className="bg-primary text-white text-uppercase px-2 py-1 rounded-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
                 <Zap size={10} className="me-1 mb-1" />
-                AI Powered
+                Coming Soon
               </div>
             </div>
             <div>
@@ -81,15 +75,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }:
             </div>
           </button>
 
-          {/* Network Warning */}
-          {!isOnline && (
-            <div className="position-absolute bottom-0 start-50 translate-middle-x mb-2 w-100 text-center pointer-events-none">
-              <div className="badge bg-danger bg-opacity-10 text-danger border border-danger p-2 rounded-pill d-inline-flex align-items-center gap-1 shadow-sm">
-                <AlertTriangle size={14} />
-                <span className="fw-bold small">⚠️ Stable Network Required</span>
-              </div>
-            </div>
-          )}
+
         </div>
       </div>
     </div>
