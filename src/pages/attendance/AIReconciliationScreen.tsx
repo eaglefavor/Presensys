@@ -48,7 +48,10 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         setError(null);
 
         // Get API Key from environment OR fallback to provided token for local test
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyAcNX2uM_6i1Oh0JXYlZ7rZXndNWYsdsU4';
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        if (!apiKey) {
+          throw new Error("Gemini API key is not configured. Configure VITE_GEMINI_API_KEY or route this request through a server-side endpoint.");
+        }
 
         const ai = new GoogleGenAI({ apiKey });
 
@@ -138,8 +141,8 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         rawData.forEach(item => {
            if (item && item.regNumber) {
                // Basic cleanup of reg number
-               const cleanReg = item.regNumber.toString().replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-               if (!uniqueMap.has(cleanReg)) {
+               const cleanReg = item.regNumber.toString().replace(/\D/g, '');
+               if (cleanReg.length === 10 && !uniqueMap.has(cleanReg)) {
                    uniqueMap.set(cleanReg, { regNumber: cleanReg, name: item.name || 'Unknown' });
                }
            }
@@ -190,9 +193,9 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
   const handleFixUnmatched = (oldReg: string) => {
     if (!editValue.trim()) return;
 
-    const cleanEdit = editValue.trim().toUpperCase();
+    const cleanEdit = editValue.trim().replace(/[^A-Za-z0-9]/g, '').toUpperCase();
     const match = enrollments.find(e =>
-        e.regNumber.toUpperCase() === cleanEdit ||
+        e.regNumber.toUpperCase().replace(/[^A-Za-z0-9]/g, '') === cleanEdit ||
         e.regNumber.replace(/[^A-Za-z0-9]/g, '').toUpperCase() === cleanEdit
     );
 
@@ -338,6 +341,7 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
                             <button
                                className="btn btn-sm btn-outline-danger border-0 rounded-circle p-2"
                                onClick={() => { setEditingReg(record.regNumber); setEditValue(record.regNumber); }}
+                               aria-label="Edit registration number"
                             >
                                 <Pencil size={14} />
                             </button>

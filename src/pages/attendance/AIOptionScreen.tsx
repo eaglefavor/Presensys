@@ -8,7 +8,7 @@ interface Props {
 }
 
 export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }: Props) {
-  const { isOnline, isSlow } = useNetworkStatus();
+  const { isOnline } = useNetworkStatus();
 
   return (
     <div className="d-flex flex-column h-100 bg-white">
@@ -18,6 +18,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }:
           <button
             className="btn btn-light rounded-circle p-2 border-0"
             onClick={onCancel}
+            aria-label="Go back"
           >
             <ArrowLeft size={24} />
           </button>
@@ -56,9 +57,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }:
             className={`btn ${!isOnline ? 'btn-outline-secondary' : 'btn-outline-primary border-2'} p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all`}
             onClick={() => {
               if (isOnline) {
-                if (isSlow) {
-                  alert("Network seems slow. Upload may take longer than usual.");
-                }
+                // Not blocking the user with an alert, but UI already shows slow warning icon below.
                 onSelectAI();
               }
             }}

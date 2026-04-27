@@ -24,7 +24,7 @@ export function useNetworkStatus() {
     // Check connection speed if available
     const nav = navigator as unknown as NavigatorWithConnection;
     const connection = nav.connection || (nav.mozConnection as typeof nav.connection) || (nav.webkitConnection as typeof nav.connection);
-    if (connection) {
+    if (connection && typeof connection.addEventListener === 'function') {
       const updateConnectionStatus = () => {
         if (connection.effectiveType === '2g' || connection.effectiveType === 'slow-2g') {
           setIsSlow(true);

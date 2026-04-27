@@ -40,13 +40,17 @@ export default function AICameraScreen({ onCancel, onSubmit }: Props) {
     <div className="d-flex flex-column h-100 bg-dark text-white position-fixed top-0 start-0 w-100 z-3">
       {/* Header */}
       <div className="d-flex align-items-center justify-content-between p-3 position-absolute top-0 w-100 z-10" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%)' }}>
-        <button className="btn btn-dark bg-opacity-50 border-0 rounded-circle p-2 text-white" onClick={onCancel}>
+        <button className="btn btn-dark bg-opacity-50 border-0 rounded-circle p-2 text-white" onClick={onCancel}
+          aria-label="Close camera"
+          title="Close camera">
           <X size={24} />
         </button>
         <div className="fw-bold text-uppercase small tracking-widest">
           {images.length === 0 ? "Capture Front" : "Capture Back"}
         </div>
-        <button className="btn btn-dark bg-opacity-50 border-0 rounded-circle p-2 text-white" onClick={toggleCamera}>
+        <button className="btn btn-dark bg-opacity-50 border-0 rounded-circle p-2 text-white" onClick={toggleCamera}
+          aria-label="Flip camera"
+          title="Flip camera">
           <RefreshCw size={20} />
         </button>
       </div>
@@ -57,6 +61,7 @@ export default function AICameraScreen({ onCancel, onSubmit }: Props) {
           <Webcam
             audio={false}
             ref={webcamRef}
+            onUserMediaError={() => alert('Camera access denied. Please grant permission or use manual entry.')}
             screenshotFormat="image/jpeg"
             screenshotQuality={0.8}
             videoConstraints={videoConstraints}
