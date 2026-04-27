@@ -52,36 +52,61 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         const ai = new GoogleGenAI({ apiKey });
 
-        // Choose model dynamically based on conditions
-        // As requested:
-        // switch dynamically between these three models alone: Gemini 1.5 flash, Gemini 2.5 flash, and Gemini 2.5 flash-lite, depending on various conditions like the quality of the photo, network quality, handwriting visibility, lighting, API calls, and so on.
-        // For our local assessment, network speed is our primary variable since images are basic base64 snapshots.
-        // 1. Check network. If connection is very slow, we MUST use a smaller/faster model.
-        // 2. If it's 2 images, we need a smarter model to correlate across pages.
-        // 3. Fallback to Gemini 1.5 Flash for basic requests if needed, but 2.5 is preferred.
+        // Dynamic model selection based on network quality and image count (task complexity).
+        //
+        // Available models (API identifiers):
+        //   gemini-3.0-pro-exp          – Most powerful; complex multi-page OCR, very messy handwriting  (5–10 RPM / 50–100 RPD)
+        //   gemini-2.5-pro-latest       – Deep analysis, 1M token context; ideal for many pages          (5 RPM   / 100 RPD)
+        //   gemini-3.0-flash-exp        – Fast + high accuracy, low latency; cross-page correlation      (5–10 RPM / 50–100 RPD)
+        //   gemini-2.5-flash-latest     – Standard production-ready multimodal                           (10 RPM  / 250 RPD)
+        //   gemini-2.0-flash            – Cost-effective general-purpose; free-tier friendly             (free tier)
+        //   gemini-2.5-flash-lite-latest– High throughput, low cost                                     (15 RPM  / 1,000 RPD)
+        //   gemini-3.1-flash-lite-exp   – Ultra-efficient; absolute lowest latency at scale             (scale tier)
+        //
+        // Selection matrix:
+        //   Very slow network (slow-2g / 2g):  prioritise minimum latency and data usage
+        //     1 image  → gemini-3.1-flash-lite-exp      (fastest possible)
+        //     2+ images→ gemini-2.5-flash-lite-latest   (efficient cross-page)
+        //   Slow network (3g):                 balance efficiency with accuracy
+        //     1 image  → gemini-2.0-flash               (cost-effective, free-tier)
+        //     2 images → gemini-2.5-flash-lite-latest   (efficient cross-page)
+        //     3+ images→ gemini-2.5-flash-latest        (more capable for volume)
+        //   Fast network (4g / wifi / unknown): maximise accuracy, scale with complexity
+        //     1 image  → gemini-2.5-flash-latest        (standard production)
+        //     2 images → gemini-3.0-flash-exp           (fast + accurate cross-page)
+        //     3–4 images→ gemini-2.5-pro-latest         (deep analysis, large context)
+        //     5+ images→ gemini-3.0-pro-exp             (most powerful for complex tasks)
 
-        let modelName = "gemini-2.5-flash-lite"; // Default to fastest/cheapest
+        const connection = (navigator as unknown as { connection?: { effectiveType: string } }).connection;
+        const effectiveType = connection?.effectiveType ?? '4g';
+        const isVerySlowNetwork = effectiveType === 'slow-2g' || effectiveType === '2g';
+        const isSlowNetwork = effectiveType === '3g';
 
-        // Let's grab network speed from navigator
-        const connection = (navigator as unknown as { connection?: { effectiveType: string; addEventListener: (type: string, listener: () => void) => void; removeEventListener: (type: string, listener: () => void) => void } }).connection;
-        const isSlowNetwork = connection && (connection.effectiveType === '2g' || connection.effectiveType === 'slow-2g');
+        let modelName: string;
 
-        if (images.length === 2) {
-           if (isSlowNetwork) {
-               // Tradeoff: we need cross-image correlation, but network is slow.
-               // Use lite model for slow network conditions
-               modelName = "gemini-2.5-flash-lite";
-           } else {
-               // Ideal condition: fast network, complex task (2 images)
-               modelName = "gemini-2.5-flash";
-           }
+        if (isVerySlowNetwork) {
+          modelName = images.length >= 2
+            ? "gemini-2.5-flash-lite-latest"  // multi-page: efficient cross-image model
+            : "gemini-3.1-flash-lite-exp";     // single page: absolute lowest latency
+        } else if (isSlowNetwork) {
+          if (images.length >= 3) {
+            modelName = "gemini-2.5-flash-latest";      // 3+ pages: balanced capability
+          } else if (images.length === 2) {
+            modelName = "gemini-2.5-flash-lite-latest"; // 2 pages: efficient cross-page
+          } else {
+            modelName = "gemini-2.0-flash";             // 1 page: cost-effective, free-tier
+          }
         } else {
-           // Single image
-           if (!isSlowNetwork) {
-               // We have good network, use lite model for single-page which is fast and robust for basic OCR
-               modelName = "gemini-2.5-flash-lite";
-           }
-           // if slow network, keep default 2.5-flash-lite
+          // Fast network: maximise accuracy, escalate model with task complexity
+          if (images.length >= 5) {
+            modelName = "gemini-3.0-pro-exp";     // 5+ pages: most powerful, complex OCR
+          } else if (images.length >= 3) {
+            modelName = "gemini-2.5-pro-latest";  // 3–4 pages: deep analysis, 1M context
+          } else if (images.length === 2) {
+            modelName = "gemini-3.0-flash-exp";   // 2 pages: fast + accurate cross-page
+          } else {
+            modelName = "gemini-2.5-flash-latest"; // 1 page: standard production-ready
+          }
         }
 
         const imageParts = parseImagesForGemini(images);
