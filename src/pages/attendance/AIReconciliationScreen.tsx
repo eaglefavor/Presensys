@@ -48,10 +48,24 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         setError(null);
 
         // Get API Key from environment OR fallback to provided token for local test
-        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+        // Get API Key from environment OR fallback to provided token for local test
+        const apiKeyEnv = import.meta.env.VITE_GEMINI_API_KEY;
+        const fallbackKeys = [
+          'AIzaSyDRa_wjEwsymMjhf8ZyekM6KIBGIEZLkIc',
+          'AIzaSyDimXT-qg0Ki4TdMTBySJiTMn7vDHtOtY0',
+          'AIzaSyDlNwSrgmBsXB-DUsQkPT2rkL4y4EVvwts',
+          'AIzaSyCXMZuI1CVe1FdqN5OI3zOq4jkGB7i-d8A',
+          'AIzaSyDczRQ9fflubwO5rLCacZ-O-kZ1Nni6bhQ'
+        ];
+
+        // Use environment key if available, otherwise pick a random key from the fallback pool
+        const apiKey = apiKeyEnv || fallbackKeys[Math.floor(Math.random() * fallbackKeys.length)];
+
         if (!apiKey) {
           throw new Error("Gemini API key is not configured. Configure VITE_GEMINI_API_KEY or route this request through a server-side endpoint.");
         }
+
 
         const ai = new GoogleGenAI({ apiKey });
 
@@ -89,17 +103,28 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         const imageParts = parseImagesForGemini(images);
 
-        const prompt = `
-          You are a data extraction tool. Attached are ${images.length} image(s) of a university attendance sheet (front and potentially back).
-          Extract all 10-digit Registration Numbers and their corresponding Names.
 
-          CRITICAL RULES:
-          1. Merge the data from all images into a single list.
-          2. Ignore duplicate Registration Numbers (e.g., if ink bled through the paper).
-          3. Ignore reversed text or bleed-through.
-          4. Return STRICTLY a valid JSON array of objects with keys "regNumber" (string) and "name" (string).
-          5. Do not include markdown blocks like \`\`\`json or \`\`\`. Output ONLY the raw JSON array.
+        // We can pass the database of reg numbers contextually if it's small enough to improve accuracy
+        // by telling the AI about the static structure (first 4 = year, next 3 = dept code, last 3 = student id)
+        const enrolledRegNumbers = enrollments.map(e => e.regNumber).join(', ');
+
+        const prompt = `
+          You are an advanced data extraction tool for a university attendance sheet.
+          Attached are ${images.length} image(s) of an attendance sheet (front and potentially back).
+
+          CRITICAL CONTEXT & RULES:
+          1. Extract all 10-digit Registration Numbers and their corresponding Names.
+          2. Merge the data from all images into a single list.
+          3. Ignore duplicate Registration Numbers (e.g., if ink bled through the paper).
+          4. Ignore reversed text or bleed-through.
+          5. UNIVERSITY REG NUMBER STRUCTURE: The first 4 digits are the admission year, the next 3 are the department code (usually static for a class), and the last 3 are the unique student ID.
+          6. CROSS-REFERENCE: Here is the list of enrolled student Registration Numbers for this class to help you verify unclear handwriting:
+             [${enrolledRegNumbers}]
+             Use this list to correct ambiguous digits (e.g., distinguishing '0' from 'O', '1' from '7', '8' from 'B'), but DO NOT hallucinate students who aren't on the paper. Only use this list to correct numbers that you can already partially read on the paper.
+          7. Return STRICTLY a valid JSON array of objects with keys "regNumber" (string) and "name" (string).
+          8. Do not include markdown blocks like \`\`\`json or \`\`\`. Output ONLY the raw JSON array.
         `;
+
 
         const response = await ai.models.generateContent({
             model: modelName,
