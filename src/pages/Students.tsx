@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle } from 'lucide-react';
 import { db, type Student } from '../db/db';
@@ -15,6 +15,13 @@ export default function Students() {
   const { user } = useAuthStore();
   const students = useLiveQuery(() => db.students.orderBy('name').filter(s => s.isDeleted !== 1).toArray());
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+
+  // Debounce search input by 300 ms to avoid re-filtering on every keystroke (4.1)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearchTerm(searchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -71,24 +78,60 @@ export default function Students() {
   };
 
   const doBulkDelete = async () => {
-    await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
+    await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords, db.attendanceSessions, db.outbox], async () => {
       const ids = Array.from(selectedIds);
       const studentRecords = await db.students.where('id').anyOf(ids).toArray();
       const studentServerIds = studentRecords.map(s => s.serverId);
-      
+
       await db.students.where('id').anyOf(ids).modify({ isDeleted: 1, synced: 0 });
+
+      // Soft-delete enrollments for these students
+      const affectedEnrollments = await db.enrollments.where('studentId').anyOf(studentServerIds).toArray();
       await db.enrollments.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
+
+      // Soft-delete attendance records for these students
       await db.attendanceRecords.where('studentId').anyOf(studentServerIds).modify({ isDeleted: 1, synced: 0 });
+
+      // Cascade: soft-delete attendance sessions that are now orphaned (3.2).
+      // A session is orphaned if ALL its enrollments (by courseId) are now deleted.
+      const affectedCourseIds = [...new Set(affectedEnrollments.map(e => e.courseId))];
+      for (const courseId of affectedCourseIds) {
+        const remainingEnrollments = await db.enrollments
+          .where('courseId').equals(courseId)
+          .filter(e => e.isDeleted !== 1)
+          .count();
+        if (remainingEnrollments === 0) {
+          await db.attendanceSessions
+            .where('courseId').equals(courseId)
+            .modify({ isDeleted: 1, synced: 0 });
+        }
+      }
     });
     setIsSelectionMode(false);
     setSelectedIds(new Set());
   };
 
   const doStudentDelete = async (student: Student) => {
-    await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords], async () => {
+    await db.transaction('rw', [db.students, db.enrollments, db.attendanceRecords, db.attendanceSessions, db.outbox], async () => {
       await db.students.update(student.id!, { isDeleted: 1 });
+
+      const affectedEnrollments = await db.enrollments.where('studentId').equals(student.serverId).toArray();
       await db.enrollments.where('studentId').equals(student.serverId).modify({ isDeleted: 1, synced: 0 });
       await db.attendanceRecords.where('studentId').equals(student.serverId).modify({ isDeleted: 1, synced: 0 });
+
+      // Cascade orphaned sessions (3.2)
+      const affectedCourseIds = [...new Set(affectedEnrollments.map(e => e.courseId))];
+      for (const courseId of affectedCourseIds) {
+        const remainingEnrollments = await db.enrollments
+          .where('courseId').equals(courseId)
+          .filter(e => e.isDeleted !== 1)
+          .count();
+        if (remainingEnrollments === 0) {
+          await db.attendanceSessions
+            .where('courseId').equals(courseId)
+            .modify({ isDeleted: 1, synced: 0 });
+        }
+      }
     });
     setSelectedStudent(null);
   };
