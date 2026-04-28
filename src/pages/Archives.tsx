@@ -317,20 +317,21 @@ export default function Archives() {
   // ── Load courses ──────────────────────────────────────────────────────────
   const loadCourses = useCallback(async () => {
     if (!user) return;
-    const local = await db.courses.filter(c => c.isDeleted !== 1).toArray();
+    const local = await db.courses.filter(c => c.isDeleted !== 1 && (!activeSemester || c.semesterId === activeSemester.serverId)).toArray();
     if (local.length > 0) {
       setCourses(local.map(c => ({ id: c.serverId, code: c.code, title: c.title })));
       return;
     }
-    const { data } = await supabase.from('courses').select('id, code, title')
-      .eq('user_id', user.id).eq('is_deleted', 0);
+    let query = supabase.from('courses').select('id, code, title').eq('user_id', user.id).eq('is_deleted', 0);
+    if (activeSemester) query = query.eq('semester_id', activeSemester.serverId);
+    const { data } = await query;
     if (data) setCourses(data);
-  }, [user]);
+  }, [user, activeSemester]);
 
   // Load courses on mount so dropdowns are ready for all tabs
   useEffect(() => {
     if (user && courses.length === 0) loadCourses();
-  }, [user, courses.length, loadCourses]);
+  }, [user, courses.length, loadCourses, activeSemester]);
 
   const handleModeSwitch = (newMode: ArchiveMode) => {
     setMode(newMode);
@@ -859,12 +860,11 @@ export default function Archives() {
     if (!activeSemester) { toast.error('No active semester.'); return; }
     setLoading(true); setSemesterRows([]); setSemesterLoaded(false);
 
-    const semCourses = courses.length > 0
-      ? courses
-      : await db.courses
-          .where('semesterId').equals(activeSemester.serverId)
-          .filter(c => c.isDeleted !== 1).toArray()
-          .then(local => local.map(c => ({ id: c.serverId, code: c.code, title: c.title })));
+    const semCourses = courses; // courses is already filtered by activeSemester
+    if (semCourses.length === 0 && courses.length === 0) {
+      const local = await db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray();
+      semCourses.push(...local.map(c => ({ id: c.serverId, code: c.code, title: c.title })));
+    }
 
     if (semCourses.length === 0) { toast.error('No courses for this semester.'); setLoading(false); return; }
     const sDate = activeSemester.startDate || `${new Date().getFullYear()}-01-01`;
