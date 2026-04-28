@@ -1,6 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
-import { shareData, exportToCSV } from './ExportUtils.ts';
+import { shareData, exportToCSV, downloadText } from './ExportUtils.ts';
 
 describe('shareData', () => {
   let originalDescriptor: PropertyDescriptor | undefined;
@@ -223,6 +223,92 @@ describe('exportToCSV', () => {
 
     assert.strictEqual(downloadedFilename, 'empty.csv');
     // Papa.unparse with empty array returns empty string by default
+    assert.strictEqual(downloadedContent, '');
+  });
+});
+
+describe('downloadText', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let originalDocument: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let originalURLCreateObjectURL: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let originalURLRevokeObjectURL: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let originalBlob: any;
+
+  let downloadedContent: string | null = null;
+  let downloadedFilename: string | null = null;
+  let downloadedMimeType: string | null = null;
+
+  beforeEach(() => {
+    downloadedContent = null;
+    downloadedFilename = null;
+    downloadedMimeType = null;
+
+    // Save originals
+    originalDocument = globalThis.document;
+    originalURLCreateObjectURL = globalThis.URL.createObjectURL;
+    originalURLRevokeObjectURL = globalThis.URL.revokeObjectURL;
+    originalBlob = globalThis.Blob;
+
+    // Mock URL methods
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    globalThis.URL.createObjectURL = (_blob: any) => {
+      return 'mock-url';
+    };
+    globalThis.URL.revokeObjectURL = () => {};
+
+    // Mock document
+    const mockLink = {
+      href: '',
+      download: '',
+      click() {
+        downloadedFilename = this.download;
+      }
+    };
+
+    globalThis.document = {
+      createElement: (tag: string) => {
+        if (tag === 'a') return mockLink;
+        return {};
+      },
+      body: {
+        appendChild: () => {},
+        removeChild: () => {},
+      }
+    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+    // Mock Blob to capture content
+    globalThis.Blob = class MockBlob {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      constructor(content: any[], options: any) {
+        downloadedContent = content[0];
+        downloadedMimeType = options?.type;
+      }
+    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  });
+
+  afterEach(() => {
+    globalThis.document = originalDocument;
+    globalThis.URL.createObjectURL = originalURLCreateObjectURL;
+    globalThis.URL.revokeObjectURL = originalURLRevokeObjectURL;
+    globalThis.Blob = originalBlob;
+  });
+
+  test('should download text with .txt extension', () => {
+    const text = 'Hello world';
+    const filename = 'test-file';
+    downloadText(text, filename);
+
+    assert.strictEqual(downloadedFilename, 'test-file.txt');
+    assert.strictEqual(downloadedContent, text);
+    assert.strictEqual(downloadedMimeType, 'text/plain;charset=utf-8;');
+  });
+
+  test('should handle empty text', () => {
+    downloadText('', 'empty');
+    assert.strictEqual(downloadedFilename, 'empty.txt');
     assert.strictEqual(downloadedContent, '');
   });
 });
