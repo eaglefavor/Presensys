@@ -158,7 +158,7 @@ export function exportToPDF(data: ExportRow[], title: string, filename: string, 
  * Uses ONLY ASCII characters for maximum device compatibility.
  */
 export function exportToText(data: ExportRow[], title: string, meta?: ExportMeta): string {
-  if (data.length === 0) return `${title}\n\nNo records found.`;
+  if (data.length === 0) return `TTT ${title} TTT\n\nNo records found.`;
 
   const headers = Object.keys(data[0]);
   const colWidths = headers.map(h =>
@@ -177,7 +177,7 @@ export function exportToText(data: ExportRow[], title: string, meta?: ExportMeta
   if (meta?.level) metaLines.push(`Level: ${meta.level}`);
 
   const text = [
-    `--- ${title} ---`,
+    `TTT ${title} TTT`,
     `Generated: ${new Date().toLocaleString()}`,
     ...metaLines,
     '',
