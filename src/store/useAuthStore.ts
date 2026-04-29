@@ -45,12 +45,44 @@ function exposeDebugGlobal() {
 exposeDebugGlobal();
 // ──────────────────────────────────────────────────────────────────────────────
 
+
+// Synchronous check to avoid initial loading flash if user is already cached
+const getCachedSession = () => {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const keys = Object.keys(localStorage);
+    const authKey = keys.find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+    if (authKey) {
+      const data = JSON.parse(localStorage.getItem(authKey) || '{}');
+      return data?.session || null;
+    }
+  } catch {
+    // Ignore error
+  }
+  return null;
+};
+
+const getCachedProfile = () => {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const cachedRaw = localStorage.getItem('user_profile');
+    return cachedRaw ? JSON.parse(cachedRaw) : null;
+  } catch {
+    return null;
+  }
+};
+
+const initialSession = getCachedSession();
+const initialProfile = getCachedProfile();
+// We only need loading if there's an initial session but NO initial profile
+const initialLoading = !!initialSession && !initialProfile;
+
 export const useAuthStore = create<AuthState>((set, get) => ({
-  session: null,
-  user: null,
-  profile: null,
+  session: initialSession,
+  user: initialSession?.user ?? null,
+  profile: initialProfile,
   profileVerified: false,
-  loading: true,
+  loading: initialLoading,
   
   setSession: async (session) => {
     console.group('%c[AuthStore] setSession called', 'color:#2980b9;font-weight:bold');
@@ -59,15 +91,43 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     console.log('user id         :', session?.user?.id ?? 'none');
     console.log('expires_at      :', session?.expires_at ?? 'n/a');
 
-    // Keep loading=true while the profile is being fetched so that App never
-    // renders the route guard with a null profile (which would incorrectly show
-    // VerifyAccess to already-verified/admin accounts).
-    set({ session, user: session?.user ?? null, loading: !!session });
-    console.log('→ store updated: loading=', !!session);
+    const currentUser = get().user;
+    let profileFromCache = get().profile;
+    const isSameUser = session?.user?.id === currentUser?.id;
+    const hasProfile = !!profileFromCache;
+
+    // If we have a session but no profile loaded yet, try synchronously loading it from cache
+    if (session && (!isSameUser || !hasProfile)) {
+      const cachedRaw = localStorage.getItem('user_profile');
+      if (cachedRaw) {
+        try {
+          const parsed = JSON.parse(cachedRaw);
+          if (parsed.id === session.user.id) {
+            profileFromCache = parsed;
+          }
+        } catch {
+          // Ignore cache parse error
+        }
+      }
+    }
+
+    // Only block the UI with a loading spinner if we genuinely have no profile data to display
+    // or if we have no session (loading should be false to show login)
+    const needsLoading = !!session && !profileFromCache;
+
+    set({
+      session,
+      user: session?.user ?? null,
+      profile: profileFromCache,
+      loading: needsLoading
+    });
+
+    console.log('→ store updated: loading=', needsLoading, 'profileFromCache=', !!profileFromCache);
     
     if (session) {
       console.log('→ calling fetchProfile…');
       console.groupEnd();
+      // Fetch profile in the background, without forcing loading=true
       await get().fetchProfile();
     } else {
       set({ loading: false, profile: null, profileVerified: false });
