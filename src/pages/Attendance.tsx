@@ -419,6 +419,15 @@ export default function Attendance() {
                 <p className="xx-small fw-bold text-muted uppercase">No sessions found</p>
               </div>
             )}
+      <ConfirmDialog
+        open={deletingSessionId !== null}
+        title="Delete Session"
+        message="Are you sure you want to delete this session? This action can be reversed by an administrator."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => deletingSessionId && handleDeleteSession(deletingSessionId)}
+        onCancel={() => setDeletingSessionId(null)}
+      />
           </div>
         </div>
       </div>
