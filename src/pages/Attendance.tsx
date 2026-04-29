@@ -79,6 +79,7 @@ export default function Attendance() {
 
   // Session rename state
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
   // Confirm dialog state
