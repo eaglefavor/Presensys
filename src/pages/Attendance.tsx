@@ -71,11 +71,20 @@ export default function Attendance() {
     );
   }, [enrollments, debouncedMarkSearch]);
 
+  useEffect(() => {
+    setStudentPage(1);
+  }, [debouncedMarkSearch]);
+
   // View 1 & 2 logic
   const [coursePage, setCoursePage] = useState(1);
+  const [studentPage, setStudentPage] = useState(1);
   const itemsPerPage = 5;
   const totalCoursePages = Math.ceil((courses?.length || 0) / itemsPerPage);
   const displayedCourses = courses?.slice((coursePage - 1) * itemsPerPage, coursePage * itemsPerPage);
+
+  const itemsPerStudentPage = 7;
+  const totalStudentPages = Math.max(1, Math.ceil((filteredEnrollments?.length || 0) / itemsPerStudentPage));
+  const displayedEnrollments = filteredEnrollments?.slice((studentPage - 1) * itemsPerStudentPage, studentPage * itemsPerStudentPage);
 
   // Session rename state
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
@@ -569,7 +578,7 @@ export default function Attendance() {
 
       <div className="px-4 container-mobile d-flex flex-column gap-2">
         <AnimatePresence mode="popLayout">
-          {filteredEnrollments.map((student: { serverId: string, name: string, regNumber: string }) => {
+          {displayedEnrollments.map((student: { serverId: string, name: string, regNumber: string }) => {
             const status = combinedRecords.get(student.serverId);
             return (
               <motion.div key={student.serverId} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
@@ -594,6 +603,15 @@ export default function Attendance() {
           })}
         </AnimatePresence>
         
+
+        {filteredEnrollments && filteredEnrollments.length > itemsPerStudentPage && (
+          <div className="d-flex justify-content-between align-items-center mt-2 pb-2">
+            <button className="btn btn-light btn-sm fw-bold rounded-pill px-3 shadow-sm border" disabled={studentPage === 1} onClick={() => setStudentPage(p => Math.max(p - 1, 1))}>PREV</button>
+            <span className="xx-small fw-black text-muted uppercase">Page {studentPage} of {totalStudentPages}</span>
+            <button className="btn btn-light btn-sm fw-bold rounded-pill px-3 shadow-sm border" disabled={studentPage === totalStudentPages} onClick={() => setStudentPage(p => Math.min(p + 1, totalStudentPages))}>NEXT</button>
+          </div>
+        )}
+
         {enrollments?.length === 0 && (
           <div className="text-center py-5 bg-white rounded-4 border-dashed border-2">
             <p className="xx-small fw-black text-muted text-uppercase tracking-widest mb-0">No students enrolled in this course</p>
