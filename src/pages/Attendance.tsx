@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { 
   Plus, Calendar, UserCheck, UserX, Search, 
   CheckCircle, XCircle, HelpCircle, 
-  RotateCcw, Settings2, Book, ChevronRight, ArrowLeft, Clock, Download, Share2, FileText, FileSpreadsheet, Pencil, Check
+  RotateCcw, Settings2, Book, ChevronRight, ArrowLeft, Clock, Download, Share2, FileText, FileSpreadsheet, Pencil, Check, Trash2
 } from 'lucide-react';
 import { db, type LocalAttendanceRecord } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
@@ -182,6 +182,34 @@ export default function Attendance() {
     });
 
     setPendingChanges({});
+  };
+
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      const session = await db.attendanceSessions.where('serverId').equals(sessionId).first();
+      if (session && session.id) {
+        await db.attendanceSessions.update(session.id, { isDeleted: 1, synced: 0 });
+
+        // Also soft-delete associated records
+        const records = await db.attendanceRecords.where('sessionId').equals(sessionId).toArray();
+        if (records.length > 0) {
+          const updates = records.map(r => ({ ...r, isDeleted: 1, synced: 0 }));
+          await db.attendanceRecords.bulkPut(updates);
+        }
+
+        toast.success("Session deleted successfully.");
+        if (activeSessionId === sessionId) {
+          setActiveSessionId(null);
+          setAttendanceMode(null);
+        }
+      }
+    } catch (err) {
+      console.error("Session delete error:", err);
+      toast.error("Failed to delete session.");
+    } finally {
+      setDeletingSessionId(null);
+    }
   };
 
   const handleRenameSession = async () => {
@@ -372,6 +400,14 @@ export default function Attendance() {
                     >
                       <Pencil size={14} />
                     </button>
+                    <button
+                      className="btn btn-light btn-sm rounded-circle p-1 border-0 text-danger me-1"
+                      style={{ width: 30, height: 30 }}
+                      onClick={e => { e.stopPropagation(); setDeletingSessionId(session.serverId); }}
+                      title="Delete session"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                     <ChevronRight size={16} className="text-muted opacity-50" />
                   </div>
                 )}
@@ -459,6 +495,14 @@ export default function Attendance() {
                     title="Rename session"
                   >
                     <Pencil size={12} />
+                  </button>
+                  <button
+                    className="btn btn-light btn-sm rounded-circle p-1 border-0 text-danger flex-shrink-0"
+                    style={{ width: 26, height: 26 }}
+                    onClick={() => { if (activeSessionId) setDeletingSessionId(activeSessionId); }}
+                    title="Delete session"
+                  >
+                    <Trash2 size={12} />
                   </button>
                 </div>
               )}
@@ -555,6 +599,17 @@ export default function Attendance() {
       </div>
 
       {/* Confirm: Bulk mark */}
+
+      <ConfirmDialog
+        open={deletingSessionId !== null}
+        title="Delete Session"
+        message="Are you sure you want to delete this session? This action can be reversed by an administrator."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => deletingSessionId && handleDeleteSession(deletingSessionId)}
+        onCancel={() => setDeletingSessionId(null)}
+      />
+
       <ConfirmDialog
         open={confirmBulkMarkStatus !== null}
         title={`MARK ALL ${confirmBulkMarkStatus?.toUpperCase()}`}
