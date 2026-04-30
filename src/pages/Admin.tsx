@@ -38,7 +38,7 @@ export default function Admin() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
-  const { user: currentUser } = useAuthStore(); // need to import useAuthStore
+  const { user: currentUser } = useAuthStore();
 
 
   useEffect(() => {

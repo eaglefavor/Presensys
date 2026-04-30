@@ -13,10 +13,17 @@ RETURNS TABLE (
     status TEXT,
     created_at TIMESTAMPTZ
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+  -- Verify caller is admin
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'Access denied. Admin privileges required.';
+  END IF;
+
+  RETURN QUERY
   SELECT
     p.id,
     u.email::text,
@@ -27,6 +34,7 @@ AS $$
   FROM public.profiles p
   JOIN auth.users u ON u.id = p.id
   ORDER BY u.created_at DESC;
+END;
 $$;
 
 -- Only admins may call this function
