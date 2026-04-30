@@ -50,15 +50,38 @@ export default function Dashboard() {
       ? await db.attendanceRecords.where('sessionId').anyOf(sessionIds).filter(r => r.isDeleted !== 1).toArray()
       : [];
 
-    // Group in memory — O(n) per course with a Set lookup
+    // Map session IDs to course IDs for O(1) lookups
+    const sessionIdToCourseId = new Map<string, string>();
+    for (const session of sessions) {
+      sessionIdToCourseId.set(session.serverId, session.courseId);
+    }
+
+    // Single pass over records to accumulate stats per course - O(M)
+    const courseStats = new Map<string, { present: number; total: number }>();
+    for (const record of records) {
+      const courseId = sessionIdToCourseId.get(record.sessionId);
+      if (!courseId) continue;
+
+      let stats = courseStats.get(courseId);
+      if (!stats) {
+        stats = { present: 0, total: 0 };
+        courseStats.set(courseId, stats);
+      }
+
+      stats.total++;
+      if (record.status === 'present') {
+        stats.present++;
+      }
+    }
+
+    // Combine stats with courses in a single pass - O(N)
     return courses.map(course => {
-      const courseSessions = sessions.filter(s => s.courseId === course.serverId);
-      const courseSessionIdSet = new Set(courseSessions.map(s => s.serverId));
-      const courseRecords = records.filter(r => courseSessionIdSet.has(r.sessionId));
-      const presentCount = courseRecords.filter(r => r.status === 'present').length;
-      const totalPossible = courseRecords.length;
-      const percentage = totalPossible > 0 ? (presentCount / totalPossible) * 100 : 100;
-      return { ...course, percentage, totalSessions: courseSessions.length };
+      const courseSessionsCount = sessions.filter(s => s.courseId === course.serverId).length;
+      const stats = courseStats.get(course.serverId) || { present: 0, total: 0 };
+
+      const percentage = stats.total > 0 ? (stats.present / stats.total) * 100 : 100;
+
+      return { ...course, percentage, totalSessions: courseSessionsCount };
     });
   }, [activeSemester]);
 
