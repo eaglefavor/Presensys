@@ -158,7 +158,7 @@ export class PresensysDB extends Dexie {
     // (the hook context, which exposes `onsuccess`) is accessible via `this`,
     // while `self` retains the DB instance reference.
     // -------------------------------------------------------------------
-    const self = this;
+    const self = this; // eslint-disable-line @typescript-eslint/no-this-alias
 
     this.tables.forEach(table => {
       if (table.name === 'outbox') return; // never hook the outbox itself
@@ -180,14 +180,14 @@ export class PresensysDB extends Dexie {
         // This is a separate micro-transaction; failures are silently ignored because
         // the synced=0 flag on the data row is the authoritative "needs push" marker.
         this.onsuccess = () => {
-          self.outbox.add({
+            Dexie.ignoreTransaction(() => self.outbox.add({
             tableName: capturedTableName,
             serverId: capturedServerId,
             operation: 'upsert',
             createdAt: new Date().toISOString(),
             attempts: 0,
             done: 0,
-          }).catch(() => {/* best-effort */});
+          }).catch(() => {/* best-effort */}));
         };
 
         self.notifyChange();
@@ -219,15 +219,15 @@ export class PresensysDB extends Dexie {
             'isDeleted' in mods && mods.isDeleted === 1 ? 'delete' : 'upsert';
 
           this.onsuccess = () => {
-            self.outbox.add({
+            Dexie.ignoreTransaction(() => self.outbox.add({
               tableName: capturedTableName,
               serverId: capturedServerId,
               operation,
               createdAt: new Date().toISOString(),
               attempts: 0,
               done: 0,
-            }).catch(() => {/* best-effort */});
-          };
+            }).catch(() => {/* best-effort */}));
+        };
         }
 
         // Stamp updatedAt and reset synced for all user-driven updates
