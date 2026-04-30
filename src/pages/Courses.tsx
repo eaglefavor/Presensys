@@ -451,7 +451,7 @@ export default function Courses() {
             <div className="modal-content border-0 shadow-2xl rounded-4">
               <div className="modal-header border-bottom-0 p-4 pb-0">
                 <h5 className="fw-black mb-0" style={{ color: 'var(--primary-blue)' }}>{isEditing ? 'EDIT COURSE' : 'NEW COURSE'}</h5>
-                <button type="button" className="btn-close" onClick={() => setShowAddModal(false)}></button>
+                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowAddModal(false)}></button>
               </div>
               <form onSubmit={handleAddCourse}>
                 <div className="modal-body p-4">
