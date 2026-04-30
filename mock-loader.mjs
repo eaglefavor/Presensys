@@ -36,5 +36,16 @@ export async function load(url, context, nextLoad) {
       source: MOCKS[name],
     };
   }
+
+  if (url.endsWith('.ts') || url.endsWith('.tsx') || url.endsWith('.js') || url.endsWith('.jsx')) {
+    const loaded = await nextLoad(url, context);
+    if (loaded && loaded.source) {
+      let source = loaded.source;
+      if (typeof source !== 'string') source = source.toString();
+      source = source.replace(/import\.meta\.env(?:\?.DEV|\.DEV|)/g, 'false');
+      return { ...loaded, source };
+    }
+  }
   return nextLoad(url, context);
+
 }
