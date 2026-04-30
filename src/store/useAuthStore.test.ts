@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
@@ -5,8 +6,8 @@ import 'fake-indexeddb/auto';
 
 // We must dynamically import the module after globals are mocked
 test('useAuthStore fetchProfile error handling', async (t) => {
-  let useAuthStore;
-  let supabase;
+  let useAuthStore: any;
+  let supabase: any;
 
   t.beforeEach(async () => {
     // 1. Setup DOM globals required by RealtimeSyncEngine/Zustand
@@ -27,10 +28,10 @@ test('useAuthStore fetchProfile error handling', async (t) => {
 
     // Reset state before test
     useAuthStore.setState({
-      user: { id: 'test-user-id' },
+      user: { id: 'test-user-id' } as any,
       profileVerified: false,
       loading: true,
-      profile: { id: 'cached-id', role: 'rep' } // pre-existing cached profile
+      profile: { id: 'cached-id', role: 'rep' } as any // pre-existing cached profile
     });
   });
 
