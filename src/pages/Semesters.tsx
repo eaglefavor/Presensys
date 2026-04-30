@@ -201,7 +201,7 @@ export default function Semesters() {
         <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1050 }}>
           <motion.div className="modal-dialog modal-dialog-centered px-3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
             <div className="modal-content border-0 shadow-2xl rounded-4 overflow-hidden">
-              <div className="modal-header border-bottom-0 p-4 pb-0"><h5 className="fw-black mb-0 text-primary uppercase letter-spacing-n1">NEW CYCLE</h5><button type="button" className="btn-close" onClick={() => setShowModal(false)}></button></div>
+              <div className="modal-header border-bottom-0 p-4 pb-0"><h5 className="fw-black mb-0 text-primary uppercase letter-spacing-n1">NEW CYCLE</h5><button type="button" className="btn-close" aria-label="Close" onClick={() => setShowModal(false)}></button></div>
               <form onSubmit={handleAddSemester}>
                 <div className="modal-body p-4">
                   <div className="mb-3"><label className="xx-small fw-bold text-muted ps-1">CYCLE TITLE</label><div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="e.g. 2025/2026 First Semester" required value={newSemester.name} onChange={e => setNewSemester({ ...newSemester, name: e.target.value })} /></div></div>
