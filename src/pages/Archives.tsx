@@ -870,39 +870,65 @@ export default function Archives() {
     const sDate = activeSemester.startDate || `${new Date().getFullYear()}-01-01`;
     const eDate = activeSemester.endDate   || `${new Date().getFullYear()}-12-31`;
 
-    const rows: SemesterCourseRow[] = [];
-    for (const course of semCourses) {
-      const [sessRes, enrollRes] = await Promise.all([
-        supabase.from('attendance_sessions').select('id')
-          .eq('course_id', course.id).eq('is_deleted', 0)
-          .gte('date', sDate).lte('date', eDate),
-        supabase.from('enrollments').select('student_id')
-          .eq('course_id', course.id).eq('is_deleted', 0),
-      ]);
-      const sessions = sessRes.data || [];
-      const enrolledCount = enrollRes.data?.length ?? 0;
+    const courseIds = semCourses.map(c => c.id);
+    const [sessRes, enrollRes] = await Promise.all([
+      supabase.from('attendance_sessions').select('id, course_id')
+        .in('course_id', courseIds).eq('is_deleted', 0)
+        .gte('date', sDate).lte('date', eDate),
+      supabase.from('enrollments').select('student_id, course_id')
+        .in('course_id', courseIds).eq('is_deleted', 0),
+    ]);
+
+    const allSessions = (sessRes.data || []) as { id: string; course_id: string }[];
+    const allEnrollments = (enrollRes.data || []) as { student_id: string; course_id: string }[];
+    const sessionIds = allSessions.map(s => s.id);
+
+    let allRecords: { status: string; session_id: string }[] = [];
+    if (sessionIds.length > 0) {
+      const { data: recs } = await supabase.from('attendance_records').select('status, session_id')
+        .in('session_id', sessionIds).eq('is_deleted', 0);
+      allRecords = (recs || []) as { status: string; session_id: string }[];
+    }
+
+    const sessionsByCourse = new Map<string, typeof allSessions>();
+    allSessions.forEach(s => {
+      if (!sessionsByCourse.has(s.course_id)) sessionsByCourse.set(s.course_id, []);
+      sessionsByCourse.get(s.course_id)!.push(s);
+    });
+
+    const enrollCountByCourse = new Map<string, number>();
+    allEnrollments.forEach(e => {
+      enrollCountByCourse.set(e.course_id, (enrollCountByCourse.get(e.course_id) || 0) + 1);
+    });
+
+    const recordsBySession = new Map<string, typeof allRecords>();
+    allRecords.forEach(r => {
+      if (!recordsBySession.has(r.session_id)) recordsBySession.set(r.session_id, []);
+      recordsBySession.get(r.session_id)!.push(r);
+    });
+
+    const rows: SemesterCourseRow[] = semCourses.map(course => {
+      const sessions = sessionsByCourse.get(course.id) || [];
+      const enrolledCount = enrollCountByCourse.get(course.id) || 0;
       let presentCount = 0; let absentCount = 0; let excusedCount = 0;
-      if (sessions.length > 0) {
-        const { data: recs } = await supabase.from('attendance_records').select('status')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .in('session_id', (sessions as any[]).map(s => s.id)).eq('is_deleted', 0);
-        if (recs) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          presentCount = recs.filter((r: any) => r.status === 'present').length;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          absentCount  = recs.filter((r: any) => r.status === 'absent').length;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          excusedCount = recs.filter((r: any) => r.status === 'excused').length;
-        }
-      }
+
+      sessions.forEach(s => {
+        const recs = recordsBySession.get(s.id) || [];
+        recs.forEach(r => {
+          if (r.status === 'present') presentCount++;
+          else if (r.status === 'absent') absentCount++;
+          else if (r.status === 'excused') excusedCount++;
+        });
+      });
+
       const total = sessions.length * enrolledCount;
-      rows.push({
+      return {
         courseId: course.id, code: course.code, title: course.title,
         sessionsHeld: sessions.length, enrolledCount,
         avgAttendance: total > 0 ? Math.round((presentCount / total) * 100) : 0,
         presentCount, absentCount, excusedCount,
-      });
-    }
+      };
+    });
     rows.sort((a, b) => a.avgAttendance - b.avgAttendance); // worst first
     setSemesterRows(rows);
     setSemesterLoaded(true);
