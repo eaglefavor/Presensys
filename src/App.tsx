@@ -1,3 +1,4 @@
+import { SplashLogo } from './components/SplashLogo';
 import { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
@@ -26,10 +27,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 function PageLoader() {
   return (
     <div className="d-flex align-items-center justify-content-center py-5 min-vh-100">
-      <div className="text-center">
-        <div className="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
-        <div className="xx-small fw-bold text-muted text-uppercase" style={{ letterSpacing: '2px', fontSize: '10px' }}>Loading...</div>
-      </div>
+      <SplashLogo />
     </div>
   );
 }
@@ -108,9 +106,7 @@ function App() {
   if (loading) {
     return (
       <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
+        <SplashLogo />
       </div>
     );
   }
