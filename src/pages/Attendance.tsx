@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Calendar } from 'lucide-react';
 import { db, type LocalAttendanceRecord } from '../db/db';
@@ -14,13 +15,14 @@ import SessionsList from './attendance/SessionsList';
 import ManualMarking from './attendance/ManualMarking';
 export default function Attendance() {
   const { user } = useAuthStore();
+  const location = useLocation();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
     () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray() : [],
     [activeSemester]
   );
   
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(location.state?.selectedCourseId || null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [markSearch, setMarkSearch] = useState('');
   const [debouncedMarkSearch, setDebouncedMarkSearch] = useState('');
