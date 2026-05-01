@@ -588,18 +588,27 @@ export default function Archives() {
       const students = await db.students.where('serverId').anyOf(studentIds).filter(s => s.isDeleted !== 1).toArray();
       const studentMap = new Map(students.map(s => [s.serverId, s]));
 
+      // Performance optimization: Pre-calculate counts instead of filtering arrays inside the loop O(N*M) -> O(N+M)
+      const studentStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+      for (const r of allRecords) {
+        if (!studentStatsMap.has(r.studentId)) {
+          studentStatsMap.set(r.studentId, { present: 0, absent: 0, excused: 0 });
+        }
+        const stats = studentStatsMap.get(r.studentId)!;
+        if (r.status === 'present') stats.present++;
+        else if (r.status === 'absent') stats.absent++;
+        else if (r.status === 'excused') stats.excused++;
+      }
+
       const rows: CompilationRow[] = [];
       for (const enrollment of localEnrollments) {
         const student = studentMap.get(enrollment.studentId);
         if (!student) continue;
-        const sr = allRecords.filter(r => r.studentId === enrollment.studentId);
-        const presentCount  = sr.filter(r => r.status === 'present').length;
-        const absentCount   = sr.filter(r => r.status === 'absent').length;
-        const excusedCount  = sr.filter(r => r.status === 'excused').length;
+        const stats = studentStatsMap.get(enrollment.studentId) || { present: 0, absent: 0, excused: 0 };
         rows.push({
           name: student.name, regNumber: student.regNumber,
-          totalSessions, presentCount, absentCount, excusedCount,
-          percentage: totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0,
+          totalSessions, presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+          percentage: totalSessions > 0 ? Math.round((stats.present / totalSessions) * 100) : 0,
         });
       }
       if (rows.length > 0) {
@@ -624,21 +633,27 @@ export default function Archives() {
       .eq('course_id', courseId).eq('is_deleted', 0);
     if (!enrollments || enrollments.length === 0) return [];
     const totalSessions = sessions.length;
+
+    // Performance optimization: Pre-calculate counts O(N+M)
+    const studentStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+    for (const r of (records || [])) {
+      if (!studentStatsMap.has(r.student_id)) {
+        studentStatsMap.set(r.student_id, { present: 0, absent: 0, excused: 0 });
+      }
+      const stats = studentStatsMap.get(r.student_id)!;
+      if (r.status === 'present') stats.present++;
+      else if (r.status === 'absent') stats.absent++;
+      else if (r.status === 'excused') stats.excused++;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (enrollments as any[]).map(enr => {
       const student = enr.students;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sr = (records || []).filter((r: any) => r.student_id === student.id);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const presentCount  = sr.filter((r: any) => r.status === 'present').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const absentCount   = sr.filter((r: any) => r.status === 'absent').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const excusedCount  = sr.filter((r: any) => r.status === 'excused').length;
+      const stats = studentStatsMap.get(student.id) || { present: 0, absent: 0, excused: 0 };
       return {
         name: student.name, regNumber: student.reg_number,
-        totalSessions, presentCount, absentCount, excusedCount,
-        percentage: totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0,
+        totalSessions, presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+        percentage: totalSessions > 0 ? Math.round((stats.present / totalSessions) * 100) : 0,
       };
     }).sort((a: CompilationRow, b: CompilationRow) => b.percentage - a.percentage);
   };
@@ -754,17 +769,26 @@ export default function Archives() {
         .where('sessionId').anyOf(sessionIds)
         .filter(r => r.isDeleted !== 1)
         .toArray();
+      // Performance optimization: Group records by sessionId O(N+M)
+      const sessionStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+      for (const r of allRecords) {
+        if (!sessionStatsMap.has(r.sessionId)) {
+          sessionStatsMap.set(r.sessionId, { present: 0, absent: 0, excused: 0 });
+        }
+        const stats = sessionStatsMap.get(r.sessionId)!;
+        if (r.status === 'present') stats.present++;
+        else if (r.status === 'absent') stats.absent++;
+        else if (r.status === 'excused') stats.excused++;
+      }
+
       const list: SessionRow[] = localSessions
         .sort((a, b) => b.date.localeCompare(a.date))
         .map(s => {
-          const recs = allRecords.filter(r => r.sessionId === s.serverId);
-          const presentCount = recs.filter(r => r.status === 'present').length;
-          const absentCount  = recs.filter(r => r.status === 'absent').length;
-          const excusedCount = recs.filter(r => r.status === 'excused').length;
+          const stats = sessionStatsMap.get(s.serverId) || { present: 0, absent: 0, excused: 0 };
           return {
             id: s.serverId, date: s.date, title: s.title, totalEnrolled,
-            presentCount, absentCount, excusedCount,
-            attendanceRate: totalEnrolled > 0 ? Math.round((presentCount / totalEnrolled) * 100) : 0,
+            presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+            attendanceRate: totalEnrolled > 0 ? Math.round((stats.present / totalEnrolled) * 100) : 0,
           };
         });
       setSessionsList(list);
@@ -788,20 +812,25 @@ export default function Archives() {
       .from('attendance_records').select('session_id, status')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .in('session_id', (sessRes.data as any[]).map(s => s.id)).eq('is_deleted', 0);
+    // Performance optimization: Pre-calculate counts O(N+M)
+    const sessionStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+    for (const r of (records || [])) {
+      if (!sessionStatsMap.has(r.session_id)) {
+        sessionStatsMap.set(r.session_id, { present: 0, absent: 0, excused: 0 });
+      }
+      const stats = sessionStatsMap.get(r.session_id)!;
+      if (r.status === 'present') stats.present++;
+      else if (r.status === 'absent') stats.absent++;
+      else if (r.status === 'excused') stats.excused++;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setSessionsList((sessRes.data as any[]).map(s => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const recs = (records || []).filter((r: any) => r.session_id === s.id);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const presentCount = recs.filter((r: any) => r.status === 'present').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const absentCount  = recs.filter((r: any) => r.status === 'absent').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const excusedCount = recs.filter((r: any) => r.status === 'excused').length;
+      const stats = sessionStatsMap.get(s.id) || { present: 0, absent: 0, excused: 0 };
       return {
         id: s.id, date: s.date, title: s.title, totalEnrolled,
-        presentCount, absentCount, excusedCount,
-        attendanceRate: totalEnrolled > 0 ? Math.round((presentCount / totalEnrolled) * 100) : 0,
+        presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+        attendanceRate: totalEnrolled > 0 ? Math.round((stats.present / totalEnrolled) * 100) : 0,
       };
     }));
     setLoading(false);
