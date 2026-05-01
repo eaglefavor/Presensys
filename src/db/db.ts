@@ -37,6 +37,9 @@ export interface LocalCourse {
   title: string;
   semesterId: string;
   userId?: string;
+  dayOfWeek?: string;
+  time?: string;
+  lecturers?: string;
   createdAt?: string;
   updatedAt?: string;
   isDeleted: number;
@@ -126,7 +129,7 @@ export class PresensysDB extends Dexie {
     const dataSchema = {
       semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
       students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
-      courses: '++id, &serverId, semesterId, code, synced, isDeleted, userId, updatedAt',
+      courses: '++id, &serverId, semesterId, code, dayOfWeek, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
       attendanceSessions: '++id, &serverId, courseId, date, synced, isDeleted, userId, updatedAt',
       attendanceRecords: '++id, &serverId, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, updatedAt',
@@ -146,6 +149,12 @@ export class PresensysDB extends Dexie {
 
     // Version 13 – add outbox table (non-destructive; data rows unchanged)
     this.version(13).stores({
+      ...dataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 14 - add dayOfWeek, time, lecturers to courses
+    this.version(14).stores({
       ...dataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });

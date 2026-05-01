@@ -20,7 +20,7 @@ export default function Courses() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [courseForm, setCourseForm] = useState({ id: 0, serverId: '', code: '', title: '' });
+  const [courseForm, setCourseForm] = useState({ id: 0, serverId: '', code: '', title: '', dayOfWeek: '', time: '', lecturers: '' });
 
   const [showEnrollModal, setShowEnrollModal] = useState<{ show: boolean, courseId?: string, courseName?: string }>({ show: false });
   const itemsPerPage = 5;
@@ -34,13 +34,16 @@ export default function Courses() {
     e.preventDefault();
     if (!activeSemester || !user) return;
     if (isEditing) {
-      await db.courses.update(courseForm.id, { code: courseForm.code, title: courseForm.title });
+      await db.courses.update(courseForm.id, { code: courseForm.code, title: courseForm.title, dayOfWeek: courseForm.dayOfWeek, time: courseForm.time, lecturers: courseForm.lecturers });
       setIsEditing(false);
     } else {
       await db.courses.add({
         serverId: '',
         code: courseForm.code,
         title: courseForm.title,
+        dayOfWeek: courseForm.dayOfWeek,
+        time: courseForm.time,
+        lecturers: courseForm.lecturers,
         semesterId: activeSemester.serverId,
         userId: user.id,
         synced: 0,
@@ -48,11 +51,11 @@ export default function Courses() {
       } as unknown as import("../db/db").Course);
     }
     setShowAddModal(false);
-    setCourseForm({ id: 0, serverId: '', code: '', title: '' });
+    setCourseForm({ id: 0, serverId: '', code: '', title: '', dayOfWeek: '', time: '', lecturers: '' });
   };
 
   const handleEditClick = (course: import("../db/db").Course) => {
-    setCourseForm({ id: course.id || 0, serverId: course.serverId, code: course.code, title: course.title });
+    setCourseForm({ id: course.id || 0, serverId: course.serverId, code: course.code, title: course.title, dayOfWeek: course.dayOfWeek || '', time: course.time || '', lecturers: course.lecturers || '' });
     setIsEditing(true);
     setShowAddModal(true);
   };
@@ -191,7 +194,7 @@ export default function Courses() {
           <button
             className="btn btn-primary rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center"
             style={{ width: '52px', height: '52px' }}
-            onClick={() => { setIsEditing(false); setCourseForm({ id: 0, serverId: '', code: '', title: '' }); setShowAddModal(true); }}
+            onClick={() => { setIsEditing(false); setCourseForm({ id: 0, serverId: '', code: '', title: '', dayOfWeek: '', time: '', lecturers: '' }); setShowAddModal(true); }}
           >
             <Plus size={24} />
           </button>
@@ -220,6 +223,12 @@ export default function Courses() {
                       <div className="flex-grow-1 overflow-hidden" onClick={() => setShowEnrollModal({ show: true, courseId: course.serverId, courseName: course.title })} style={{ cursor: 'pointer' }}>
                         <h6 className="fw-black mb-0 text-dark text-truncate text-uppercase letter-spacing-n1">{course.code}</h6>
                         <p className="xx-small fw-bold text-muted mb-0 text-truncate text-uppercase">{course.title}</p>
+                        {(course.dayOfWeek || course.time || course.lecturers) && (
+                          <div className="mt-1 xx-small text-muted d-flex gap-2 flex-wrap">
+                            {course.dayOfWeek && <span>📅 {course.dayOfWeek} {course.time}</span>}
+                            {course.lecturers && <span>👨‍🏫 {course.lecturers}</span>}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="p-2 border-top bg-light d-flex gap-2">
@@ -283,6 +292,31 @@ export default function Courses() {
                   <div className="mb-3">
                     <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE TITLE</label>
                     <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold text-uppercase" placeholder="e.g. SOFTWARE ENGINEERING" required value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value.toUpperCase() })} /></div>
+                  </div>
+                  <div className="row g-2 mb-3">
+                    <div className="col-6">
+                      <label className="xx-small fw-bold text-muted ps-1 mb-1">DAY OF WEEK</label>
+                      <div className="modern-input-unified p-1">
+                        <select className="form-select border-0 bg-transparent fw-bold text-dark" value={courseForm.dayOfWeek} onChange={e => setCourseForm({ ...courseForm, dayOfWeek: e.target.value })}>
+                          <option value="">Select Day...</option>
+                          <option value="Monday">Monday</option>
+                          <option value="Tuesday">Tuesday</option>
+                          <option value="Wednesday">Wednesday</option>
+                          <option value="Thursday">Thursday</option>
+                          <option value="Friday">Friday</option>
+                          <option value="Saturday">Saturday</option>
+                          <option value="Sunday">Sunday</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div className="col-6">
+                      <label className="xx-small fw-bold text-muted ps-1 mb-1">TIME</label>
+                      <div className="modern-input-unified p-1"><input type="time" className="form-control border-0 bg-transparent fw-bold" value={courseForm.time} onChange={e => setCourseForm({ ...courseForm, time: e.target.value })} /></div>
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="xx-small fw-bold text-muted ps-1 mb-1">LECTURERS</label>
+                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="e.g. Dr. Smith" value={courseForm.lecturers} onChange={e => setCourseForm({ ...courseForm, lecturers: e.target.value })} /></div>
                   </div>
                 </div>
                 <div className="modal-footer border-0 p-4 pt-0">
