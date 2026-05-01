@@ -109,9 +109,9 @@ const Layout: React.FC = () => {
         <div className="container-mobile d-flex align-items-center justify-content-between px-3 h-100">
           <div className="d-flex align-items-center gap-2">
             {!isMainNavPage ? (
-              <button className="btn btn-link text-dark p-0 me-2" onClick={() => navigate(-1)}><ChevronLeft size={24} /></button>
+              <button className="btn btn-link text-dark p-0 me-2" onClick={() => navigate(-1)} aria-label="Go back"><ChevronLeft size={24} /></button>
             ) : (
-              <button className="btn btn-link text-primary p-0 me-2" onClick={() => setIsMenuOpen(true)}><Menu size={26} /></button>
+              <button className="btn btn-link text-primary p-0 me-2" onClick={() => setIsMenuOpen(true)} aria-label="Open menu"><Menu size={26} /></button>
             )}
             <h1 className="h5 mb-0 fw-black text-primary letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h1>
           </div>
@@ -169,7 +169,7 @@ const Layout: React.FC = () => {
               <h5 className="fw-black mb-0 text-primary uppercase letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h5>
               <p className="xx-small fw-bold text-muted opacity-75 mb-0">Portal Management</p>
             </div>
-            <button className="btn btn-light rounded-circle p-1" onClick={() => setIsMenuOpen(false)}><X size={20} /></button>
+            <button className="btn btn-light rounded-circle p-1" onClick={() => setIsMenuOpen(false)} aria-label="Close menu"><X size={20} /></button>
           </div>
 
           <div className="px-4 py-3 border-bottom bg-light d-flex align-items-center gap-3">
