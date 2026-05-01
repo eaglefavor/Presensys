@@ -6,6 +6,7 @@ const MOCKS = {
   'xlsx': 'export const utils = { book_new: () => ({}), json_to_sheet: () => ({}), book_append_sheet: () => ({}) }; export const writeFile = () => {};',
   'jspdf': 'export default class jsPDF { constructor() { this.setFontSize = () => this; this.setFont = () => this; this.text = () => this; this.setTextColor = () => this; this.save = () => this; } };',
   'jspdf-autotable': 'export default () => {};',
+  '@supabase/supabase-js': 'export const createClient = (url, key) => ({ url, key, auth: {}, from: () => ({ select: () => Promise.resolve({ data: [], error: null }) }) });',
 };
 
 export async function resolve(specifier, context, nextResolve) {
