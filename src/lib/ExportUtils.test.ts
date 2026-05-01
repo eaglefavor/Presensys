@@ -1,6 +1,6 @@
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
-import { shareData, exportToCSV, downloadText } from './ExportUtils.ts';
+import { shareData, exportToCSV, exportToPDF, downloadText } from './ExportUtils.ts';
 
 describe('shareData', () => {
   let originalDescriptor: PropertyDescriptor | undefined;
@@ -310,5 +310,86 @@ describe('downloadText', () => {
     downloadText('', 'empty');
     assert.strictEqual(downloadedFilename, 'empty.txt');
     assert.strictEqual(downloadedContent, '');
+  });
+});
+
+describe('exportToPDF', () => {
+  beforeEach((t: any) => {
+    // Reset mocks before each test
+    // @ts-ignore
+    globalThis.__jsPDFMock = {
+      constructor: t.mock.fn(),
+      setFontSize: t.mock.fn(),
+      setFont: t.mock.fn(),
+      text: t.mock.fn(),
+      setTextColor: t.mock.fn(),
+      save: t.mock.fn(),
+    };
+    // @ts-ignore
+    globalThis.__autoTableMock = t.mock.fn();
+  });
+
+  afterEach(() => {
+    // @ts-ignore
+    delete globalThis.__jsPDFMock;
+    // @ts-ignore
+    delete globalThis.__autoTableMock;
+  });
+
+  test('should generate PDF with correct title and filename (empty data)', () => {
+    exportToPDF([], 'Attendance Report', 'attendance_empty');
+
+    // @ts-ignore
+    const jsPDFMock = globalThis.__jsPDFMock;
+
+    assert.strictEqual(jsPDFMock.constructor.mock.calls.length, 1);
+    assert.deepStrictEqual(jsPDFMock.constructor.mock.calls[0].arguments, [{ orientation: 'landscape' }]);
+
+    assert.strictEqual(jsPDFMock.save.mock.calls.length, 1);
+    assert.deepStrictEqual(jsPDFMock.save.mock.calls[0].arguments, ['attendance_empty.pdf']);
+
+    // Title checks
+    const textCalls = jsPDFMock.text.mock.calls.map((c: any) => c.arguments);
+    assert.ok(textCalls.some((args: any[]) => args[0] === 'Attendance Report' && args[1] === 14 && args[2] === 15));
+
+    // Subtitle checks (should include 'Generated:' and 'Presensys - UNIZIK')
+    const subtitleCall = textCalls.find((args: any[]) => args[0].includes('Generated:') && args[0].includes('Presensys - UNIZIK'));
+    assert.ok(subtitleCall, 'Should output subtitle with Generated date and branding');
+    assert.strictEqual(subtitleCall[1], 14);
+    assert.strictEqual(subtitleCall[2], 22);
+
+    // No autoTable since empty data
+    // @ts-ignore
+    assert.strictEqual(globalThis.__autoTableMock.mock.calls.length, 0);
+  });
+
+  test('should generate PDF with data triggering autoTable', () => {
+    const data = [{ Name: 'John Doe', RegNo: '2020123456' }, { Name: 'Jane Smith', RegNo: '2020654321' }];
+    exportToPDF(data, 'Student List', 'students');
+
+    // @ts-ignore
+    const autoTableMock = globalThis.__autoTableMock;
+    assert.strictEqual(autoTableMock.mock.calls.length, 1);
+
+    const [doc, options] = autoTableMock.mock.calls[0].arguments;
+    assert.ok(doc, 'autoTable should receive doc instance');
+
+    assert.deepStrictEqual(options.head, [['Name', 'RegNo']]);
+    assert.deepStrictEqual(options.body, [
+      ['John Doe', '2020123456'],
+      ['Jane Smith', '2020654321']
+    ]);
+    assert.strictEqual(options.startY, 28);
+  });
+
+  test('should include academic metadata in subtitle when provided', () => {
+    const meta = { faculty: 'Engineering', department: 'Computer Science', level: '400' };
+    exportToPDF([], 'Meta Test', 'meta', meta);
+
+    // @ts-ignore
+    const textCalls = globalThis.__jsPDFMock.text.mock.calls.map((c: any) => c.arguments);
+    const subtitleCall = textCalls.find((args: any[]) => args[0].includes('Faculty: Engineering') && args[0].includes('Dept: Computer Science') && args[0].includes('Level: 400'));
+
+    assert.ok(subtitleCall, 'Should include faculty, department, and level in subtitle');
   });
 });
