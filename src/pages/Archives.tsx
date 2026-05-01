@@ -330,6 +330,7 @@ export default function Archives() {
 
   // Load courses on mount so dropdowns are ready for all tabs
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (user && courses.length === 0) loadCourses();
   }, [user, courses.length, loadCourses, activeSemester]);
 
