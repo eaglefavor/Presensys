@@ -64,7 +64,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }:
               </div>
               <div className="bg-primary text-white text-uppercase px-2 py-1 rounded-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
                 <Zap size={10} className="me-1 mb-1" />
-                Coming Soon
+                AI
               </div>
             </div>
             <div>
