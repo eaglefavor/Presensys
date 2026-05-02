@@ -99,26 +99,26 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         if (isVerySlowNetwork) {
           modelName = images.length >= 2
-            ? "gemini-2.5-flash-lite-latest"  // multi-page: efficient cross-image model
-            : "gemini-3.1-flash-lite-exp";     // single page: absolute lowest latency
+            ? "gemini-2.5-flash-lite"
+            : "gemini-3.1-flash-lite-preview";
         } else if (isSlowNetwork) {
           if (images.length >= 3) {
-            modelName = "gemini-2.5-flash-latest";      // 3+ pages: balanced capability
+            modelName = "gemini-2.5-flash";
           } else if (images.length === 2) {
-            modelName = "gemini-2.5-flash-lite-latest"; // 2 pages: efficient cross-page
+            modelName = "gemini-2.5-flash-lite";
           } else {
-            modelName = "gemini-2.0-flash";             // 1 page: cost-effective, free-tier
+            modelName = "gemini-2.0-flash";
           }
         } else {
           // Fast network: maximise accuracy, escalate model with task complexity
           if (images.length >= 5) {
-            modelName = "gemini-3.0-pro-exp";     // 5+ pages: most powerful, complex OCR
+            modelName = "gemini-3.0-pro-exp";
           } else if (images.length >= 3) {
-            modelName = "gemini-2.5-pro-latest";  // 3–4 pages: deep analysis, 1M context
+            modelName = "gemini-2.5-pro";
           } else if (images.length === 2) {
-            modelName = "gemini-3.0-flash-exp";   // 2 pages: fast + accurate cross-page
+            modelName = "gemini-3.0-flash-exp";
           } else {
-            modelName = "gemini-2.5-flash-latest"; // 1 page: standard production-ready
+            modelName = "gemini-2.5-flash";
           }
         }
 
@@ -170,12 +170,12 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         };
 
         if (isVerySlowNetwork) {
-             addFallbacks(["gemini-2.5-flash-lite-latest", "gemini-2.0-flash", "gemini-2.5-flash-latest"]);
+             addFallbacks(["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]);
         } else if (isSlowNetwork) {
-             addFallbacks(["gemini-2.5-flash-lite-latest", "gemini-2.5-flash-latest", "gemini-2.0-flash"]);
+             addFallbacks(["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]);
         } else {
              // For fast networks, fallback from most powerful to most stable/fast
-             addFallbacks(["gemini-2.5-pro-latest", "gemini-3.0-flash-exp", "gemini-2.5-flash-latest", "gemini-2.0-flash"]);
+             addFallbacks(["gemini-2.5-pro", "gemini-3.0-flash-exp", "gemini-2.5-flash", "gemini-2.0-flash"]);
         }
 
         // Loop through each API key
