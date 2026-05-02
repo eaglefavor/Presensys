@@ -4,11 +4,11 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 interface Props {
   onCancel: () => void;
   onSelectManual: () => void;
-  // onSelectAI is currently disabled
+
   onSelectAI?: () => void;
 }
 
-export default function AIOptionScreen({ onCancel, onSelectManual }: Props) {
+export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }: Props) {
   const { isOnline } = useNetworkStatus();
 
   return (
@@ -55,8 +55,8 @@ export default function AIOptionScreen({ onCancel, onSelectManual }: Props) {
         <div className="position-relative">
           <button
             className={`btn ${!isOnline ? 'btn-outline-secondary' : 'btn-outline-primary border-2'} p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all`}
-            onClick={() => {}}
-            disabled={true} style={{ opacity: 0.6 }}
+            onClick={onSelectAI}
+            disabled={!isOnline} style={{ opacity: isOnline ? 1 : 0.6 }}
           >
             <div className="d-flex justify-content-between align-items-center w-100">
               <div className="bg-warning bg-opacity-10 text-warning p-3 rounded-circle">
