@@ -71,21 +71,21 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         //   gemini-3.0-pro-exp          – Most powerful; complex multi-page OCR, very messy handwriting  (5–10 RPM / 50–100 RPD)
         //   gemini-2.5-pro-latest       – Deep analysis, 1M token context; ideal for many pages          (5 RPM   / 100 RPD)
         //   gemini-3.0-flash-exp        – Fast + high accuracy, low latency; cross-page correlation      (5–10 RPM / 50–100 RPD)
-        //   gemini-2.5-flash-latest     – Standard production-ready multimodal                           (10 RPM  / 250 RPD)
+        //   gemini-2.5-flash     – Standard production-ready multimodal                           (10 RPM  / 250 RPD)
         //   gemini-2.0-flash            – Cost-effective general-purpose; free-tier friendly             (free tier)
-        //   gemini-2.5-flash-lite-latest– High throughput, low cost                                     (15 RPM  / 1,000 RPD)
+        //   gemini-2.5-flash-lite– High throughput, low cost                                     (15 RPM  / 1,000 RPD)
         //   gemini-3.1-flash-lite-exp   – Ultra-efficient; absolute lowest latency at scale             (scale tier)
         //
         // Selection matrix:
         //   Very slow network (slow-2g / 2g):  prioritise minimum latency and data usage
         //     1 image  → gemini-3.1-flash-lite-exp      (fastest possible)
-        //     2+ images→ gemini-2.5-flash-lite-latest   (efficient cross-page)
+        //     2+ images→ gemini-2.5-flash-lite   (efficient cross-page)
         //   Slow network (3g):                 balance efficiency with accuracy
         //     1 image  → gemini-2.0-flash               (cost-effective, free-tier)
-        //     2 images → gemini-2.5-flash-lite-latest   (efficient cross-page)
-        //     3+ images→ gemini-2.5-flash-latest        (more capable for volume)
+        //     2 images → gemini-2.5-flash-lite   (efficient cross-page)
+        //     3+ images→ gemini-2.5-flash        (more capable for volume)
         //   Fast network (4g / wifi / unknown): maximise accuracy, scale with complexity
-        //     1 image  → gemini-2.5-flash-latest        (standard production)
+        //     1 image  → gemini-2.5-flash        (standard production)
         //     2 images → gemini-3.0-flash-exp           (fast + accurate cross-page)
         //     3–4 images→ gemini-2.5-pro-latest         (deep analysis, large context)
         //     5+ images→ gemini-3.0-pro-exp             (most powerful for complex tasks)
@@ -99,13 +99,13 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         if (isVerySlowNetwork) {
           modelName = images.length >= 2
-            ? "gemini-2.5-flash-lite-latest"  // multi-page: efficient cross-image model
+            ? "gemini-2.5-flash-lite"  // multi-page: efficient cross-image model
             : "gemini-3.1-flash-lite-exp";     // single page: absolute lowest latency
         } else if (isSlowNetwork) {
           if (images.length >= 3) {
-            modelName = "gemini-2.5-flash-latest";      // 3+ pages: balanced capability
+            modelName = "gemini-2.5-flash";      // 3+ pages: balanced capability
           } else if (images.length === 2) {
-            modelName = "gemini-2.5-flash-lite-latest"; // 2 pages: efficient cross-page
+            modelName = "gemini-2.5-flash-lite"; // 2 pages: efficient cross-page
           } else {
             modelName = "gemini-2.0-flash";             // 1 page: cost-effective, free-tier
           }
@@ -118,7 +118,7 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
           } else if (images.length === 2) {
             modelName = "gemini-3.0-flash-exp";   // 2 pages: fast + accurate cross-page
           } else {
-            modelName = "gemini-2.5-flash-latest"; // 1 page: standard production-ready
+            modelName = "gemini-2.5-flash"; // 1 page: standard production-ready
           }
         }
 
