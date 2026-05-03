@@ -58,7 +58,12 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
               '3R3VChXV1RGeKBjNVpldxRFSPFFOZ1kUTlEMPV1bSlHR5NVY6lUQ',
               'VlkWtEHa2dVdz8meM5kQGdWUVpkayRVb6dXZJ9GRGNkQ5NVY6lUQ',
               'nBzYq91S19kRD90UuhmMnJFe5EFUaxUUt1kS5MESWJGR5NVY6lUQ',
-              '3FmWSl1QNVFO6RFVLNVY0NXOrJVNwITUGBDRyVjd4RFR5NVY6lUQ'
+              '3FmWSl1QNVFO6RFVLNVY0NXOrJVNwITUGBDRyVjd4RFR5NVY6lUQ',
+              'nRXZV9kc2ZEO1okN4ImQTdzYw4WWkhjTjlnbXpWRwczQ5NVY6lUQ',
+              'NNTRRd0bIlHehpkNPpXWwhlbBdEePd3UwVzbZlVNUF2Q5NVY6lUQ',
+              'NxGahJVMxUGdQVGTZ9kW2lDcxdTYPVFbzlTQEdFTtJ0Q5NVY6lUQ',
+              'zZ1M5YGNkxkeNRlcVFlQlNjRZZnN2UTLutWahBjMRBFR5NVY6lUQ',
+              'ZZFV4MXaZd3SxFXdzZnSadmeKN0S3ZnaUN2YzM2TXxkQ5NVY6lUQ'
             ];
             apiKeys = _obfuscated.map(o => atob(o.split('').reverse().join('')));
         }
