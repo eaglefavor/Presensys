@@ -6,6 +6,7 @@ import {
   type LocalEnrollment,
   type LocalAttendanceSession,
   type LocalAttendanceRecord,
+  type LocalLecturer,
   type LocalOutboxEntry,
 } from '../db/db';
 import { supabase } from './supabase';
@@ -17,7 +18,8 @@ type TableName =
   | 'courses'
   | 'enrollments'
   | 'attendance_sessions'
-  | 'attendance_records';
+  | 'attendance_records'
+  | 'lecturers';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
@@ -317,8 +319,12 @@ export class RealtimeSyncEngine {
         userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
       })),
       pull('attendance_sessions', db.attendanceSessions, (s) => ({
-        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title,
+        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
         userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
+      })),
+      pull('lecturers', db.lecturers, (l) => ({
+        serverId: l.id, name: l.name,
+        userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
       })),
       pull('attendance_records', db.attendanceRecords, (r) => ({
         serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
@@ -377,6 +383,11 @@ export class RealtimeSyncEngine {
         updated_at: item.updatedAt,
       };
     });
+
+    // Push lecturers
+    await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
+      name: item.name
+    }));
 
     // Push attendance sessions
     await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => {
@@ -732,6 +743,7 @@ export class RealtimeSyncEngine {
       enrollments: 'enrollments',
       attendance_sessions: 'attendanceSessions',
       attendance_records: 'attendanceRecords',
+      lecturers: 'lecturers',
     };
 
     for (const dexieName of Object.values(tableMapping)) {
@@ -790,7 +802,8 @@ export class RealtimeSyncEngine {
     this.channel = supabase
       .channel(`db_changes_${this.userId}_${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_records', db.attendanceRecords, payload))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_sessions', db.attendanceSessions, payload))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_sessions', db.attendanceSessions, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lecturers', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('lecturers', db.lecturers, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('students', db.students, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'courses', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('courses', db.courses, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'semesters', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('semesters', db.semesters, payload))
@@ -858,7 +871,7 @@ export class RealtimeSyncEngine {
       case 'enrollments':
         return { ...base, studentId: r.student_id, courseId: r.course_id };
       case 'attendance_sessions':
-        return { ...base, courseId: r.course_id, date: r.date, title: r.title };
+        return { ...base, courseId: r.course_id, date: r.date, title: r.title, lecturerId: r.lecturer_id };
       case 'attendance_records':
         return {
           ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status,

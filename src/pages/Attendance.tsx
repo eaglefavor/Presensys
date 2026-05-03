@@ -97,13 +97,15 @@ export default function Attendance() {
   const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | null>(null);
   const [aiImages, setAiImages] = useState<string[]>([]);
 
-  const handleCreateSession = async () => {
+  const handleCreateSession = async (lecturerId: string) => {
+    if (!lecturerId) return;
     if (!selectedCourseId || !user) return;
     const newSession = {
       serverId: '',
       courseId: selectedCourseId,
       date: new Date().toISOString().split('T')[0],
       title: `Session ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
+      lecturerId,
       userId: user.id,
       synced: 0,
       isDeleted: 0

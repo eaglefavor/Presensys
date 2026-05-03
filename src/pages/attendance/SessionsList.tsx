@@ -1,6 +1,9 @@
 import { Plus, Calendar, ArrowLeft, Clock, Pencil, Check, Trash2, ChevronRight } from 'lucide-react';
 import type { LocalAttendanceSession, LocalCourse } from '../../db/db';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db } from '../../db/db';
 
 interface SessionsListProps {
   sessions: LocalAttendanceSession[] | undefined;
@@ -9,7 +12,7 @@ interface SessionsListProps {
   deletingSessionId: string | null;
   renameValue: string;
   onClearSelectedCourse: () => void;
-  onCreateSession: () => void;
+  onCreateSession: (lecturerId: string) => void;
   onRenameSession: () => void;
   onDeleteSession: (id: string) => void;
   onSessionSelect: (id: string) => void;
@@ -19,6 +22,7 @@ interface SessionsListProps {
 }
 
 export default function SessionsList({
+
   sessions,
   selectedCourse,
   renamingSessionId,
@@ -33,6 +37,21 @@ export default function SessionsList({
   setDeletingSessionId,
   setRenameValue
 }: SessionsListProps) {
+  const [showStartModal, setShowStartModal] = useState(false);
+  const [selectedLecturerId, setSelectedLecturerId] = useState('');
+  const [lecturerSearch, setLecturerSearch] = useState('');
+  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray()) || [];
+
+  const filteredLecturers = lecturers.filter(l => l.name.toLowerCase().includes(lecturerSearch.toLowerCase()));
+
+  const handleStartSession = () => {
+    if (!selectedLecturerId) return;
+    onCreateSession(selectedLecturerId);
+    setShowStartModal(false);
+    setSelectedLecturerId('');
+    setLecturerSearch('');
+  };
+
   return (
     <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
@@ -43,7 +62,7 @@ export default function SessionsList({
             <p className="xx-small fw-bold text-muted mb-0 text-uppercase tracking-widest">Attendance Feed</p>
           </div>
         </div>
-        <button className="btn btn-primary w-100 py-3 rounded-pill fw-black shadow-lg d-flex align-items-center justify-content-center gap-2 text-uppercase letter-spacing-n1" onClick={onCreateSession}>
+        <button className="btn btn-primary w-100 py-3 rounded-pill fw-black shadow-lg d-flex align-items-center justify-content-center gap-2 text-uppercase letter-spacing-n1" onClick={() => setShowStartModal(true)}>
           <Plus size={20} /> START NEW SESSION
         </button>
       </div>
@@ -108,6 +127,51 @@ export default function SessionsList({
           />
         </div>
       </div>
+
+      {showStartModal && (
+        <div className="modal-backdrop show bg-dark bg-opacity-75" style={{ zIndex: 1040 }} />
+      )}
+      <div className={`modal fade ${showStartModal ? 'show d-block' : ''}`} tabIndex={-1} style={{ zIndex: 1050 }}>
+        <div className="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+          <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+            <div className="modal-header border-0 bg-light pb-0 pt-4 px-4 d-flex justify-content-between align-items-center">
+              <div>
+                <h5 className="modal-title fw-black text-dark text-uppercase letter-spacing-n1">Start Session</h5>
+                <p className="xx-small fw-bold text-muted uppercase tracking-widest mb-0">Who is taking this lecture?</p>
+              </div>
+              <button type="button" className="btn-close shadow-none" onClick={() => setShowStartModal(false)}></button>
+            </div>
+            <div className="modal-body p-4">
+              <input
+                type="text"
+                className="form-control rounded-3 mb-3"
+                placeholder="Search lecturer..."
+                value={lecturerSearch}
+                onChange={e => setLecturerSearch(e.target.value)}
+              />
+              <div className="d-flex flex-column gap-2" style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                {filteredLecturers.map(lecturer => (
+                  <div
+                    key={lecturer.serverId}
+                    className={`card border-0 p-3 rounded-3 cursor-pointer ${selectedLecturerId === lecturer.serverId ? 'bg-primary bg-opacity-10 border-primary border text-primary' : 'bg-light text-dark'}`}
+                    onClick={() => setSelectedLecturerId(lecturer.serverId)}
+                  >
+                    <h6 className="mb-0 fw-bold small">{lecturer.name}</h6>
+                  </div>
+                ))}
+                {filteredLecturers.length === 0 && (
+                   <p className="text-center text-muted small py-3 mb-0">No lecturers found.</p>
+                )}
+              </div>
+            </div>
+            <div className="modal-footer border-0 p-4 pt-0">
+              <button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowStartModal(false)}>Cancel</button>
+              <button type="button" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-lg fw-bold" disabled={!selectedLecturerId} onClick={handleStartSession}>START</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

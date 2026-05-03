@@ -1,6 +1,18 @@
 import Dexie, { type Table } from 'dexie';
 import { v4 as uuidv4 } from 'uuid';
 
+
+export interface LocalLecturer {
+  id?: number;
+  serverId: string;
+  name: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted: number;
+  synced: number;
+}
+
 export interface LocalSemester {
   id?: number;
   serverId: string;
@@ -62,6 +74,7 @@ export interface LocalAttendanceSession {
   id?: number;
   serverId: string;
   courseId: string;
+  lecturerId?: string;
   date: string;
   title: string;
   userId?: string;
@@ -119,6 +132,7 @@ export class PresensysDB extends Dexie {
   enrollments!: Table<LocalEnrollment>;
   attendanceSessions!: Table<LocalAttendanceSession>;
   attendanceRecords!: Table<LocalAttendanceRecord>;
+  lecturers!: Table<LocalLecturer>;
   outbox!: Table<LocalOutboxEntry>;
 
   private onChangeListeners: (() => void)[] = [];
@@ -131,7 +145,8 @@ export class PresensysDB extends Dexie {
       students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
       courses: '++id, &serverId, semesterId, code, dayOfWeek, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
-      attendanceSessions: '++id, &serverId, courseId, date, synced, isDeleted, userId, updatedAt',
+      attendanceSessions: '++id, &serverId, courseId, date, lecturerId, synced, isDeleted, userId, updatedAt',
+      lecturers: '++id, &serverId, name, synced, isDeleted, userId, updatedAt',
       attendanceRecords: '++id, &serverId, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, updatedAt',
     };
 
@@ -155,6 +170,12 @@ export class PresensysDB extends Dexie {
 
     // Version 14 - add dayOfWeek, time, lecturers to courses
     this.version(14).stores({
+      ...dataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 15 - add lecturers table and lecturerId to attendanceSessions
+    this.version(15).stores({
       ...dataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
@@ -268,4 +289,5 @@ export type Student = LocalStudent;
 export type Course = LocalCourse;
 export type Enrollment = LocalEnrollment;
 export type AttendanceSession = LocalAttendanceSession;
+export type Lecturer = LocalLecturer;
 export type AttendanceRecord = LocalAttendanceRecord;
