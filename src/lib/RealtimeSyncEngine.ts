@@ -7,6 +7,7 @@ import {
   type LocalAttendanceSession,
   type LocalAttendanceRecord,
   type LocalLecturer,
+  type LocalCourseSchedule,
   type LocalOutboxEntry,
 } from '../db/db';
 import { supabase } from './supabase';
@@ -19,7 +20,8 @@ type TableName =
   | 'enrollments'
   | 'attendance_sessions'
   | 'attendance_records'
-  | 'lecturers';
+  | 'lecturers'
+  | 'course_schedules';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
@@ -333,6 +335,11 @@ export class RealtimeSyncEngine {
         timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
         userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
       })),
+      pull('course_schedules', db.courseSchedules, (cs) => ({
+        serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
+        startTime: cs.start_time, endTime: cs.end_time,
+        userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
+      })),
     ]);
   }
 
@@ -413,6 +420,21 @@ export class RealtimeSyncEngine {
         status: item.status,
         // Always push as ISO string — works with both BIGINT (legacy) and TIMESTAMPTZ columns
         marked_at: new Date(item.timestamp).toISOString(),
+        user_id: this.userId,
+        is_deleted: item.isDeleted,
+        updated_at: item.updatedAt,
+      };
+    });
+
+    // Push course schedules
+    await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules, (item) => {
+      if (!this.isValidUUID(item.courseId)) return null;
+      return {
+        id: item.serverId,
+        course_id: item.courseId,
+        day_of_week: item.dayOfWeek,
+        start_time: item.startTime,
+        end_time: item.endTime,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
@@ -744,6 +766,7 @@ export class RealtimeSyncEngine {
       attendance_sessions: 'attendanceSessions',
       attendance_records: 'attendanceRecords',
       lecturers: 'lecturers',
+      course_schedules: 'courseSchedules',
     };
 
     for (const dexieName of Object.values(tableMapping)) {
@@ -808,6 +831,7 @@ export class RealtimeSyncEngine {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'courses', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('courses', db.courses, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'semesters', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('semesters', db.semesters, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('enrollments', db.enrollments, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'course_schedules', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('course_schedules', db.courseSchedules, payload))
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           // Channel connected or reconnected → run a catch-up pull to close
@@ -868,6 +892,8 @@ export class RealtimeSyncEngine {
         return { ...base, regNumber: r.reg_number, name: r.name, email: r.email, phone: r.phone };
       case 'courses':
         return { ...base, code: r.code, title: r.title, semesterId: r.semester_id };
+      case 'course_schedules':
+        return { ...base, courseId: r.course_id, dayOfWeek: r.day_of_week, startTime: r.start_time, endTime: r.end_time };
       case 'enrollments':
         return { ...base, studentId: r.student_id, courseId: r.course_id };
       case 'attendance_sessions':
