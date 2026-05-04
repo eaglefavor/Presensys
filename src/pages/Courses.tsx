@@ -58,7 +58,6 @@ export default function Courses() {
 
   const checkConflict = (draft: { dayOfWeek: string; startTime: string; endTime: string }, excludeCourseServerId?: string): string | null => {
     if (!draft.startTime || !draft.endTime || !allSchedules || !courses) return null;
-    if (draft.dayOfWeek === 'Everyday') return null;
 
     const draftStart = toMinutes(draft.startTime);
     const draftEnd = toMinutes(draft.endTime);
@@ -66,7 +65,12 @@ export default function Courses() {
 
     for (const sched of allSchedules) {
       if (sched.courseId === excludeCourseServerId) continue;
-      if (sched.dayOfWeek !== draft.dayOfWeek && sched.dayOfWeek !== 'Everyday') continue;
+      // 'Everyday' matches all days; specific days match themselves and 'Everyday' slots
+      const daysMatch =
+        draft.dayOfWeek === 'Everyday' ||
+        sched.dayOfWeek === 'Everyday' ||
+        sched.dayOfWeek === draft.dayOfWeek;
+      if (!daysMatch) continue;
 
       const schedStart = toMinutes(sched.startTime);
       const schedEnd = toMinutes(sched.endTime);
@@ -86,8 +90,7 @@ export default function Courses() {
     } else {
       setConflictWarning(null);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slotDraft, allSchedules]);
+  }, [slotDraft, allSchedules, courseForm.serverId, courses]);
 
   const handleAddSlot = () => {
     if (!slotDraft.startTime || !slotDraft.endTime) {
