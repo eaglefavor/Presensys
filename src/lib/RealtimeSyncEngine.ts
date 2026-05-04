@@ -399,6 +399,8 @@ export class RealtimeSyncEngine {
       return {
         id: item.serverId,
         course_id: item.courseId,
+        // lecturer_id is optional (nullable FK) — only send a valid UUID to avoid
+        // server-side FK violations when the referenced lecturer hasn't synced yet.
         lecturer_id: this.isValidUUID(item.lecturerId) ? item.lecturerId : null,
         date: item.date,
         title: item.title,
