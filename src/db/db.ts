@@ -58,6 +58,20 @@ export interface LocalCourse {
   synced: number;
 }
 
+export interface LocalCourseSchedule {
+  id?: number;
+  serverId: string;
+  courseId: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted: number;
+  synced: number;
+}
+
 export interface LocalEnrollment {
   id?: number;
   serverId: string;
@@ -133,6 +147,7 @@ export class PresensysDB extends Dexie {
   attendanceSessions!: Table<LocalAttendanceSession>;
   attendanceRecords!: Table<LocalAttendanceRecord>;
   lecturers!: Table<LocalLecturer>;
+  courseSchedules!: Table<LocalCourseSchedule>;
   outbox!: Table<LocalOutboxEntry>;
 
   private onChangeListeners: (() => void)[] = [];
@@ -148,6 +163,7 @@ export class PresensysDB extends Dexie {
       attendanceSessions: '++id, &serverId, courseId, date, lecturerId, synced, isDeleted, userId, updatedAt',
       lecturers: '++id, &serverId, name, synced, isDeleted, userId, updatedAt',
       attendanceRecords: '++id, &serverId, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, updatedAt',
+      courseSchedules: '++id, &serverId, courseId, dayOfWeek, synced, isDeleted, userId, updatedAt',
     };
 
     // Version 11 – initial index fix
@@ -176,6 +192,12 @@ export class PresensysDB extends Dexie {
 
     // Version 15 - add lecturers table and lecturerId to attendanceSessions
     this.version(15).stores({
+      ...dataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 16 – add courseSchedules table (flexible multi-slot schedule per course)
+    this.version(16).stores({
       ...dataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
@@ -287,6 +309,7 @@ export const db = new PresensysDB();
 export type Semester = LocalSemester;
 export type Student = LocalStudent;
 export type Course = LocalCourse;
+export type CourseSchedule = LocalCourseSchedule;
 export type Enrollment = LocalEnrollment;
 export type AttendanceSession = LocalAttendanceSession;
 export type Lecturer = LocalLecturer;
