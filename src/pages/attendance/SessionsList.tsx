@@ -40,7 +40,7 @@ export default function SessionsList({
   const [showStartModal, setShowStartModal] = useState(false);
   const [selectedLecturerId, setSelectedLecturerId] = useState('');
   const [lecturerSearch, setLecturerSearch] = useState('');
-  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray()) || [];
+  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []) || [];
 
   const filteredLecturers = lecturers.filter(l => l.name.toLowerCase().includes(lecturerSearch.toLowerCase()));
 
