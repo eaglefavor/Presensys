@@ -31,24 +31,18 @@ interface AuthState {
 function exposeDebugGlobal() {
   (window as unknown as Record<string, unknown>)['__presensysDebug'] = () => {
     const s = useAuthStore.getState();
-    if (import.meta.env.DEV) {
-      console.group('%c[PRESENSYS DEBUG] Full Auth State', 'color:#e67e22;font-weight:bold;font-size:14px');
-      console.log('loading        :', s.loading);
-      console.log('session        :', s.session ? `✅ active (user=${s.session.user?.email})` : '❌ null');
-      console.log('user.id        :', s.user?.id ?? 'null');
-      console.log('profileVerified:', s.profileVerified);
-      console.log('profile (full) :', s.profile);
-      console.groupEnd();
-    }
+    console.group('%c[PRESENSYS DEBUG] Full Auth State', 'color:#e67e22;font-weight:bold;font-size:14px');
+    console.log('loading        :', s.loading);
+    console.log('session        :', s.session ? `✅ active (user=${s.session.user?.email})` : '❌ null');
+    console.log('user.id        :', s.user?.id ?? 'null');
+    console.log('profileVerified:', s.profileVerified);
+    console.log('profile (full) :', s.profile);
+    console.groupEnd();
     return s;
   };
-  if (import.meta.env.DEV) {
-    console.log('%c[PRESENSYS] Debug helper ready — call window.__presensysDebug() in Eruda console', 'color:#27ae60;font-size:12px');
-  }
+  console.log('%c[PRESENSYS] Debug helper ready — call window.__presensysDebug() in Eruda console', 'color:#27ae60;font-size:12px');
 }
-if (import.meta.env.DEV) {
-  exposeDebugGlobal();
-}
+exposeDebugGlobal();
 // ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -91,13 +85,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: initialLoading,
   
   setSession: async (session) => {
-    if (import.meta.env.DEV) {
-      console.group('%c[AuthStore] setSession called', 'color:#2980b9;font-weight:bold');
-      console.log('session present :', !!session);
-      console.log('user email      :', session?.user?.email ?? 'none');
-      console.log('user id         :', session?.user?.id ?? 'none');
-      console.log('expires_at      :', session?.expires_at ?? 'n/a');
-    }
+    console.group('%c[AuthStore] setSession called', 'color:#2980b9;font-weight:bold');
+    console.log('session present :', !!session);
+    console.log('user email      :', session?.user?.email ?? 'none');
+    console.log('user id         :', session?.user?.id ?? 'none');
+    console.log('expires_at      :', session?.expires_at ?? 'n/a');
 
     const currentUser = get().user;
     let profileFromCache = get().profile;
@@ -130,35 +122,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       loading: needsLoading
     });
 
-    if (import.meta.env.DEV) {
-      console.log('→ store updated: loading=', needsLoading, 'profileFromCache=', !!profileFromCache);
-    }
+    console.log('→ store updated: loading=', needsLoading, 'profileFromCache=', !!profileFromCache);
     
     if (session) {
-      if (import.meta.env.DEV) {
-        console.log('→ calling fetchProfile…');
-        console.groupEnd();
-      }
+      console.log('→ calling fetchProfile…');
+      console.groupEnd();
       // Fetch profile in the background, without forcing loading=true
       await get().fetchProfile();
     } else {
       set({ loading: false, profile: null, profileVerified: false });
-      if (import.meta.env.DEV) {
-        console.log('→ no session — cleared profile, loading=false');
-        console.groupEnd();
-      }
+      console.log('→ no session — cleared profile, loading=false');
+      console.groupEnd();
     }
   },
 
   fetchProfile: async () => {
     const { user } = get();
-    if (import.meta.env.DEV) {
-      console.group('%c[AuthStore] fetchProfile called', 'color:#8e44ad;font-weight:bold');
-      console.log('user.id :', user?.id ?? 'null — aborting');
-    }
+    console.group('%c[AuthStore] fetchProfile called', 'color:#8e44ad;font-weight:bold');
+    console.log('user.id :', user?.id ?? 'null — aborting');
 
     if (!user) {
-      if (import.meta.env.DEV) console.groupEnd();
+      console.groupEnd();
       return;
     }
 
@@ -169,34 +153,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (cachedRaw) {
       try {
         const parsed = JSON.parse(cachedRaw);
-        if (import.meta.env.DEV) {
-          console.log('cache hit — cached profile:', { id: parsed.id, role: parsed.role, status: parsed.status, invalid_tries: parsed.invalid_tries });
-        }
+        console.log('cache hit — cached profile:', { id: parsed.id, role: parsed.role, status: parsed.status, invalid_tries: parsed.invalid_tries });
         if (parsed.id === user.id) {
           set({ profile: parsed });
-          if (import.meta.env.DEV) {
-            console.log('→ cache applied to store (profileVerified still false)');
-          }
+          console.log('→ cache applied to store (profileVerified still false)');
         } else {
-          if (import.meta.env.DEV) {
-            console.warn('cache mismatch — cached id', parsed.id, 'vs user.id', user.id, '— ignoring cache');
-          }
+          console.warn('cache mismatch — cached id', parsed.id, 'vs user.id', user.id, '— ignoring cache');
         }
       } catch (e) {
-        if (import.meta.env.DEV) {
-          console.warn('cache parse error — removing:', e);
-        }
+        console.warn('cache parse error — removing:', e);
         localStorage.removeItem('user_profile');
       }
     } else {
-      if (import.meta.env.DEV) {
-        console.log('no cached profile found');
-      }
+      console.log('no cached profile found');
     }
 
-    if (import.meta.env.DEV) {
-      console.log('→ querying profiles table for id =', user.id);
-    }
+    console.log('→ querying profiles table for id =', user.id);
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
@@ -204,44 +176,34 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .limit(1)
       .maybeSingle();
     
-    if (import.meta.env.DEV) {
-      console.log('← profiles query result:');
-      console.log('  error :', error ?? 'none');
-      console.log('  data  :', data);
-    }
+    console.log('← profiles query result:');
+    console.log('  error :', error ?? 'none');
+    console.log('  data  :', data);
 
     if (error) {
       // Offline or network failure — keep the cached profile for offline use but
       // mark loading as done. profileVerified stays false so the Admin route
       // does not render on stale cached data.
-      if (import.meta.env.DEV) {
-        console.warn('fetchProfile error — keeping cached profile, loading=false, profileVerified stays false');
-        console.warn('error details:', error.message, '| code:', error.code, '| hint:', (error as { hint?: string }).hint);
-      }
+      console.warn('fetchProfile error — keeping cached profile, loading=false, profileVerified stays false');
+      console.warn('error details:', error.message, '| code:', error.code, '| hint:', (error as { hint?: string }).hint);
       set({ loading: false });
     } else if (data === null) {
-      if (import.meta.env.DEV) {
-        console.error('⚠️ fetchProfile: profiles query returned NULL — no profile row found for this user!');
-        console.error('This means the handle_new_user() trigger may not have created a profile row.');
-        console.error('The user will be stuck on VerifyAccess indefinitely.');
-      }
+      console.error('⚠️ fetchProfile: profiles query returned NULL — no profile row found for this user!');
+      console.error('This means the handle_new_user() trigger may not have created a profile row.');
+      console.error('The user will be stuck on VerifyAccess indefinitely.');
       localStorage.removeItem('user_profile');
       set({ profile: null, profileVerified: true, loading: false });
     } else {
       const p = data as Profile;
-      if (import.meta.env.DEV) {
-        console.log('✅ profile fetched — role:', p.role, '| status:', p.status, '| invalid_tries:', p.invalid_tries);
-      }
+      console.log('✅ profile fetched — role:', p.role, '| status:', p.status, '| invalid_tries:', p.invalid_tries);
       localStorage.setItem('user_profile', JSON.stringify(data));
       set({ profile: p, profileVerified: true, loading: false });
     }
-    if (import.meta.env.DEV) console.groupEnd();
+    console.groupEnd();
   },
 
   signOut: async () => {
-    if (import.meta.env.DEV) {
-      console.log('%c[AuthStore] signOut called', 'color:#e74c3c;font-weight:bold');
-    }
+    console.log('%c[AuthStore] signOut called', 'color:#e74c3c;font-weight:bold');
     await supabase.auth.signOut();
     localStorage.removeItem('user_profile'); // Clear cache on logout
 

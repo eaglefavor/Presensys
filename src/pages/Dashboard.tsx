@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2, Bug, Clock } from 'lucide-react';
+import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2, Bug } from 'lucide-react';
 import { db, type LocalSemester, type LocalStudent, type LocalCourse, type LocalEnrollment, type LocalAttendanceSession, type LocalAttendanceRecord } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
@@ -12,13 +12,6 @@ type DexieTableRecord = LocalSemester | LocalStudent | LocalCourse | LocalEnroll
 
 export default function Dashboard() {
   const activeSemester = useAppStore(state => state.activeSemester);
-
-  const todayDayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-  const todaysCourses = useLiveQuery(
-    () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1 && c.dayOfWeek === todayDayOfWeek).toArray() : [],
-    [activeSemester]
-  );
-
 
   const handleDebugSync = async () => {
     console.log('--- DEBUG: STARTING SYNC DUMP ---');
@@ -151,36 +144,6 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
-
-
-        {/* Today Section */}
-        {todaysCourses && todaysCourses.length > 0 && (
-          <>
-            <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 px-1">Today's Courses ({todayDayOfWeek})</h6>
-            <div className="d-flex flex-column gap-2 mb-4">
-              {todaysCourses.map(course => (
-                <div key={course.id} className="card border-0 bg-white shadow-sm overflow-hidden">
-                  <div className="card-body p-3 d-flex align-items-center gap-3">
-                    <div className="icon-box-small rounded-2 d-flex align-items-center justify-content-center bg-primary bg-opacity-10 text-primary" style={{ width: '44px', height: '44px' }}>
-                      <Clock size={20} />
-                    </div>
-                    <div className="flex-grow-1 overflow-hidden">
-                      <h6 className="fw-bold mb-0 text-dark text-truncate">{course.code}</h6>
-                      <div className="xx-small fw-bold text-muted">
-                        {course.time || 'Time Not Set'} • {course.lecturers || 'No Lecturers Assigned'}
-                      </div>
-                    </div>
-                    <div>
-                      <Link to="/attendance" state={{ selectedCourseId: course.serverId }} className="btn btn-primary btn-sm rounded-pill px-3 fw-bold xx-small d-flex align-items-center gap-1 shadow-sm">
-                        <Plus size={12} /> Start
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
 
         {/* Course List Section (Feed Style) */}
         <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 px-1">Active Performance</h6>

@@ -1,9 +1,11 @@
-feat: add animated SplashLogo to PWA
+🧪 [testing improvement] Add tests for exportToCSV utility
 
-This commit introduces a new custom `SplashLogo` component matching the requested "Seamless Arrival" Concept 1 for the PresenSys app.
+🎯 What: The testing gap in src/lib/ExportUtils.ts for the exportToCSV utility has been addressed by writing a new set of tests covering this functionality. Since this relies on a DOM implementation for downloading the created CSV blob, I mocked the `Blob` and basic DOM implementations (`document.createElement`, `URL.createObjectURL`, etc) within the `node:test` framework.
 
-- Uses SVG and CSS Keyframes to drive a 2.5s loop animation.
-- Implements the "draw on" effect for the gray track.
-- Implements the "fill" and "morph to checkmark" with colors transitioning from Synergy Blue (`var(--bs-primary)`) to Arrival Green (`var(--bs-success)`).
-- Typography correctly matches the design with "Presen" holding steady and "Sys" recoloring.
-- Integrated `SplashLogo` into the `PageLoader` inside `src/App.tsx`, completely replacing the old unbranded Bootstrap spinner layout while the application initiates.
+📊 Coverage:
+- Simple CSV export without metadata
+- Full metadata insertion (faculty, department, level)
+- Partial metadata insertion
+- Empty data array handling
+
+✨ Result: Replaces manual testing of CSV export files with a verified, deterministic test suite that captures regressions and properly verifies correct PapaParse functionality along with the unparsed metadata generation logic before output generation.

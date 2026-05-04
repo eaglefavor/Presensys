@@ -1,18 +1,15 @@
 import { useState, useEffect } from 'react';
+import { Plus, Ticket, Trash2, Copy, Check, Users, ShieldCheck, Activity } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useAuthStore } from '../store/useAuthStore';
 
-// Subcomponents
-import AdminStatsGrid from './admin/AdminStatsGrid';
-import AccessCodeManager from './admin/AccessCodeManager';
-import UserManagementTable from './admin/UserManagementTable';
-
 interface AdminStats {
-  totalUsers: number;
-  activeReps: number;
-  pendingUsers: number;
+  total_users: number;
+  active_reps: number;
+  pending_users: number;
 }
 
 interface AccessCode {
@@ -21,6 +18,7 @@ interface AccessCode {
   is_used: boolean;
   created_at: string;
 }
+
 
 interface AdminUser {
   id: string;
@@ -33,7 +31,7 @@ interface AdminUser {
 
 export default function Admin() {
   const [codes, setCodes] = useState<AccessCode[]>([]);
-  const [stats, setStats] = useState<AdminStats>({ totalUsers: 0, activeReps: 0, pendingUsers: 0 });
+  const [stats, setStats] = useState({ totalUsers: 0, activeReps: 0, pendingUsers: 0 });
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [confirmDeleteCodeId, setConfirmDeleteCodeId] = useState<number | null>(null);
@@ -42,34 +40,35 @@ export default function Admin() {
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
   const { user: currentUser } = useAuthStore();
 
+
   useEffect(() => {
     fetchCodes();
     fetchStats();
     fetchUsers();
   }, []);
 
-  async function fetchCodes() {
-    const { data, error } = await supabase
-      .from('access_codes')
-      .select('*')
-      .order('created_at', { ascending: false });
-    if (!error && data) {
-      setCodes(data);
+  const fetchCodes = async () => {
+    const { data, error } = await supabase.from('access_codes').select('*').order('created_at', { ascending: false });
+    if (error) {
+      toast.error('Failed to load access codes.');
+      return;
     }
+    if (data) setCodes(data as AccessCode[]);
   };
 
-  async function fetchStats() {
+  const fetchStats = async () => {
     const { data, error } = await supabase.rpc('get_admin_stats');
-    if (!error && data) {
-      setStats({
-        totalUsers: data.total_users,
-        activeReps: data.active_reps,
-        pendingUsers: data.pending_users
-      });
+    if (error) {
+      toast.error('Failed to load user stats.');
+      return;
+    }
+    if (data) {
+      const s = data as AdminStats;
+      setStats({ totalUsers: s.total_users, activeReps: s.active_reps, pendingUsers: s.pending_users });
     }
   };
 
-  async function generateCode() {
+  const generateCode = async () => {
     setLoading(true);
     // Use crypto.getRandomValues for a cryptographically secure random code.
     const bytes = new Uint8Array(4);
@@ -87,7 +86,8 @@ export default function Admin() {
     setLoading(false);
   };
 
-  async function fetchUsers() {
+
+  const fetchUsers = async () => {
     setLoadingUsers(true);
     const { data, error } = await supabase.rpc('get_admin_users');
     if (error) {
@@ -98,7 +98,7 @@ export default function Admin() {
     setLoadingUsers(false);
   };
 
-  async function deleteUser(id: string) {
+  const deleteUser = async (id: string) => {
     const { data, error } = await supabase.rpc('delete_user', { target_user_id: id });
     if (error) {
       toast.error('Failed to delete user: ' + error.message);
@@ -115,7 +115,7 @@ export default function Admin() {
     await fetchStats();
   };
 
-  async function deleteCode(id: number) {
+  const deleteCode = async (id: number) => {
     const { error } = await supabase.from('access_codes').delete().eq('id', id);
     if (error) {
       toast.error('Failed to delete code.');
@@ -124,7 +124,7 @@ export default function Admin() {
     await fetchCodes();
   };
 
-  function copyToClipboard(code: string, id: number) {
+  const copyToClipboard = (code: string, id: number) => {
     navigator.clipboard.writeText(code);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -139,25 +139,132 @@ export default function Admin() {
       </div>
 
       <div className="px-4 container-mobile">
-        <AdminStatsGrid stats={stats} />
+        {/* Stats Grid */}
+        <div className="row g-3 mb-4">
+          <div className="col-12">
+            <div className="card border-0 bg-primary text-white p-4 rounded-4 shadow-lg position-relative overflow-hidden">
+              <div className="position-absolute top-0 end-0 p-3 opacity-10"><Users size={100} /></div>
+              <div className="position-relative z-10">
+                <div className="xx-small fw-bold text-uppercase tracking-widest mb-1 opacity-75">Total Users</div>
+                <h1 className="display-4 fw-black mb-0 letter-spacing-n1">{stats.totalUsers}</h1>
+                <div className="d-flex gap-3 mt-3">
+                  <div className="d-flex align-items-center gap-1 small"><ShieldCheck size={16} /> <strong>{stats.activeReps}</strong> Active</div>
+                  <div className="d-flex align-items-center gap-1 small text-warning"><Activity size={16} /> <strong>{stats.pendingUsers}</strong> Pending</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-        <AccessCodeManager
-          codes={codes}
-          loading={loading}
-          copiedId={copiedId}
-          onGenerateCode={generateCode}
-          onCopyCode={copyToClipboard}
-          onDeleteCode={setConfirmDeleteCodeId}
-        />
+        {/* Access Code Management */}
+        <div className="d-flex justify-content-between align-items-center mb-3 px-1">
+          <h6 className="fw-black text-muted text-uppercase tracking-widest mb-0">Access Codes</h6>
+          <button className="btn btn-primary rounded-pill px-4 py-2 shadow-sm fw-bold d-flex align-items-center gap-2" onClick={generateCode} disabled={loading}>
+            <Plus size={18} /> {loading ? 'Generating...' : 'New Code'}
+          </button>
+        </div>
 
-        <UserManagementTable
-          users={users}
-          loadingUsers={loadingUsers}
-          currentUser={currentUser}
-          onRefreshUsers={fetchUsers}
-          onDeleteUser={setConfirmDeleteUserId}
-        />
+        <div className="d-flex flex-column gap-2">
+          {codes.map((c) => (
+            <motion.div key={c.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="card border-0 bg-white shadow-sm rounded-4 overflow-hidden">
+              <div className="card-body p-3 d-flex align-items-center justify-content-between">
+                <div className="d-flex align-items-center gap-3">
+                  <div className={`p-2 rounded-3 ${c.is_used ? 'bg-light text-muted' : 'bg-success-subtle text-success'}`}>
+                    <Ticket size={24} />
+                  </div>
+                  <div>
+                    <div className={`h5 fw-black font-monospace mb-0 ${c.is_used ? 'text-muted text-decoration-line-through' : 'text-dark'}`}>{c.code}</div>
+                    <div className="xx-small fw-bold text-muted text-uppercase">{c.is_used ? 'Used' : 'Available'} • {new Date(c.created_at).toLocaleDateString()}</div>
+                  </div>
+                </div>
+                <div className="d-flex gap-1">
+                  {!c.is_used && (
+                    <button className="btn btn-light rounded-circle p-2 text-primary" onClick={() => copyToClipboard(c.code, c.id)}>
+                      {copiedId === c.id ? <Check size={18} /> : <Copy size={18} />}
+                    </button>
+                  )}
+                  <button className="btn btn-light rounded-circle p-2 text-danger" onClick={() => setConfirmDeleteCodeId(c.id)}>
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+          {codes.length === 0 && (
+            <div className="text-center py-5 bg-white rounded-4 border-dashed">
+              <p className="xx-small fw-bold text-muted uppercase mb-0">No active codes generated</p>
+            </div>
+          )}
+        </div>
       </div>
+
+
+        {/* User Management */}
+        <div className="d-flex justify-content-between align-items-center mt-5 mb-3 px-1">
+          <h6 className="fw-black text-muted text-uppercase tracking-widest mb-0">User Management</h6>
+          <button className="btn btn-light rounded-pill px-3 py-1 shadow-sm fw-bold small d-flex align-items-center gap-1" onClick={fetchUsers} disabled={loadingUsers}>
+            {loadingUsers ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
+
+        <div className="card border-0 bg-white shadow-sm rounded-4 overflow-hidden mb-5">
+          <div className="table-responsive">
+            <table className="table table-hover align-middle mb-0">
+              <thead className="table-light">
+                <tr>
+                  <th className="xx-small fw-bold text-uppercase text-muted py-3 px-4">User</th>
+                  <th className="xx-small fw-bold text-uppercase text-muted py-3">Role & Status</th>
+                  <th className="xx-small fw-bold text-uppercase text-muted py-3">Joined</th>
+                  <th className="xx-small fw-bold text-uppercase text-muted py-3 text-end px-4">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => (
+                  <tr key={u.id}>
+                    <td className="px-4 py-3">
+                      <div className="fw-bold text-dark">{u.full_name || 'No Name'}</div>
+                      <div className="small text-muted">{u.email}</div>
+                    </td>
+                    <td className="py-3">
+                      <div className="d-flex flex-column gap-1 align-items-start">
+                        <span className={`badge rounded-pill ${u.role === 'admin' ? 'bg-primary' : 'bg-secondary'}`}>
+                          {u.role.toUpperCase()}
+                        </span>
+                        <span className={`badge rounded-pill ${
+                          u.status === 'verified' ? 'bg-success' :
+                          u.status === 'pending' ? 'bg-warning text-dark' : 'bg-danger'
+                        }`}>
+                          {u.status.toUpperCase()}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 small text-muted">
+                      {new Date(u.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3 text-end">
+                      {currentUser?.id !== u.id && (
+                        <button
+                          className="btn btn-light rounded-circle p-2 text-danger"
+                          onClick={() => setConfirmDeleteUserId(u.id)}
+                          title="Delete user completely"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {users.length === 0 && !loadingUsers && (
+                  <tr>
+                    <td colSpan={4} className="text-center py-4 text-muted small">
+                      No users found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
 
       <ConfirmDialog
         open={confirmDeleteCodeId !== null}
