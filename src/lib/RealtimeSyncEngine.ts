@@ -386,7 +386,11 @@ export class RealtimeSyncEngine {
 
     // Push lecturers
     await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
-      name: item.name
+      id: item.serverId,
+      name: item.name,
+      user_id: this.userId,
+      is_deleted: item.isDeleted,
+      updated_at: item.updatedAt,
     }));
 
     // Push attendance sessions
@@ -395,6 +399,7 @@ export class RealtimeSyncEngine {
       return {
         id: item.serverId,
         course_id: item.courseId,
+        lecturer_id: this.isValidUUID(item.lecturerId) ? item.lecturerId : null,
         date: item.date,
         title: item.title,
         user_id: this.userId,

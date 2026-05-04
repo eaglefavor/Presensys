@@ -23,6 +23,7 @@ const Auth = lazy(() => import('./pages/Auth'));
 const VerifyAccess = lazy(() => import('./pages/VerifyAccess'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Settings = lazy(() => import('./pages/Settings'));
+const Lecturers = lazy(() => import('./pages/Lecturers'));
 
 function PageLoader() {
   return (
@@ -135,6 +136,7 @@ function App() {
             <Route path="attendance" element={<Attendance />} />
             <Route path="archives" element={<Archives />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="lecturers" element={<Lecturers />} />
 
             {/* Admin only route — requires server-confirmed profile to prevent localStorage spoofing */}
             {profileVerified && normalizedRole === 'admin' && (

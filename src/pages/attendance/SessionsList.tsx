@@ -1,7 +1,7 @@
-import { Plus, Calendar, ArrowLeft, Clock, Pencil, Check, Trash2, ChevronRight } from 'lucide-react';
+import { Plus, Calendar, ArrowLeft, Clock, Pencil, Check, Trash2, ChevronRight, UserRound } from 'lucide-react';
 import type { LocalAttendanceSession, LocalCourse } from '../../db/db';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 
@@ -40,9 +40,18 @@ export default function SessionsList({
   const [showStartModal, setShowStartModal] = useState(false);
   const [selectedLecturerId, setSelectedLecturerId] = useState('');
   const [lecturerSearch, setLecturerSearch] = useState('');
+  const [filterLecturerId, setFilterLecturerId] = useState('');
   const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []) || [];
 
+  const lecturerMap = useMemo(() => new Map(lecturers.map(l => [l.serverId, l.name])), [lecturers]);
+
   const filteredLecturers = lecturers.filter(l => l.name.toLowerCase().includes(lecturerSearch.toLowerCase()));
+
+  const displayedSessions = useMemo(() => {
+    if (!sessions) return [];
+    if (!filterLecturerId) return sessions;
+    return sessions.filter(s => s.lecturerId === filterLecturerId);
+  }, [sessions, filterLecturerId]);
 
   const handleStartSession = () => {
     if (!selectedLecturerId) return;
@@ -67,9 +76,27 @@ export default function SessionsList({
         </button>
       </div>
       <div className="px-4 container-mobile">
-        <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 ps-1">Recent Sessions</h6>
+        {/* Lecturer filter */}
+        {lecturers.length > 0 && (
+          <div className="mb-3">
+            <select
+              className="form-select form-select-sm rounded-3 fw-bold border-light bg-white shadow-sm"
+              value={filterLecturerId}
+              onChange={e => setFilterLecturerId(e.target.value)}
+            >
+              <option value="">All Lecturers</option>
+              {lecturers.map(l => (
+                <option key={l.serverId} value={l.serverId}>{l.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 ps-1">
+          {filterLecturerId ? `Sessions — ${lecturerMap.get(filterLecturerId) || 'Lecturer'}` : 'Recent Sessions'}
+        </h6>
         <div className="d-flex flex-column gap-2">
-          {sessions?.map(session => (
+          {displayedSessions.map(session => (
             <div key={session.serverId} className="card border-0 bg-white shadow-sm rounded-4">
               {renamingSessionId === session.serverId ? (
                 <div className="p-3 d-flex align-items-center gap-2">
@@ -88,7 +115,14 @@ export default function SessionsList({
                   <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
                   <div className="flex-grow-1">
                     <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
-                    <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1 mt-1"><Clock size={10} /> {new Date(session.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</div>
+                    <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1 mt-1">
+                      <Clock size={10} /> {new Date(session.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                      {session.lecturerId && lecturerMap.has(session.lecturerId) && (
+                        <span className="d-flex align-items-center gap-1 ms-2">
+                          <UserRound size={10} /> {lecturerMap.get(session.lecturerId)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     className="btn btn-light btn-sm rounded-circle p-1 border-0 text-muted me-1"
@@ -111,9 +145,11 @@ export default function SessionsList({
               )}
             </div>
           ))}
-          {sessions?.length === 0 && (
+          {displayedSessions.length === 0 && (
             <div className="text-center py-5 bg-white rounded-4 border-dashed">
-              <p className="xx-small fw-bold text-muted uppercase">No sessions found</p>
+              <p className="xx-small fw-bold text-muted uppercase">
+                {filterLecturerId ? 'No sessions found for this lecturer' : 'No sessions found'}
+              </p>
             </div>
           )}
           <ConfirmDialog
@@ -175,3 +211,4 @@ export default function SessionsList({
     </div>
   );
 }
+
