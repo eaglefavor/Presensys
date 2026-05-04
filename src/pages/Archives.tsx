@@ -209,6 +209,7 @@ const StatusIcon = ({ status }: { status: string }) =>
 export default function Archives() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
+  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray()) || [];
 
   const [mode, setMode] = useState<ArchiveMode>('student');
   const [loading, setLoading] = useState(false);
@@ -248,10 +249,12 @@ export default function Archives() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [filterChip, setFilterChip] = useState<FilterChip>('');
   const [compilationPage, setCompilationPage] = useState(1);
+  const [compilationLecturerId, setCompilationLecturerId] = useState('');
   const compilationItemsPerPage = 15;
 
   // ── Session Drill-Down ──────────────────────────────────────────────────────
   const [sessionsCourseId, setSessionsCourseId] = useState('');
+  const [sessionsLecturerId, setSessionsLecturerId] = useState('');
   const [sessionsList, setSessionsList] = useState<SessionRow[]>([]);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [rollCallMap, setRollCallMap] = useState<Record<string, RollCallEntry[]>>({});
@@ -283,7 +286,7 @@ export default function Archives() {
     const courseIds = semCourses.map(c => c.serverId);
     const sessions = await db.attendanceSessions
       .where('courseId').anyOf(courseIds)
-      .filter(s => s.isDeleted !== 1).toArray();
+      .filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId)).toArray();
 
     const totalSessions = sessions.length;
     let totalPresent = 0;
@@ -330,6 +333,7 @@ export default function Archives() {
 
   // Load courses on mount so dropdowns are ready for all tabs
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (user && courses.length === 0) loadCourses();
   }, [user, courses.length, loadCourses, activeSemester]);
 
@@ -365,7 +369,7 @@ export default function Archives() {
     if (localRecords.length > 0) {
       // N+1 Optimization: Batch fetch all sessions and courses instead of querying in the loop
       const sessionIds = [...new Set(localRecords.map(r => r.sessionId))];
-      const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1).toArray();
+      const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId)).toArray();
       const sessionMap = new Map(sessions.map(s => [s.serverId, s]));
 
       const courseIds = [...new Set(sessions.map(s => s.courseId))];
@@ -565,11 +569,11 @@ export default function Archives() {
   };
 
   // ── Shared compile logic ──────────────────────────────────────────────────
-  const compileForCourse = async (courseId: string, sDate: string, eDate: string): Promise<CompilationRow[]> => {
+  const compileForCourse = async (courseId: string, sDate: string, eDate: string, lecturerId?: string): Promise<CompilationRow[]> => {
     // Query local DB first
     const localSessions = await db.attendanceSessions
       .where('courseId').equals(courseId)
-      .filter(s => s.isDeleted !== 1 && s.date >= sDate && s.date <= eDate)
+      .filter(s => s.isDeleted !== 1 && (!lecturerId || s.lecturerId === lecturerId) && s.date >= sDate && s.date <= eDate)
       .toArray();
     const localEnrollments = await db.enrollments
       .where('courseId').equals(courseId)
@@ -588,18 +592,27 @@ export default function Archives() {
       const students = await db.students.where('serverId').anyOf(studentIds).filter(s => s.isDeleted !== 1).toArray();
       const studentMap = new Map(students.map(s => [s.serverId, s]));
 
+      // Performance optimization: Pre-calculate counts instead of filtering arrays inside the loop O(N*M) -> O(N+M)
+      const studentStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+      for (const r of allRecords) {
+        if (!studentStatsMap.has(r.studentId)) {
+          studentStatsMap.set(r.studentId, { present: 0, absent: 0, excused: 0 });
+        }
+        const stats = studentStatsMap.get(r.studentId)!;
+        if (r.status === 'present') stats.present++;
+        else if (r.status === 'absent') stats.absent++;
+        else if (r.status === 'excused') stats.excused++;
+      }
+
       const rows: CompilationRow[] = [];
       for (const enrollment of localEnrollments) {
         const student = studentMap.get(enrollment.studentId);
         if (!student) continue;
-        const sr = allRecords.filter(r => r.studentId === enrollment.studentId);
-        const presentCount  = sr.filter(r => r.status === 'present').length;
-        const absentCount   = sr.filter(r => r.status === 'absent').length;
-        const excusedCount  = sr.filter(r => r.status === 'excused').length;
+        const stats = studentStatsMap.get(enrollment.studentId) || { present: 0, absent: 0, excused: 0 };
         rows.push({
           name: student.name, regNumber: student.regNumber,
-          totalSessions, presentCount, absentCount, excusedCount,
-          percentage: totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0,
+          totalSessions, presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+          percentage: totalSessions > 0 ? Math.round((stats.present / totalSessions) * 100) : 0,
         });
       }
       if (rows.length > 0) {
@@ -624,21 +637,27 @@ export default function Archives() {
       .eq('course_id', courseId).eq('is_deleted', 0);
     if (!enrollments || enrollments.length === 0) return [];
     const totalSessions = sessions.length;
+
+    // Performance optimization: Pre-calculate counts O(N+M)
+    const studentStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+    for (const r of (records || [])) {
+      if (!studentStatsMap.has(r.student_id)) {
+        studentStatsMap.set(r.student_id, { present: 0, absent: 0, excused: 0 });
+      }
+      const stats = studentStatsMap.get(r.student_id)!;
+      if (r.status === 'present') stats.present++;
+      else if (r.status === 'absent') stats.absent++;
+      else if (r.status === 'excused') stats.excused++;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (enrollments as any[]).map(enr => {
       const student = enr.students;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sr = (records || []).filter((r: any) => r.student_id === student.id);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const presentCount  = sr.filter((r: any) => r.status === 'present').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const absentCount   = sr.filter((r: any) => r.status === 'absent').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const excusedCount  = sr.filter((r: any) => r.status === 'excused').length;
+      const stats = studentStatsMap.get(student.id) || { present: 0, absent: 0, excused: 0 };
       return {
         name: student.name, regNumber: student.reg_number,
-        totalSessions, presentCount, absentCount, excusedCount,
-        percentage: totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0,
+        totalSessions, presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+        percentage: totalSessions > 0 ? Math.round((stats.present / totalSessions) * 100) : 0,
       };
     }).sort((a: CompilationRow, b: CompilationRow) => b.percentage - a.percentage);
   };
@@ -651,7 +670,7 @@ export default function Archives() {
     const c = courses.find(c => c.id === selectedCourseId);
     const title = `${c?.code || 'Course'} — ${c?.title || ''}`;
     setCompilationTitle(title);
-    const rows = await compileForCourse(selectedCourseId, startDate, endDate);
+    const rows = await compileForCourse(selectedCourseId, startDate, endDate, compilationLecturerId);
     if (rows.length === 0) toast.error('No sessions or enrollments found.');
     setCompilationData(rows);
     savePersistedCompilation(selectedCourseId, startDate, endDate, rows, title);
@@ -740,7 +759,7 @@ export default function Archives() {
     // Query local DB first
     const localSessions = await db.attendanceSessions
       .where('courseId').equals(sessionsCourseId)
-      .filter(s => s.isDeleted !== 1)
+      .filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId))
       .toArray();
     const localEnrollments = await db.enrollments
       .where('courseId').equals(sessionsCourseId)
@@ -754,17 +773,26 @@ export default function Archives() {
         .where('sessionId').anyOf(sessionIds)
         .filter(r => r.isDeleted !== 1)
         .toArray();
+      // Performance optimization: Group records by sessionId O(N+M)
+      const sessionStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+      for (const r of allRecords) {
+        if (!sessionStatsMap.has(r.sessionId)) {
+          sessionStatsMap.set(r.sessionId, { present: 0, absent: 0, excused: 0 });
+        }
+        const stats = sessionStatsMap.get(r.sessionId)!;
+        if (r.status === 'present') stats.present++;
+        else if (r.status === 'absent') stats.absent++;
+        else if (r.status === 'excused') stats.excused++;
+      }
+
       const list: SessionRow[] = localSessions
         .sort((a, b) => b.date.localeCompare(a.date))
         .map(s => {
-          const recs = allRecords.filter(r => r.sessionId === s.serverId);
-          const presentCount = recs.filter(r => r.status === 'present').length;
-          const absentCount  = recs.filter(r => r.status === 'absent').length;
-          const excusedCount = recs.filter(r => r.status === 'excused').length;
+          const stats = sessionStatsMap.get(s.serverId) || { present: 0, absent: 0, excused: 0 };
           return {
             id: s.serverId, date: s.date, title: s.title, totalEnrolled,
-            presentCount, absentCount, excusedCount,
-            attendanceRate: totalEnrolled > 0 ? Math.round((presentCount / totalEnrolled) * 100) : 0,
+            presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+            attendanceRate: totalEnrolled > 0 ? Math.round((stats.present / totalEnrolled) * 100) : 0,
           };
         });
       setSessionsList(list);
@@ -777,9 +805,11 @@ export default function Archives() {
     const [sessRes, enrollRes] = await Promise.all([
       supabase.from('attendance_sessions').select('id, date, title')
         .eq('course_id', sessionsCourseId).eq('is_deleted', 0)
+        .eq(sessionsLecturerId ? 'lecturer_id' : '', sessionsLecturerId ? sessionsLecturerId : '') // hacky conditional eq, better to build query
         .order('date', { ascending: false }),
       supabase.from('enrollments').select('student_id')
-        .eq('course_id', sessionsCourseId).eq('is_deleted', 0),
+        .eq('course_id', sessionsCourseId).eq('is_deleted', 0)
+        .eq(sessionsLecturerId ? 'lecturer_id' : '', sessionsLecturerId ? sessionsLecturerId : '') // hacky conditional eq, better to build query,
     ]);
     if (sessRes.error || !sessRes.data) { toast.error('Failed to load sessions.'); setLoading(false); return; }
     if (sessRes.data.length === 0) { toast.error('No sessions found.'); setLoading(false); return; }
@@ -788,20 +818,25 @@ export default function Archives() {
       .from('attendance_records').select('session_id, status')
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .in('session_id', (sessRes.data as any[]).map(s => s.id)).eq('is_deleted', 0);
+    // Performance optimization: Pre-calculate counts O(N+M)
+    const sessionStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
+    for (const r of (records || [])) {
+      if (!sessionStatsMap.has(r.session_id)) {
+        sessionStatsMap.set(r.session_id, { present: 0, absent: 0, excused: 0 });
+      }
+      const stats = sessionStatsMap.get(r.session_id)!;
+      if (r.status === 'present') stats.present++;
+      else if (r.status === 'absent') stats.absent++;
+      else if (r.status === 'excused') stats.excused++;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setSessionsList((sessRes.data as any[]).map(s => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const recs = (records || []).filter((r: any) => r.session_id === s.id);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const presentCount = recs.filter((r: any) => r.status === 'present').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const absentCount  = recs.filter((r: any) => r.status === 'absent').length;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const excusedCount = recs.filter((r: any) => r.status === 'excused').length;
+      const stats = sessionStatsMap.get(s.id) || { present: 0, absent: 0, excused: 0 };
       return {
         id: s.id, date: s.date, title: s.title, totalEnrolled,
-        presentCount, absentCount, excusedCount,
-        attendanceRate: totalEnrolled > 0 ? Math.round((presentCount / totalEnrolled) * 100) : 0,
+        presentCount: stats.present, absentCount: stats.absent, excusedCount: stats.excused,
+        attendanceRate: totalEnrolled > 0 ? Math.round((stats.present / totalEnrolled) * 100) : 0,
       };
     }));
     setLoading(false);
@@ -870,39 +905,65 @@ export default function Archives() {
     const sDate = activeSemester.startDate || `${new Date().getFullYear()}-01-01`;
     const eDate = activeSemester.endDate   || `${new Date().getFullYear()}-12-31`;
 
-    const rows: SemesterCourseRow[] = [];
-    for (const course of semCourses) {
-      const [sessRes, enrollRes] = await Promise.all([
-        supabase.from('attendance_sessions').select('id')
-          .eq('course_id', course.id).eq('is_deleted', 0)
-          .gte('date', sDate).lte('date', eDate),
-        supabase.from('enrollments').select('student_id')
-          .eq('course_id', course.id).eq('is_deleted', 0),
-      ]);
-      const sessions = sessRes.data || [];
-      const enrolledCount = enrollRes.data?.length ?? 0;
+    const courseIds = semCourses.map(c => c.id);
+    const [sessRes, enrollRes] = await Promise.all([
+      supabase.from('attendance_sessions').select('id, course_id')
+        .in('course_id', courseIds).eq('is_deleted', 0)
+        .gte('date', sDate).lte('date', eDate),
+      supabase.from('enrollments').select('student_id, course_id')
+        .in('course_id', courseIds).eq('is_deleted', 0),
+    ]);
+
+    const allSessions = (sessRes.data || []) as { id: string; course_id: string }[];
+    const allEnrollments = (enrollRes.data || []) as { student_id: string; course_id: string }[];
+    const sessionIds = allSessions.map(s => s.id);
+
+    let allRecords: { status: string; session_id: string }[] = [];
+    if (sessionIds.length > 0) {
+      const { data: recs } = await supabase.from('attendance_records').select('status, session_id')
+        .in('session_id', sessionIds).eq('is_deleted', 0);
+      allRecords = (recs || []) as { status: string; session_id: string }[];
+    }
+
+    const sessionsByCourse = new Map<string, typeof allSessions>();
+    allSessions.forEach(s => {
+      if (!sessionsByCourse.has(s.course_id)) sessionsByCourse.set(s.course_id, []);
+      sessionsByCourse.get(s.course_id)!.push(s);
+    });
+
+    const enrollCountByCourse = new Map<string, number>();
+    allEnrollments.forEach(e => {
+      enrollCountByCourse.set(e.course_id, (enrollCountByCourse.get(e.course_id) || 0) + 1);
+    });
+
+    const recordsBySession = new Map<string, typeof allRecords>();
+    allRecords.forEach(r => {
+      if (!recordsBySession.has(r.session_id)) recordsBySession.set(r.session_id, []);
+      recordsBySession.get(r.session_id)!.push(r);
+    });
+
+    const rows: SemesterCourseRow[] = semCourses.map(course => {
+      const sessions = sessionsByCourse.get(course.id) || [];
+      const enrolledCount = enrollCountByCourse.get(course.id) || 0;
       let presentCount = 0; let absentCount = 0; let excusedCount = 0;
-      if (sessions.length > 0) {
-        const { data: recs } = await supabase.from('attendance_records').select('status')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .in('session_id', (sessions as any[]).map(s => s.id)).eq('is_deleted', 0);
-        if (recs) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          presentCount = recs.filter((r: any) => r.status === 'present').length;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          absentCount  = recs.filter((r: any) => r.status === 'absent').length;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          excusedCount = recs.filter((r: any) => r.status === 'excused').length;
-        }
-      }
+
+      sessions.forEach(s => {
+        const recs = recordsBySession.get(s.id) || [];
+        recs.forEach(r => {
+          if (r.status === 'present') presentCount++;
+          else if (r.status === 'absent') absentCount++;
+          else if (r.status === 'excused') excusedCount++;
+        });
+      });
+
       const total = sessions.length * enrolledCount;
-      rows.push({
+      return {
         courseId: course.id, code: course.code, title: course.title,
         sessionsHeld: sessions.length, enrolledCount,
         avgAttendance: total > 0 ? Math.round((presentCount / total) * 100) : 0,
         presentCount, absentCount, excusedCount,
-      });
-    }
+      };
+    });
     rows.sort((a, b) => a.avgAttendance - b.avgAttendance); // worst first
     setSemesterRows(rows);
     setSemesterLoaded(true);
@@ -1069,6 +1130,14 @@ export default function Archives() {
                 {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
               </select>
             </div>
+
+            <div className="mb-2">
+              <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={compilationLecturerId} onChange={e => setCompilationLecturerId(e.target.value)}>
+                <option value="">All Lecturers</option>
+                {lecturers.map(l => <option key={l.serverId} value={l.serverId}>{l.name}</option>)}
+              </select>
+            </div>
+
             <div className="row g-2 mb-2">
               <div className="col-6">
                 <div className="d-flex align-items-center gap-1">
@@ -1098,6 +1167,14 @@ export default function Archives() {
                 {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
               </select>
             </div>
+
+            <div className="mb-2">
+              <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={sessionsLecturerId} onChange={e => setSessionsLecturerId(e.target.value)}>
+                <option value="">All Lecturers</option>
+                {lecturers.map(l => <option key={l.serverId} value={l.serverId}>{l.name}</option>)}
+              </select>
+            </div>
+
             <button className="btn btn-primary w-100 py-2 rounded-3 fw-black xx-small shadow-sm text-uppercase" type="submit" disabled={loading}>
               {loading ? 'Loading…' : 'LOAD SESSIONS'}
             </button>
