@@ -45,7 +45,18 @@ export default function SessionsList({
 
   const lecturerMap = useMemo(() => new Map(lecturers.map(l => [l.serverId, l.name])), [lecturers]);
 
-  const filteredLecturers = lecturers.filter(l => l.name.toLowerCase().includes(lecturerSearch.toLowerCase()));
+  const courseAssignedLecturerIds = useMemo(() => {
+    if (!selectedCourse?.lecturers) return null;
+    const ids = selectedCourse.lecturers.split(',').map(s => s.trim()).filter(Boolean);
+    return ids.length > 0 ? new Set(ids) : null;
+  }, [selectedCourse]);
+
+  const filteredLecturers = useMemo(() => {
+    const base = courseAssignedLecturerIds
+      ? lecturers.filter(l => courseAssignedLecturerIds.has(l.serverId))
+      : lecturers;
+    return base.filter(l => l.name.toLowerCase().includes(lecturerSearch.toLowerCase()));
+  }, [lecturers, courseAssignedLecturerIds, lecturerSearch]);
 
   const displayedSessions = useMemo(() => {
     if (!sessions) return [];
