@@ -8,7 +8,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0;
-  animation: splashFadeLoop 2.5s infinite linear;
+  animation: splashFadeLoop 4s infinite linear;
 }
 
 .splashLogoSvg {
@@ -17,11 +17,11 @@
   overflow: visible;
 }
 
-/* 2.5s total loop.
-   0.0-0.5s: 0-20% (Draw base line)
-   0.5-1.2s: 20-48% (Fill blue line)
-   1.2-1.8s: 48-72% (Morph & Recolor)
-   1.8-2.5s: 72-100% (Text fade in & Hold)
+/* 4s total loop.
+   0.0-1.0s: 0-25% (Draw base line)
+   1.0-2.0s: 25-50% (Fill blue line)
+   2.0-3.0s: 50-75% (Morph & Recolor)
+   3.0-4.0s: 75-100% (Text fade in & Hold)
    Then loop and fade out handled by container.
 */
 
@@ -39,14 +39,14 @@
   stroke-linejoin: round;
   stroke-dasharray: 140;
   stroke-dashoffset: 140;
-  animation: splashDrawBase 2.5s infinite ease-out;
+  animation: splashDrawBase 4s infinite ease-out;
 }
 
 @keyframes splashDrawBase {
   0% { stroke-dashoffset: 140; opacity: 1; }
-  20% { stroke-dashoffset: 0; opacity: 1; }
-  48% { opacity: 1; }
-  52%, 100% { opacity: 0; }
+  25% { stroke-dashoffset: 0; opacity: 1; }
+  50% { opacity: 1; }
+  55%, 100% { opacity: 0; }
 }
 
 .splashFillLine {
@@ -57,36 +57,34 @@
   stroke-linejoin: round;
   stroke-dasharray: 140;
   stroke-dashoffset: 140;
-  animation: splashFillAndMorph 2.5s infinite cubic-bezier(0.4, 0, 0.2, 1), splashRecolor 2.5s infinite ease-out;
+  animation: splashFillAndMorph 4s infinite cubic-bezier(0.4, 0, 0.2, 1), splashRecolor 4s infinite ease-out;
 }
 
-/* Using distinct M commands to transition to the checkmark cleanly */
 @keyframes splashFillAndMorph {
-  0%, 20% {
+  0%, 25% {
     stroke-dashoffset: 140;
     d: path("M 30 50 L 100 50 L 130 50 L 170 50");
   }
-  48% {
+  50% {
     stroke-dashoffset: 0;
     d: path("M 30 50 L 100 50 L 130 50 L 170 50");
   }
-  72%, 100% {
+  75%, 100% {
     stroke-dashoffset: 0;
-    /* The morph to checkmark */
     d: path("M 60 45 L 90 45 L 110 65 L 150 25");
   }
 }
 
 @keyframes splashRecolor {
-  0%, 48% { stroke: var(--bs-primary, #0d6efd); } /* Synergy Blue */
-  72%, 100% { stroke: var(--bs-success, #198754); } /* Arrival Green */
+  0%, 50% { stroke: var(--bs-primary, #0d6efd); } /* Synergy Blue */
+  75%, 100% { stroke: var(--bs-success, #198754); } /* Arrival Green */
 }
 
 .splashTextContainer {
   margin-top: 4px;
   font-size: 28px;
   opacity: 0;
-  animation: splashTextFade 2.5s infinite ease-out;
+  animation: splashTextFade 4s infinite ease-out;
   display: flex;
   letter-spacing: 0.5px;
 }
@@ -101,15 +99,15 @@
   font-family: 'Alegreya Sans', sans-serif;
   font-weight: 700;
   color: var(--bs-primary, #0d6efd);
-  animation: splashTextSysRecolor 2.5s infinite ease-out;
+  animation: splashTextSysRecolor 4s infinite ease-out;
 }
 
 @keyframes splashTextFade {
-  0%, 72% { opacity: 0; transform: translateY(8px); }
-  82%, 100% { opacity: 1; transform: translateY(0); }
+  0%, 75% { opacity: 0; transform: translateY(8px); }
+  85%, 100% { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes splashTextSysRecolor {
-  0%, 72% { color: var(--bs-primary, #0d6efd); }
-  82%, 100% { color: var(--bs-success, #198754); }
+  0%, 75% { color: var(--bs-primary, #0d6efd); }
+  85%, 100% { color: var(--bs-success, #198754); }
 }

@@ -6,6 +6,8 @@ import {
   type LocalEnrollment,
   type LocalAttendanceSession,
   type LocalAttendanceRecord,
+  type LocalLecturer,
+  type LocalCourseSchedule,
   type LocalOutboxEntry,
 } from '../db/db';
 import { supabase } from './supabase';
@@ -17,7 +19,9 @@ type TableName =
   | 'courses'
   | 'enrollments'
   | 'attendance_sessions'
-  | 'attendance_records';
+  | 'attendance_records'
+  | 'lecturers'
+  | 'course_schedules';
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
@@ -306,6 +310,7 @@ export class RealtimeSyncEngine {
       pull('students', db.students, (s) => ({
         serverId: s.id, regNumber: s.reg_number, name: s.name,
         email: s.email, phone: s.phone,
+        fingerprintId: s.fingerprint_id ?? undefined,
         userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
       })),
       pull('courses', db.courses, (c) => ({
@@ -317,8 +322,12 @@ export class RealtimeSyncEngine {
         userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
       })),
       pull('attendance_sessions', db.attendanceSessions, (s) => ({
-        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title,
+        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
         userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
+      })),
+      pull('lecturers', db.lecturers, (l) => ({
+        serverId: l.id, name: l.name,
+        userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
       })),
       pull('attendance_records', db.attendanceRecords, (r) => ({
         serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
@@ -326,6 +335,11 @@ export class RealtimeSyncEngine {
         // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
         timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
         userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
+      })),
+      pull('course_schedules', db.courseSchedules, (cs) => ({
+        serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
+        startTime: cs.start_time, endTime: cs.end_time,
+        userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
       })),
     ]);
   }
@@ -378,12 +392,24 @@ export class RealtimeSyncEngine {
       };
     });
 
+    // Push lecturers
+    await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
+      id: item.serverId,
+      name: item.name,
+      user_id: this.userId,
+      is_deleted: item.isDeleted,
+      updated_at: item.updatedAt,
+    }));
+
     // Push attendance sessions
     await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => {
       if (!this.isValidUUID(item.courseId)) return null;
       return {
         id: item.serverId,
         course_id: item.courseId,
+        // lecturer_id is optional (nullable FK) — only send a valid UUID to avoid
+        // server-side FK violations when the referenced lecturer hasn't synced yet.
+        lecturer_id: this.isValidUUID(item.lecturerId) ? item.lecturerId : null,
         date: item.date,
         title: item.title,
         user_id: this.userId,
@@ -402,6 +428,21 @@ export class RealtimeSyncEngine {
         status: item.status,
         // Always push as ISO string — works with both BIGINT (legacy) and TIMESTAMPTZ columns
         marked_at: new Date(item.timestamp).toISOString(),
+        user_id: this.userId,
+        is_deleted: item.isDeleted,
+        updated_at: item.updatedAt,
+      };
+    });
+
+    // Push course schedules
+    await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules, (item) => {
+      if (!this.isValidUUID(item.courseId)) return null;
+      return {
+        id: item.serverId,
+        course_id: item.courseId,
+        day_of_week: item.dayOfWeek,
+        start_time: item.startTime,
+        end_time: item.endTime,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
@@ -588,7 +629,9 @@ export class RealtimeSyncEngine {
       if (toPush.length > 0) {
         const payload = toPush.map(item => ({
           id: item.serverId, reg_number: item.regNumber, name: item.name,
-          email: item.email, phone: item.phone, user_id: this.userId,
+          email: item.email, phone: item.phone,
+          fingerprint_id: item.fingerprintId ?? null,
+          user_id: this.userId,
           is_deleted: item.isDeleted, updated_at: item.updatedAt,
         }));
         await supabase.from('students').upsert(payload, { onConflict: 'id' }).select();
@@ -613,6 +656,7 @@ export class RealtimeSyncEngine {
       name: item.name,
       email: item.email,
       phone: item.phone,
+      fingerprint_id: item.fingerprintId ?? null,
       user_id: this.userId,
       is_deleted: item.isDeleted,
       updated_at: item.updatedAt,
@@ -732,6 +776,8 @@ export class RealtimeSyncEngine {
       enrollments: 'enrollments',
       attendance_sessions: 'attendanceSessions',
       attendance_records: 'attendanceRecords',
+      lecturers: 'lecturers',
+      course_schedules: 'courseSchedules',
     };
 
     for (const dexieName of Object.values(tableMapping)) {
@@ -790,11 +836,13 @@ export class RealtimeSyncEngine {
     this.channel = supabase
       .channel(`db_changes_${this.userId}_${Date.now()}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_records', db.attendanceRecords, payload))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_sessions', db.attendanceSessions, payload))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_sessions', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('attendance_sessions', db.attendanceSessions, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lecturers', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('lecturers', db.lecturers, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'students', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('students', db.students, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'courses', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('courses', db.courses, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'semesters', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('semesters', db.semesters, payload))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'enrollments', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('enrollments', db.enrollments, payload))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'course_schedules', filter: `user_id=eq.${this.userId}` }, payload => this.handleRealtimeEvent('course_schedules', db.courseSchedules, payload))
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           // Channel connected or reconnected → run a catch-up pull to close
@@ -855,10 +903,12 @@ export class RealtimeSyncEngine {
         return { ...base, regNumber: r.reg_number, name: r.name, email: r.email, phone: r.phone };
       case 'courses':
         return { ...base, code: r.code, title: r.title, semesterId: r.semester_id };
+      case 'course_schedules':
+        return { ...base, courseId: r.course_id, dayOfWeek: r.day_of_week, startTime: r.start_time, endTime: r.end_time };
       case 'enrollments':
         return { ...base, studentId: r.student_id, courseId: r.course_id };
       case 'attendance_sessions':
-        return { ...base, courseId: r.course_id, date: r.date, title: r.title };
+        return { ...base, courseId: r.course_id, date: r.date, title: r.title, lecturerId: r.lecturer_id };
       case 'attendance_records':
         return {
           ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status,

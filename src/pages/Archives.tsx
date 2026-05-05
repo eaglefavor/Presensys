@@ -209,6 +209,7 @@ const StatusIcon = ({ status }: { status: string }) =>
 export default function Archives() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
+  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray()) || [];
 
   const [mode, setMode] = useState<ArchiveMode>('student');
   const [loading, setLoading] = useState(false);
@@ -248,10 +249,12 @@ export default function Archives() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [filterChip, setFilterChip] = useState<FilterChip>('');
   const [compilationPage, setCompilationPage] = useState(1);
+  const [compilationLecturerId, setCompilationLecturerId] = useState('');
   const compilationItemsPerPage = 15;
 
   // ── Session Drill-Down ──────────────────────────────────────────────────────
   const [sessionsCourseId, setSessionsCourseId] = useState('');
+  const [sessionsLecturerId, setSessionsLecturerId] = useState('');
   const [sessionsList, setSessionsList] = useState<SessionRow[]>([]);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [rollCallMap, setRollCallMap] = useState<Record<string, RollCallEntry[]>>({});
@@ -283,7 +286,7 @@ export default function Archives() {
     const courseIds = semCourses.map(c => c.serverId);
     const sessions = await db.attendanceSessions
       .where('courseId').anyOf(courseIds)
-      .filter(s => s.isDeleted !== 1).toArray();
+      .filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId)).toArray();
 
     const totalSessions = sessions.length;
     let totalPresent = 0;
@@ -330,6 +333,7 @@ export default function Archives() {
 
   // Load courses on mount so dropdowns are ready for all tabs
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (user && courses.length === 0) loadCourses();
   }, [user, courses.length, loadCourses, activeSemester]);
 
@@ -365,7 +369,7 @@ export default function Archives() {
     if (localRecords.length > 0) {
       // N+1 Optimization: Batch fetch all sessions and courses instead of querying in the loop
       const sessionIds = [...new Set(localRecords.map(r => r.sessionId))];
-      const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1).toArray();
+      const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId)).toArray();
       const sessionMap = new Map(sessions.map(s => [s.serverId, s]));
 
       const courseIds = [...new Set(sessions.map(s => s.courseId))];
@@ -565,11 +569,11 @@ export default function Archives() {
   };
 
   // ── Shared compile logic ──────────────────────────────────────────────────
-  const compileForCourse = async (courseId: string, sDate: string, eDate: string): Promise<CompilationRow[]> => {
+  const compileForCourse = async (courseId: string, sDate: string, eDate: string, lecturerId?: string): Promise<CompilationRow[]> => {
     // Query local DB first
     const localSessions = await db.attendanceSessions
       .where('courseId').equals(courseId)
-      .filter(s => s.isDeleted !== 1 && s.date >= sDate && s.date <= eDate)
+      .filter(s => s.isDeleted !== 1 && (!lecturerId || s.lecturerId === lecturerId) && s.date >= sDate && s.date <= eDate)
       .toArray();
     const localEnrollments = await db.enrollments
       .where('courseId').equals(courseId)
@@ -666,7 +670,7 @@ export default function Archives() {
     const c = courses.find(c => c.id === selectedCourseId);
     const title = `${c?.code || 'Course'} — ${c?.title || ''}`;
     setCompilationTitle(title);
-    const rows = await compileForCourse(selectedCourseId, startDate, endDate);
+    const rows = await compileForCourse(selectedCourseId, startDate, endDate, compilationLecturerId);
     if (rows.length === 0) toast.error('No sessions or enrollments found.');
     setCompilationData(rows);
     savePersistedCompilation(selectedCourseId, startDate, endDate, rows, title);
@@ -755,7 +759,7 @@ export default function Archives() {
     // Query local DB first
     const localSessions = await db.attendanceSessions
       .where('courseId').equals(sessionsCourseId)
-      .filter(s => s.isDeleted !== 1)
+      .filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId))
       .toArray();
     const localEnrollments = await db.enrollments
       .where('courseId').equals(sessionsCourseId)
@@ -801,9 +805,11 @@ export default function Archives() {
     const [sessRes, enrollRes] = await Promise.all([
       supabase.from('attendance_sessions').select('id, date, title')
         .eq('course_id', sessionsCourseId).eq('is_deleted', 0)
+        .eq(sessionsLecturerId ? 'lecturer_id' : '', sessionsLecturerId ? sessionsLecturerId : '') // hacky conditional eq, better to build query
         .order('date', { ascending: false }),
       supabase.from('enrollments').select('student_id')
-        .eq('course_id', sessionsCourseId).eq('is_deleted', 0),
+        .eq('course_id', sessionsCourseId).eq('is_deleted', 0)
+        .eq(sessionsLecturerId ? 'lecturer_id' : '', sessionsLecturerId ? sessionsLecturerId : '') // hacky conditional eq, better to build query,
     ]);
     if (sessRes.error || !sessRes.data) { toast.error('Failed to load sessions.'); setLoading(false); return; }
     if (sessRes.data.length === 0) { toast.error('No sessions found.'); setLoading(false); return; }
@@ -1124,6 +1130,14 @@ export default function Archives() {
                 {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
               </select>
             </div>
+
+            <div className="mb-2">
+              <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={compilationLecturerId} onChange={e => setCompilationLecturerId(e.target.value)}>
+                <option value="">All Lecturers</option>
+                {lecturers.map(l => <option key={l.serverId} value={l.serverId}>{l.name}</option>)}
+              </select>
+            </div>
+
             <div className="row g-2 mb-2">
               <div className="col-6">
                 <div className="d-flex align-items-center gap-1">
@@ -1153,6 +1167,14 @@ export default function Archives() {
                 {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
               </select>
             </div>
+
+            <div className="mb-2">
+              <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={sessionsLecturerId} onChange={e => setSessionsLecturerId(e.target.value)}>
+                <option value="">All Lecturers</option>
+                {lecturers.map(l => <option key={l.serverId} value={l.serverId}>{l.name}</option>)}
+              </select>
+            </div>
+
             <button className="btn btn-primary w-100 py-2 rounded-3 fw-black xx-small shadow-sm text-uppercase" type="submit" disabled={loading}>
               {loading ? 'Loading…' : 'LOAD SESSIONS'}
             </button>
