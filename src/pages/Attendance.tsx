@@ -13,6 +13,7 @@ import AIReconciliationScreen from './attendance/AIReconciliationScreen';
 import CourseSelection from './attendance/CourseSelection';
 import SessionsList from './attendance/SessionsList';
 import ManualMarking from './attendance/ManualMarking';
+import FingerprintBlitzScreen from './attendance/FingerprintBlitzScreen';
 export default function Attendance() {
   const { user } = useAuthStore();
   const location = useLocation();
@@ -94,7 +95,7 @@ export default function Attendance() {
   const [confirmBulkMarkStatus, setConfirmBulkMarkStatus] = useState<'present' | 'absent' | null>(null);
   const [confirmResetRecords, setConfirmResetRecords] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, 'present' | 'absent' | 'excused' | 'reset'>>({});
-  const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | null>(null);
+  const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | 'fingerprint' | null>(null);
   const [aiImages, setAiImages] = useState<string[]>([]);
 
   const handleCreateSession = async (lecturerId: string) => {
@@ -358,6 +359,7 @@ export default function Attendance() {
         onCancel={() => handleCancelSession()}
         onSelectManual={() => setAttendanceMode('manual')}
         onSelectAI={() => setAttendanceMode('ai-camera')}
+        onSelectFingerprint={() => setAttendanceMode('fingerprint')}
       />
     );
   }
@@ -383,6 +385,18 @@ export default function Attendance() {
           setPendingChanges(newPending);
           setAttendanceMode('manual');
         }}
+      />
+    );
+  }
+
+  if (attendanceMode === 'fingerprint' && activeSessionId && user) {
+    return (
+      <FingerprintBlitzScreen
+        activeSessionId={activeSessionId}
+        enrollments={enrollments || []}
+        userId={user.id}
+        onStop={() => setAttendanceMode('manual')}
+        onCancel={() => setAttendanceMode('choosing')}
       />
     );
   }
