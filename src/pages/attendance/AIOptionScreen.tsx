@@ -1,15 +1,18 @@
-import { Camera, MousePointerClick, Zap, ArrowLeft } from 'lucide-react';
+import { Camera, MousePointerClick, Zap, ArrowLeft, FingerprintPattern } from 'lucide-react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 
 interface Props {
   onCancel: () => void;
   onSelectManual: () => void;
-
   onSelectAI?: () => void;
+  onSelectFingerprint?: () => void;
 }
 
-export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }: Props) {
+export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, onSelectFingerprint }: Props) {
   const { isOnline } = useNetworkStatus();
+
+  // Fingerprint Blitz is available when running on localhost (bridge requires local access)
+  const isFingerprintAvailable = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
   return (
     <div className="d-flex flex-column h-100 bg-white">
@@ -74,8 +77,40 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI }:
               </p>
             </div>
           </button>
+        </div>
 
-
+        {/* Fingerprint Blitz Option */}
+        <div className="position-relative">
+          <button
+            className={`btn ${!isFingerprintAvailable ? 'btn-outline-secondary' : 'btn-outline-success border-2'} p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all`}
+            onClick={onSelectFingerprint}
+            disabled={!isFingerprintAvailable}
+            style={{ opacity: isFingerprintAvailable ? 1 : 0.6 }}
+            title={!isFingerprintAvailable ? 'Fingerprint Blitz requires the local bridge daemon running on localhost' : undefined}
+          >
+            <div className="d-flex justify-content-between align-items-center w-100">
+              <div className="bg-success bg-opacity-10 text-success p-3 rounded-circle">
+                <FingerprintPattern size={32} />
+              </div>
+              <div className="bg-success text-white text-uppercase px-2 py-1 rounded-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
+                <Zap size={10} className="me-1 mb-1" />
+                BIOMETRIC
+              </div>
+            </div>
+            <div>
+              <h3 className="h5 fw-bold mb-1">Fingerprint Blitz</h3>
+              <p className="text-muted small mb-0">
+                Students touch the sensor — automatically matched and marked present in real-time. Requires the local bridge daemon.
+              </p>
+            </div>
+          </button>
+          {!isFingerprintAvailable && (
+            <div className="mt-2 px-1">
+              <p className="xx-small text-muted fw-bold mb-0">
+                ⚠ Only available when Presensys is accessed from the device running the bridge (localhost).
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
