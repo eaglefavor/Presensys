@@ -21,6 +21,8 @@ export default function FingerprintEnrollModal({ student, onClose }: Props) {
   const [capturedId, setCapturedId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const wsRef = useRef<WebSocket | null>(null);
+  // Track capture in a ref so the ws.onclose handler doesn't read stale state
+  const capturedRef = useRef(false);
 
   const closeWs = useCallback(() => {
     if (wsRef.current) {
@@ -45,6 +47,7 @@ export default function FingerprintEnrollModal({ student, onClose }: Props) {
           const data = JSON.parse(event.data as string);
           if (data?.type === 'fingerprint' && data?.fingerId) {
             const id = String(data.fingerId);
+            capturedRef.current = true;
             setCapturedId(id);
             setStatus('captured');
             closeWs();
@@ -60,7 +63,7 @@ export default function FingerprintEnrollModal({ student, onClose }: Props) {
       };
 
       ws.onclose = () => {
-        if (status !== 'captured') {
+        if (!capturedRef.current) {
           setStatus('error');
           setErrorMsg('Connection to the bridge was lost.');
         }
