@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
 import { db } from '../db/db';
@@ -41,6 +41,21 @@ export default function Courses() {
     () => db.courseSchedules.filter(s => s.isDeleted !== 1).toArray(),
     []
   );
+
+  const allLecturers = useLiveQuery(
+    () => db.lecturers.filter(l => l.isDeleted !== 1).toArray(),
+    []
+  ) || [];
+
+  const lecturerMap = useMemo(
+    () => new Map(allLecturers.map(l => [l.serverId, l.name])),
+    [allLecturers]
+  );
+
+  const resolveLecturerNames = (field: string | undefined) => {
+    if (!field) return '';
+    return field.split(',').map(id => lecturerMap.get(id.trim()) || id.trim()).filter(Boolean).join(', ');
+  };
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -330,7 +345,7 @@ export default function Courses() {
                           <h6 className="fw-black mb-0 text-dark text-truncate text-uppercase letter-spacing-n1">{course.code}</h6>
                           <p className="xx-small fw-bold text-muted mb-0 text-truncate text-uppercase">{course.title}</p>
                           {course.lecturers && (
-                            <div className="mt-1 xx-small text-muted">👨‍🏫 {course.lecturers}</div>
+                            <div className="mt-1 xx-small text-muted">👨‍🏫 {resolveLecturerNames(course.lecturers)}</div>
                           )}
                           {courseSlots.length > 0 ? (
                             <div className="mt-1 d-flex gap-1 flex-wrap">
@@ -397,7 +412,28 @@ export default function Courses() {
                   </div>
                   <div className="mb-3">
                     <label className="xx-small fw-bold text-muted ps-1 mb-1">LECTURERS</label>
-                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="e.g. Dr. Okadigwe" value={courseForm.lecturers} onChange={e => setCourseForm({ ...courseForm, lecturers: e.target.value })} /></div>
+                    {allLecturers.length === 0 ? (
+                      <p className="xx-small text-muted ps-1 mb-0">No lecturers available. Add them from the Lecturers page first.</p>
+                    ) : (
+                      <div className="d-flex flex-column gap-1 mt-1" style={{ maxHeight: '160px', overflowY: 'auto' }}>
+                        {allLecturers.map(l => {
+                          const selectedIds = courseForm.lecturers.split(',').map(s => s.trim()).filter(Boolean);
+                          const isSelected = selectedIds.includes(l.serverId);
+                          return (
+                            <div
+                              key={l.serverId}
+                              className={`rounded-3 px-3 py-2 cursor-pointer ${isSelected ? 'bg-primary bg-opacity-10 border border-primary text-primary' : 'bg-light text-dark border border-transparent'}`}
+                              onClick={() => {
+                                const newIds = isSelected ? selectedIds.filter(id => id !== l.serverId) : [...selectedIds, l.serverId];
+                                setCourseForm({ ...courseForm, lecturers: newIds.join(',') });
+                              }}
+                            >
+                              <span className="xx-small fw-bold">{l.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Schedule Slots */}

@@ -140,6 +140,13 @@ export default function Dashboard() {
     return Math.round(sum / attendanceStats.length);
   }, [attendanceStats]);
 
+  const allLecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []) || [];
+  const lecturerMap = useMemo(() => new Map(allLecturers.map(l => [l.serverId, l.name])), [allLecturers]);
+  const resolveLecturerNames = (field: string | undefined) => {
+    if (!field) return '';
+    return field.split(',').map(id => lecturerMap.get(id.trim()) || id.trim()).filter(Boolean).join(', ');
+  };
+
   return (
     <div className="dashboard-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       {/* Simplistic Header */}
@@ -217,7 +224,7 @@ export default function Dashboard() {
                         {course.slots.length > 0
                           ? course.slots.map(s => `${s.startTime}–${s.endTime}`).join(', ')
                           : course.time || 'Time Not Set'
-                        } • {course.lecturers || 'No Lecturers Assigned'}
+                        } • {resolveLecturerNames(course.lecturers) || 'No Lecturers Assigned'}
                       </div>
                     </div>
                     <div>
