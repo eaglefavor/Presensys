@@ -4,6 +4,7 @@ import { ArrowLeft, FingerprintPattern, CheckCircle, WifiOff, StopCircle } from 
 import { db } from '../../db/db';
 import type { LocalStudent } from '../../db/db';
 import { useFingerprintBridge } from '../../hooks/useFingerprintBridge';
+import { getBridgeUrl } from '../../lib/bridgeSettings';
 import toast from 'react-hot-toast';
 
 const SESSION_DURATION_S = 15 * 60; // 15 minutes in seconds
@@ -135,7 +136,7 @@ export default function FingerprintBlitzScreen({
   }, [activeSessionId, userId]);
 
   // Connect to the bridge — events are delivered via callback (no intermediate state)
-  const { connected } = useFingerprintBridge(handleFingerprintEvent);
+  const { connected } = useFingerprintBridge(handleFingerprintEvent, getBridgeUrl());
 
   const handleStop = () => {
     if (timerRef.current) clearInterval(timerRef.current);

@@ -4,7 +4,6 @@ export interface FingerprintBridgeState {
   connected: boolean;
 }
 
-const BRIDGE_URL = 'ws://localhost:8080';
 const RECONNECT_DELAY_MS = 5000;
 
 /**
@@ -15,11 +14,15 @@ const RECONNECT_DELAY_MS = 5000;
  * fingerprint ID is received.  Using a callback instead of exposing the event
  * as state avoids calling setState inside an effect in the consumer component.
  *
+ * `bridgeUrl` — the WebSocket URL of the bridge (e.g. ws://localhost:8080).
+ *   Changing this value reconnects to the new address.
+ *
  * Exposes:
  *  - `connected` — true when the WebSocket is open
  */
 export function useFingerprintBridge(
   onEvent: (fingerId: string) => void,
+  bridgeUrl: string,
 ): FingerprintBridgeState {
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -41,7 +44,7 @@ export function useFingerprintBridge(
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
       try {
-        const ws = new WebSocket(BRIDGE_URL);
+        const ws = new WebSocket(bridgeUrl);
         wsRef.current = ws;
 
         ws.onopen = () => {
@@ -87,7 +90,10 @@ export function useFingerprintBridge(
         wsRef.current = null;
       }
     };
-  }, []);
+  }, [bridgeUrl]); // reconnect whenever the target URL changes
+  // Note: onEvent is intentionally excluded — its latest value is always
+  // available via onEventRef.current (kept current by the effect above), so
+  // adding it here would cause unnecessary WebSocket reconnects.
 
   return { connected };
 }
