@@ -11,9 +11,6 @@ interface Props {
 export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, onSelectFingerprint }: Props) {
   const { isOnline } = useNetworkStatus();
 
-  // Fingerprint Blitz is available when running on localhost (bridge requires local access)
-  const isFingerprintAvailable = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-
   return (
     <div className="d-flex flex-column h-100 bg-white">
       {/* Header */}
@@ -82,11 +79,8 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, o
         {/* Fingerprint Blitz Option */}
         <div className="position-relative">
           <button
-            className={`btn ${!isFingerprintAvailable ? 'btn-outline-secondary' : 'btn-outline-success border-2'} p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all`}
+            className="btn btn-outline-success border-2 p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all"
             onClick={onSelectFingerprint}
-            disabled={!isFingerprintAvailable}
-            style={{ opacity: isFingerprintAvailable ? 1 : 0.6 }}
-            title={!isFingerprintAvailable ? 'Fingerprint Blitz requires the local bridge daemon running on localhost' : undefined}
           >
             <div className="d-flex justify-content-between align-items-center w-100">
               <div className="bg-success bg-opacity-10 text-success p-3 rounded-circle">
@@ -104,13 +98,6 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, o
               </p>
             </div>
           </button>
-          {!isFingerprintAvailable && (
-            <div className="mt-2 px-1">
-              <p className="xx-small text-muted fw-bold mb-0">
-                ⚠ Only available when Presensys is accessed from the device running the bridge (localhost).
-              </p>
-            </div>
-          )}
         </div>
       </div>
     </div>

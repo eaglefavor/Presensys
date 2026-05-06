@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { X, FingerprintPattern, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { db, type LocalStudent } from '../db/db';
+import { getBridgeUrl } from '../lib/bridgeSettings';
 import toast from 'react-hot-toast';
 
 type Status = 'connecting' | 'connected' | 'captured' | 'error';
-
-const BRIDGE_URL = 'ws://localhost:8080';
 
 interface Props {
   student: LocalStudent;
@@ -35,9 +34,10 @@ export default function FingerprintEnrollModal({ student, onClose }: Props) {
   }, []);
 
   useEffect(() => {
+    const bridgeUrl = getBridgeUrl();
     let ws: WebSocket;
     try {
-      ws = new WebSocket(BRIDGE_URL);
+      ws = new WebSocket(bridgeUrl);
       wsRef.current = ws;
 
       ws.onopen = () => setStatus('connected');
