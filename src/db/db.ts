@@ -194,6 +194,7 @@ export class PresensysDB extends Dexie {
     // Version 12 – one-time clear to resolve UUID conflicts (already deployed; keep for users upgrading from v11)
     this.version(12).stores(legacyDataSchema).upgrade(async (tx) => {
       console.log('DB Upgrade (v12): Clearing local data to resolve UUID conflicts.');
+      // Keep this list aligned with the v12 schema only; studentCredentials is introduced in v18.
       const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
       await Promise.all(tables.map(t => tx.table(t).clear()));
       // Clear legacy single-cursor key; per-table cursors (sync_cursor_*) are the new standard
