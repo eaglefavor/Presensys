@@ -231,12 +231,6 @@ export class PresensysDB extends Dexie {
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
-    // Version 18 - webauthn credentials
-    this.version(18).stores({
-      ...dataSchema,
-      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
-    });
-
     // Version 18 – remove fingerprintId; credentials are now stored in Supabase
     // student_credentials table via WebAuthn.  The index is dropped here;
     // any previously stored fingerprintId values on existing rows are simply
