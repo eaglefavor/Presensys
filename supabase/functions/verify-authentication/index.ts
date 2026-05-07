@@ -122,10 +122,17 @@ serve(async (req: Request) => {
 
     // Update the credential counter to prevent replay attacks
     const newCounter = verification.authenticationInfo.newCounter;
-    await supabase
+    const { error: updateErr } = await supabase
       .from('student_credentials')
       .update({ counter: newCounter })
       .eq('id', credRow.id);
+    if (updateErr) {
+      console.error('verify-authentication: counter update failed', updateErr);
+      return new Response(JSON.stringify({ error: 'Failed to update credential counter' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(JSON.stringify({ verified: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
