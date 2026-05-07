@@ -56,13 +56,18 @@ export default function FingerprintBlitzScreen({
 
         // Filter enrollments to only those who have a registered fingerprint AND haven't been marked yet
         const prepareList = async () => {
-           const withFingerprints: LocalStudent[] = [];
-           for (const student of enrollments) {
-              if (!existingIds.has(student.serverId) && await hasRegisteredFingerprint(student.serverId)) {
-                  withFingerprints.push(student);
-              }
-           }
-           setStudentList(withFingerprints);
+          const unmarkedStudents = enrollments.filter(student => !existingIds.has(student.serverId));
+          const studentsWithFingerprintFlags = await Promise.all(
+            unmarkedStudents.map(async (student) => ({
+              student,
+              hasFingerprint: await hasRegisteredFingerprint(student.serverId),
+            })),
+          );
+          setStudentList(
+            studentsWithFingerprintFlags
+              .filter(({ hasFingerprint }) => hasFingerprint)
+              .map(({ student }) => student),
+          );
         };
         prepareList();
       });
@@ -124,14 +129,12 @@ export default function FingerprintBlitzScreen({
   };
 
   const handleNextScan = async () => {
-    setIsScanning(true);
-    setScanError('');
-
     if (currentIndex >= studentList.length) return;
-    const student = studentList[currentIndex];
 
     setIsScanning(true);
     setScanError('');
+
+    const student = studentList[currentIndex];
 
     try {
       const success = await verifyStudentFingerprint(student);

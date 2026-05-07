@@ -171,25 +171,30 @@ export class PresensysDB extends Dexie {
   constructor() {
     super('PresensysDB');
 
-    const dataSchema = {
+    const legacyDataSchema = {
       semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
-      students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
+      students: '++id, &serverId, &regNumber, name, fingerprintId, synced, isDeleted, userId, updatedAt',
       courses: '++id, &serverId, semesterId, code, dayOfWeek, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
       attendanceSessions: '++id, &serverId, courseId, date, lecturerId, synced, isDeleted, userId, updatedAt',
       lecturers: '++id, &serverId, name, synced, isDeleted, userId, updatedAt',
       attendanceRecords: '++id, &serverId, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, updatedAt',
-            courseSchedules: '++id, &serverId, courseId, dayOfWeek, synced, isDeleted, userId, updatedAt',
+      courseSchedules: '++id, &serverId, courseId, dayOfWeek, synced, isDeleted, userId, updatedAt',
+    };
+
+    const dataSchema = {
+      ...legacyDataSchema,
+      students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
       studentCredentials: '++id, &serverId, studentId, credentialId, synced, isDeleted, userId, updatedAt',
     };
 
     // Version 11 – initial index fix
-    this.version(11).stores(dataSchema);
+    this.version(11).stores(legacyDataSchema);
 
     // Version 12 – one-time clear to resolve UUID conflicts (already deployed; keep for users upgrading from v11)
-    this.version(12).stores(dataSchema).upgrade(async (tx) => {
+    this.version(12).stores(legacyDataSchema).upgrade(async (tx) => {
       console.log('DB Upgrade (v12): Clearing local data to resolve UUID conflicts.');
-      const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords', 'studentCredentials'];
+      const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
       await Promise.all(tables.map(t => tx.table(t).clear()));
       // Clear legacy single-cursor key; per-table cursors (sync_cursor_*) are the new standard
       localStorage.removeItem('last_sync_timestamp');
@@ -197,31 +202,31 @@ export class PresensysDB extends Dexie {
 
     // Version 13 – add outbox table (non-destructive; data rows unchanged)
     this.version(13).stores({
-      ...dataSchema,
+      ...legacyDataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 14 - add dayOfWeek, time, lecturers to courses
     this.version(14).stores({
-      ...dataSchema,
+      ...legacyDataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 15 - add lecturers table and lecturerId to attendanceSessions
     this.version(15).stores({
-      ...dataSchema,
+      ...legacyDataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 16 – add courseSchedules table (flexible multi-slot schedule per course)
     this.version(16).stores({
-      ...dataSchema,
+      ...legacyDataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
-    // Version 17 - unused
+    // Version 17 – add fingerprintId index to students table
     this.version(17).stores({
-      ...dataSchema,
+      ...legacyDataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
