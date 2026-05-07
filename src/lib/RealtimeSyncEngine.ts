@@ -310,7 +310,6 @@ export class RealtimeSyncEngine {
       pull('students', db.students, (s) => ({
         serverId: s.id, regNumber: s.reg_number, name: s.name,
         email: s.email, phone: s.phone,
-        fingerprintId: s.fingerprint_id ?? undefined,
         userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
       })),
       pull('courses', db.courses, (c) => ({
@@ -630,7 +629,6 @@ export class RealtimeSyncEngine {
         const payload = toPush.map(item => ({
           id: item.serverId, reg_number: item.regNumber, name: item.name,
           email: item.email, phone: item.phone,
-          fingerprint_id: item.fingerprintId ?? null,
           user_id: this.userId,
           is_deleted: item.isDeleted, updated_at: item.updatedAt,
         }));
@@ -656,7 +654,6 @@ export class RealtimeSyncEngine {
       name: item.name,
       email: item.email,
       phone: item.phone,
-      fingerprint_id: item.fingerprintId ?? null,
       user_id: this.userId,
       is_deleted: item.isDeleted,
       updated_at: item.updatedAt,
