@@ -82,12 +82,19 @@ serve(async (req: Request) => {
     });
 
     // Store the challenge for verification
-    await supabase.from('webauthn_challenges').insert({
+    const { error: challengeErr } = await supabase.from('webauthn_challenges').insert({
       student_id: studentId,
       user_id: user.id,
       challenge: options.challenge,
       type: 'authentication',
     });
+    if (challengeErr) {
+      console.error('generate-authentication-options: challenge insert error', challengeErr);
+      return new Response(JSON.stringify({ error: 'Failed to store challenge' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     return new Response(JSON.stringify(options), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
