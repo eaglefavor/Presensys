@@ -215,3 +215,33 @@ input[type="checkbox"], input[type="radio"] {
   -webkit-appearance: auto;
   appearance: auto;
 }
+
+/* Branded Dropdown styling */
+.dropdown-menu {
+  background-color: var(--soft-white) !important;
+  border: 1px solid var(--border-color) !important;
+  box-shadow: 0 10px 30px rgba(0, 105, 148, 0.1) !important; /* Soft primary blue shadow */
+  border-radius: 12px !important;
+  padding: 8px !important;
+}
+
+.dropdown-item {
+  border-radius: 8px !important;
+  transition: all 0.2s ease !important;
+  color: var(--text-dark) !important;
+  font-weight: 600 !important;
+}
+
+.dropdown-item:hover, .dropdown-item:focus {
+  background-color: rgba(0, 105, 148, 0.08) !important; /* Soft primary blue hover */
+  color: var(--primary-blue) !important;
+}
+
+.dropdown-item:active {
+  background-color: var(--primary-blue) !important;
+  color: white !important;
+}
+
+.dropdown-item:active * {
+  color: white !important;
+}
