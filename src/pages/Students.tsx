@@ -435,7 +435,7 @@ export default function Students() {
                             onClick={() => setShowFingerprintModal(true)}
                           >
                             <FingerprintPattern size={18} />
-                            {selectedStudent.fingerprintId ? 'Update Fingerprint' : 'Register Fingerprint'}
+                            { 'Register/Update WebAuthn' }
                           </button>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
                           <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => setConfirmStudentDelete(selectedStudent)}>Delete Student</button>
@@ -554,7 +554,7 @@ export default function Students() {
       {showScanner && <BarcodeScanner onScanSuccess={handleScanSuccess} onClose={handleScannerClose} />}
 
       {showFingerprintModal && selectedStudent && (
-        <FingerprintEnrollModal
+        <FingerprintEnrollModal userId={user?.id || ''}
           student={selectedStudent}
           onClose={() => setShowFingerprintModal(false)}
         />

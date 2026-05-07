@@ -5,7 +5,6 @@ import toast from 'react-hot-toast';
 import { ProfileInfoCard } from './settings/components/ProfileInfoCard';
 import { AcademicInfoSection } from './settings/components/AcademicInfoSection';
 import { PasswordSection } from './settings/components/PasswordSection';
-import { FingerprintBridgeSection } from './settings/components/FingerprintBridgeSection';
 
 export default function Settings() {
   const { user, profile } = useAuthStore();
@@ -125,7 +124,6 @@ export default function Settings() {
           handlePasswordUpdate={handlePasswordUpdate}
         />
 
-        <FingerprintBridgeSection />
       </div>
     </div>
   );

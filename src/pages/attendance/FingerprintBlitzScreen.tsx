@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, FingerprintPattern, CheckCircle, WifiOff, StopCircle } from 'lucide-react';
+import { ArrowLeft, FingerprintPattern, CheckCircle, StopCircle, UserX, AlertCircle } from 'lucide-react';
 import { db } from '../../db/db';
 import type { LocalStudent } from '../../db/db';
-import { useFingerprintBridge } from '../../hooks/useFingerprintBridge';
-import { getBridgeUrl } from '../../lib/bridgeSettings';
+import { verifyStudentFingerprint, hasRegisteredFingerprint } from '../../lib/biometricService';
 import toast from 'react-hot-toast';
 
 const SESSION_DURATION_S = 15 * 60; // 15 minutes in seconds
@@ -30,31 +30,43 @@ export default function FingerprintBlitzScreen({
   onStop,
   onCancel,
 }: Props) {
-  // Countdown timer state
   const [secondsLeft, setSecondsLeft] = useState(SESSION_DURATION_S);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Track which studentIds have already been marked in this session to avoid duplicates
   const markedRef = useRef<Set<string>>(new Set());
-
-  // Present count for the running tally
   const [presentCount, setPresentCount] = useState(0);
-
-  // Toast queue for match feedback
   const [toastQueue, setToastQueue] = useState<MatchToast[]>([]);
   const toastCounter = useRef(0);
 
-  // Preload existing present records so we don't double-count on re-entry
+  // Blitz state
+  const [studentList, setStudentList] = useState<LocalStudent[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState('');
+
+  // Preload
   useEffect(() => {
     db.attendanceRecords
       .where('sessionId').equals(activeSessionId)
       .filter(r => r.isDeleted !== 1 && r.status === 'present')
       .toArray()
       .then(existing => {
-        existing.forEach(r => markedRef.current.add(r.studentId));
+        const existingIds = new Set(existing.map(r => r.studentId));
+        markedRef.current = existingIds;
         setPresentCount(existing.length);
+
+        // Filter enrollments to only those who have a registered fingerprint AND haven't been marked yet
+        const prepareList = async () => {
+           const withFingerprints: LocalStudent[] = [];
+           for (const student of enrollments) {
+              if (!existingIds.has(student.serverId) && await hasRegisteredFingerprint(student.serverId)) {
+                  withFingerprints.push(student);
+              }
+           }
+           setStudentList(withFingerprints);
+        };
+        prepareList();
       });
-  }, [activeSessionId]);
+  }, [activeSessionId, enrollments]);
 
   // Countdown timer
   const onStopRef = useRef(onStop);
@@ -75,30 +87,7 @@ export default function FingerprintBlitzScreen({
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
-  // Build a lookup map: fingerprintId → student
-  const fingerprintMap = useRef<Map<string, LocalStudent>>(new Map());
-  useEffect(() => {
-    const m = new Map<string, LocalStudent>();
-    for (const s of enrollments) {
-      if (s.fingerprintId) m.set(s.fingerprintId, s);
-    }
-    fingerprintMap.current = m;
-  }, [enrollments]);
-
-  // Process incoming fingerprint events — called directly from the bridge hook
-  const handleFingerprintEvent = useCallback(async (fingerId: string) => {
-    const student = fingerprintMap.current.get(fingerId);
-    if (!student) {
-      toast('Unknown fingerprint — no match found.', { icon: '🔍', duration: 2000 });
-      return;
-    }
-
-    if (markedRef.current.has(student.serverId)) {
-      // Silently ignore duplicate scan
-      return;
-    }
-
-    // Write directly to DB (no pending state — speed matters here)
+  const markStudentPresent = async (student: LocalStudent) => {
     const now = Date.now();
     try {
       const existing = await db.attendanceRecords
@@ -124,7 +113,6 @@ export default function FingerprintBlitzScreen({
       markedRef.current.add(student.serverId);
       setPresentCount(c => c + 1);
 
-      // Show match toast card
       const id = ++toastCounter.current;
       setToastQueue(q => [...q, { id, name: student.name, regNumber: student.regNumber }]);
       setTimeout(() => setToastQueue(q => q.filter(t => t.id !== id)), 3000);
@@ -133,10 +121,46 @@ export default function FingerprintBlitzScreen({
     } catch (err) {
       console.error('FingerprintBlitz: failed to write record', err);
     }
-  }, [activeSessionId, userId]);
+  };
 
-  // Connect to the bridge — events are delivered via callback (no intermediate state)
-  const { connected } = useFingerprintBridge(handleFingerprintEvent, getBridgeUrl());
+  const handleNextScan = async () => {
+    setIsScanning(true);
+    setScanError('');
+
+    if (currentIndex >= studentList.length) return;
+    const student = studentList[currentIndex];
+
+    setIsScanning(true);
+    setScanError('');
+
+    try {
+      const success = await verifyStudentFingerprint(student);
+
+      if (success) {
+        await markStudentPresent(student);
+        moveToNext();
+      }
+    } catch (err: unknown) {
+      console.error("Scan failed", err);
+      setScanError((err as Error).message || "Verification failed. Try again.");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const moveToNext = () => {
+      setScanError('');
+      if (currentIndex < studentList.length - 1) {
+          setCurrentIndex(prev => prev + 1);
+      } else {
+          toast('All enrolled students scanned!', { icon: '✅' });
+          handleStop();
+      }
+  };
+
+  const handleSkip = () => {
+      moveToNext();
+  };
 
   const handleStop = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -147,6 +171,8 @@ export default function FingerprintBlitzScreen({
   const ss = String(secondsLeft % 60).padStart(2, '0');
   const progress = ((SESSION_DURATION_S - secondsLeft) / SESSION_DURATION_S) * 100;
   const total = enrollments.length;
+
+  const currentStudent = studentList[currentIndex];
 
   return (
     <div className="d-flex flex-column min-vh-100 bg-white">
@@ -164,26 +190,14 @@ export default function FingerprintBlitzScreen({
 
       <div className="p-4 d-flex flex-column gap-4 container-mobile mx-auto flex-grow-1">
 
-        {/* Bridge status banner */}
-        {!connected && (
-          <div className="alert alert-danger d-flex align-items-center gap-2 py-2 px-3 rounded-4 fw-bold small mb-0">
-            <WifiOff size={18} className="flex-shrink-0" />
-            <span>Bridge offline — reconnecting… Start the Termux daemon to enable scanning.</span>
-          </div>
-        )}
-
         {/* Running tally card */}
         <div className="card border-0 shadow-sm rounded-4 overflow-hidden">
           <div className="card-body p-4">
             <div className="d-flex justify-content-between align-items-center mb-3">
-              <div className="d-flex align-items-center gap-2">
-                <div className={`rounded-circle ${connected ? 'bg-success' : 'bg-danger'}`} style={{ width: 10, height: 10 }} />
-                <span className="xx-small fw-bold text-muted">{connected ? 'BRIDGE CONNECTED' : 'BRIDGE OFFLINE'}</span>
-              </div>
+              <span className="xx-small fw-bold text-muted">WEB AUTHENTICATION</span>
               <span className="fw-black h5 mb-0 font-monospace text-primary">{mm}:{ss}</span>
             </div>
 
-            {/* Progress bar */}
             <div className="progress rounded-pill mb-3" style={{ height: 8, backgroundColor: '#e9ecef' }}>
               <div
                 className="progress-bar bg-primary rounded-pill"
@@ -208,16 +222,35 @@ export default function FingerprintBlitzScreen({
           </div>
         </div>
 
-        {/* Sensor prompt */}
-        <div className="text-center py-4">
-          <div className={`d-inline-block p-4 rounded-circle mb-3 ${connected ? 'bg-success bg-opacity-10' : 'bg-light'}`}>
-            <FingerprintPattern size={56} className={connected ? 'text-success' : 'text-muted'} />
-          </div>
-          <p className={`fw-bold mb-1 ${connected ? 'text-dark' : 'text-muted'}`}>
-            {connected ? 'Waiting for fingerprint scan…' : 'Waiting for bridge connection…'}
-          </p>
-          <p className="xx-small fw-bold text-muted mb-0">Students touch the sensor to mark attendance</p>
-        </div>
+        {/* Scan Area */}
+        {currentStudent ? (
+            <div className="card border-0 shadow-sm rounded-4 overflow-hidden text-center p-4">
+                <h3 className="h5 fw-black mb-1">{currentStudent.name}</h3>
+                <p className="text-muted small fw-bold font-monospace mb-4">{currentStudent.regNumber}</p>
+
+                <div className={`d-inline-flex justify-content-center align-items-center p-4 rounded-circle mb-4 ${isScanning ? 'bg-primary bg-opacity-10' : scanError ? 'bg-danger bg-opacity-10' : 'bg-light'}`} style={{ width: 100, height: 100 }}>
+                    <FingerprintPattern size={48} className={isScanning ? 'text-primary' : scanError ? 'text-danger' : 'text-muted'} />
+                </div>
+
+                {scanError && <p className="text-danger small fw-bold mb-3 d-flex align-items-center justify-content-center gap-1"><AlertCircle size={16}/> {scanError}</p>}
+
+                <div className="d-flex gap-2 w-100">
+                    <button className="btn btn-light fw-bold py-3 flex-grow-1" onClick={handleSkip} disabled={isScanning}>
+                        <UserX size={20} className="me-2" /> Skip
+                    </button>
+                    <button className="btn btn-primary fw-bold py-3 flex-grow-1" onClick={handleNextScan} disabled={isScanning}>
+                        {isScanning ? 'Scanning...' : 'Scan Finger'}
+                    </button>
+                </div>
+                <div className="mt-3 text-muted xx-small fw-bold">Student {currentIndex + 1} of {studentList.length}</div>
+            </div>
+        ) : (
+            <div className="text-center py-5">
+                <CheckCircle size={48} className="text-success mx-auto mb-3" />
+                <h3 className="h5 fw-black text-dark">All Caught Up!</h3>
+                <p className="text-muted small">No more students with registered fingerprints to scan.</p>
+            </div>
+        )}
 
         {/* Match toast cards */}
         <div className="d-flex flex-column gap-2" style={{ minHeight: 80 }}>
