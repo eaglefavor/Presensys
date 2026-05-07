@@ -15,6 +15,7 @@ import SessionsList from './attendance/SessionsList';
 import ManualMarking from './attendance/ManualMarking';
 import FingerprintBlitzScreen from './attendance/FingerprintBlitzScreen';
 export default function Attendance() {
+  type AttendanceMethod = 'manual' | 'ai-camera' | 'fingerprint';
   const { user } = useAuthStore();
   const location = useLocation();
   const activeSemester = useAppStore(state => state.activeSemester);
@@ -97,6 +98,8 @@ export default function Attendance() {
   const [pendingChanges, setPendingChanges] = useState<Record<string, 'present' | 'absent' | 'excused' | 'reset'>>({});
   const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | 'fingerprint' | null>(null);
   const [aiImages, setAiImages] = useState<string[]>([]);
+  const [pendingMethodChoice, setPendingMethodChoice] = useState<AttendanceMethod | null>(null);
+  const [initializingMethod, setInitializingMethod] = useState<AttendanceMethod | null>(null);
 
   const handleCreateSession = async (lecturerId: string) => {
     if (!lecturerId) return;
@@ -241,13 +244,90 @@ export default function Attendance() {
   const handleSessionSelect = (sessionId: string) => {
     setActiveSessionId(sessionId);
     setPendingChanges({});
+    setPendingMethodChoice(null);
     setAttendanceMode('choosing');
   };
 
   const handleCancelSession = () => {
     setActiveSessionId(null);
     setPendingChanges({});
+    setPendingMethodChoice(null);
     setAttendanceMode(null);
+  };
+
+  const initializeSessionDefaults = async (resetSession: boolean) => {
+    if (!activeSessionId || !user || !enrollments) return;
+    const now = Date.now();
+
+    await db.transaction('rw', db.attendanceRecords, async () => {
+      const existing = await db.attendanceRecords.where('sessionId').equals(activeSessionId).toArray();
+      const activeExisting = existing.filter(r => r.isDeleted !== 1);
+
+      if (resetSession && activeExisting.length > 0) {
+        const clearUpdates = activeExisting
+          .filter(r => r.id !== undefined)
+          .map(r => ({ key: r.id!, changes: { isDeleted: 1, synced: 0, timestamp: now } }));
+        if (clearUpdates.length > 0) await db.attendanceRecords.bulkUpdate(clearUpdates);
+      }
+
+      const activeMap = new Map(activeExisting.map(r => [r.studentId, r]));
+      const deletedMap = new Map(existing.filter(r => r.isDeleted === 1).map(r => [r.studentId, r]));
+
+      const toRevive: { key: number, changes: Record<string, unknown> }[] = [];
+      const toAdd: Omit<LocalAttendanceRecord, 'id'>[] = [];
+
+      for (const student of enrollments) {
+        if (!resetSession && activeMap.has(student.serverId)) continue;
+
+        const deletedRecord = deletedMap.get(student.serverId);
+        if (deletedRecord?.id !== undefined) {
+          toRevive.push({
+            key: deletedRecord.id,
+            changes: { status: 'absent', isDeleted: 0, synced: 0, timestamp: now }
+          });
+          continue;
+        }
+
+        toAdd.push({
+          serverId: '',
+          sessionId: activeSessionId,
+          studentId: student.serverId,
+          status: 'absent',
+          timestamp: now,
+          synced: 0,
+          userId: user.id,
+          isDeleted: 0
+        });
+      }
+
+      if (toRevive.length > 0) await db.attendanceRecords.bulkUpdate(toRevive);
+      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd);
+    });
+  };
+
+  const beginAttendanceMethod = async (method: AttendanceMethod, resetSession: boolean) => {
+    if (initializingMethod) return;
+    setInitializingMethod(method);
+    try {
+      await initializeSessionDefaults(resetSession);
+      setPendingChanges({});
+      setAttendanceMode(method);
+    } catch (err) {
+      console.error('Failed to initialize attendance session', err);
+      toast.error('Failed to prepare this session. Please try again.');
+    } finally {
+      setInitializingMethod(null);
+    }
+  };
+
+  const handleMethodChoice = (method: AttendanceMethod) => {
+    if (initializingMethod) return;
+    const hasSavedAttendance = (records?.length || 0) > 0;
+    if (hasSavedAttendance) {
+      setPendingMethodChoice(method);
+      return;
+    }
+    void beginAttendanceMethod(method, false);
   };
 
   const handleSessionExport = (format: 'csv' | 'xlsx' | 'pdf' | 'text' | 'share') => {
@@ -355,12 +435,71 @@ export default function Attendance() {
   // View 3: Marking Mode (AI option selection / camera / reconciliation)
   if (attendanceMode === 'choosing') {
     return (
-      <AIOptionScreen
-        onCancel={() => handleCancelSession()}
-        onSelectManual={() => setAttendanceMode('manual')}
-        onSelectAI={() => setAttendanceMode('ai-camera')}
-        onSelectFingerprint={() => setAttendanceMode('fingerprint')}
-      />
+      <>
+        <AIOptionScreen
+          onCancel={() => handleCancelSession()}
+          onSelectManual={() => handleMethodChoice('manual')}
+          onSelectAI={() => handleMethodChoice('ai-camera')}
+          onSelectFingerprint={() => handleMethodChoice('fingerprint')}
+        />
+
+        {pendingMethodChoice && (
+          <>
+            <div
+              className="modal-backdrop fade show d-block"
+              style={{ backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 3000 }}
+              onClick={() => setPendingMethodChoice(null)}
+            />
+            <div
+              className="modal fade show d-flex align-items-center justify-content-center"
+              style={{ zIndex: 3001 }}
+              role="dialog"
+              aria-modal="true"
+            >
+              <div className="modal-dialog modal-dialog-centered px-4 w-100" style={{ maxWidth: '430px' }}>
+                <div className="modal-content border-0 shadow rounded-4 overflow-hidden">
+                  <div className="modal-body p-4">
+                    <h5 className="fw-black mb-2 text-dark">Attendance Already Saved</h5>
+                    <p className="text-muted small mb-0">
+                      This session already has saved attendance. Do you want to reset and record a completely new session, or continue editing the existing data?
+                    </p>
+                  </div>
+                  <div className="modal-footer border-0 px-4 pb-4 pt-0 d-flex flex-column gap-2">
+                    <div className="d-flex gap-2 w-100">
+                      <button
+                        className="btn btn-light flex-grow-1 fw-bold py-2 rounded-3"
+                        onClick={() => setPendingMethodChoice(null)}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-primary flex-grow-1 fw-bold py-2 rounded-3"
+                        onClick={() => {
+                          const method = pendingMethodChoice;
+                          setPendingMethodChoice(null);
+                          if (method) void beginAttendanceMethod(method, false);
+                        }}
+                      >
+                        Edit Existing
+                      </button>
+                    </div>
+                    <button
+                      className="btn btn-danger w-100 fw-bold py-2 rounded-3"
+                      onClick={() => {
+                        const method = pendingMethodChoice;
+                        setPendingMethodChoice(null);
+                        if (method) void beginAttendanceMethod(method, true);
+                      }}
+                    >
+                      Reset Session
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </>
     );
   }
 
