@@ -35,7 +35,6 @@ export interface LocalStudent {
   name: string;
   email?: string;
   phone?: string;
-  fingerprintId?: string;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -158,7 +157,7 @@ export class PresensysDB extends Dexie {
 
     const dataSchema = {
       semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
-      students: '++id, &serverId, &regNumber, name, fingerprintId, synced, isDeleted, userId, updatedAt',
+      students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
       courses: '++id, &serverId, semesterId, code, dayOfWeek, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
       attendanceSessions: '++id, &serverId, courseId, date, lecturerId, synced, isDeleted, userId, updatedAt',
@@ -205,6 +204,15 @@ export class PresensysDB extends Dexie {
 
     // Version 17 – add fingerprintId index to students table
     this.version(17).stores({
+      ...dataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 18 – remove fingerprintId; credentials are now stored in Supabase
+    // student_credentials table via WebAuthn.  The index is dropped here;
+    // any previously stored fingerprintId values on existing rows are simply
+    // ignored and will be cleaned up server-side.
+    this.version(18).stores({
       ...dataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
