@@ -14,8 +14,12 @@ import CourseSelection from './attendance/CourseSelection';
 import SessionsList from './attendance/SessionsList';
 import ManualMarking from './attendance/ManualMarking';
 import FingerprintBlitzScreen from './attendance/FingerprintBlitzScreen';
+
+type AttendanceMethod = 'manual' | 'ai-camera' | 'fingerprint';
+const SESSION_PROMPT_BACKDROP_Z_INDEX = 3000;
+const SESSION_PROMPT_MODAL_Z_INDEX = 3001;
+
 export default function Attendance() {
-  type AttendanceMethod = 'manual' | 'ai-camera' | 'fingerprint';
   const { user } = useAuthStore();
   const location = useLocation();
   const activeSemester = useAppStore(state => state.activeSemester);
@@ -256,7 +260,10 @@ export default function Attendance() {
   };
 
   const initializeSessionDefaults = async (resetSession: boolean) => {
-    if (!activeSessionId || !user || !enrollments) return;
+    if (!activeSessionId || !user || !enrollments) {
+      console.warn('initializeSessionDefaults skipped: missing session, user, or enrollments.');
+      return;
+    }
     const now = Date.now();
 
     await db.transaction('rw', db.attendanceRecords, async () => {
@@ -264,14 +271,24 @@ export default function Attendance() {
       const activeExisting = existing.filter(r => r.isDeleted !== 1);
 
       if (resetSession && activeExisting.length > 0) {
-        const clearUpdates = activeExisting
-          .filter(r => r.id !== undefined)
-          .map(r => ({ key: r.id!, changes: { isDeleted: 1, synced: 0, timestamp: now } }));
+        const clearableRecords = activeExisting.filter(
+          (r): r is LocalAttendanceRecord & { id: number } => r.id !== undefined
+        );
+        const clearUpdates = clearableRecords.map(r => ({ key: r.id, changes: { isDeleted: 1, synced: 0, timestamp: now } }));
         if (clearUpdates.length > 0) await db.attendanceRecords.bulkUpdate(clearUpdates);
       }
 
-      const activeMap = new Map(activeExisting.map(r => [r.studentId, r]));
-      const deletedMap = new Map(existing.filter(r => r.isDeleted === 1).map(r => [r.studentId, r]));
+      const activeMap = new Map<string, LocalAttendanceRecord>();
+      for (const record of activeExisting) {
+        if (!activeMap.has(record.studentId)) activeMap.set(record.studentId, record);
+      }
+
+      const deletedMap = new Map<string, LocalAttendanceRecord>();
+      for (const record of existing) {
+        if (record.isDeleted === 1 && !deletedMap.has(record.studentId)) {
+          deletedMap.set(record.studentId, record);
+        }
+      }
 
       const toRevive: { key: number, changes: Record<string, unknown> }[] = [];
       const toAdd: Omit<LocalAttendanceRecord, 'id'>[] = [];
@@ -306,7 +323,10 @@ export default function Attendance() {
   };
 
   const beginAttendanceMethod = async (method: AttendanceMethod, resetSession: boolean) => {
-    if (initializingMethod) return;
+    if (initializingMethod) {
+      toast('Preparing session, please wait…');
+      return;
+    }
     setInitializingMethod(method);
     try {
       await initializeSessionDefaults(resetSession);
@@ -321,7 +341,10 @@ export default function Attendance() {
   };
 
   const handleMethodChoice = (method: AttendanceMethod) => {
-    if (initializingMethod) return;
+    if (initializingMethod) {
+      toast('Preparing session, please wait…');
+      return;
+    }
     const hasSavedAttendance = (records?.length || 0) > 0;
     if (hasSavedAttendance) {
       setPendingMethodChoice(method);
@@ -447,12 +470,12 @@ export default function Attendance() {
           <>
             <div
               className="modal-backdrop fade show d-block"
-              style={{ backgroundColor: 'rgba(0,0,0,0.45)', zIndex: 3000 }}
+              style={{ backgroundColor: 'rgba(0,0,0,0.45)', zIndex: SESSION_PROMPT_BACKDROP_Z_INDEX }}
               onClick={() => setPendingMethodChoice(null)}
             />
             <div
               className="modal fade show d-flex align-items-center justify-content-center"
-              style={{ zIndex: 3001 }}
+              style={{ zIndex: SESSION_PROMPT_MODAL_Z_INDEX }}
               role="dialog"
               aria-modal="true"
             >
