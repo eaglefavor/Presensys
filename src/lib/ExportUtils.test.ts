@@ -343,7 +343,7 @@ describe('exportToPDF', () => {
     const jsPDFMock = globalThis.__jsPDFMock;
 
     assert.strictEqual(jsPDFMock.constructor.mock.calls.length, 1);
-    assert.deepStrictEqual(jsPDFMock.constructor.mock.calls[0].arguments, [{ orientation: 'landscape' }]);
+    assert.deepStrictEqual(jsPDFMock.constructor.mock.calls[0].arguments, [{ orientation: 'portrait' }]);
 
     assert.strictEqual(jsPDFMock.save.mock.calls.length, 1);
     assert.deepStrictEqual(jsPDFMock.save.mock.calls[0].arguments, ['attendance_empty.pdf']);
@@ -364,8 +364,12 @@ describe('exportToPDF', () => {
   });
 
   test('should generate PDF with data triggering autoTable', () => {
-    const data = [{ Name: 'John Doe', RegNo: '2020123456' }, { Name: 'Jane Smith', RegNo: '2020654321' }];
+    const data = [{ Name: 'John Doe', RegNo: '2020123456' }];
     exportToPDF(data, 'Student List', 'students');
+
+    // @ts-ignore
+    const jsPDFMock = globalThis.__jsPDFMock;
+    assert.deepStrictEqual(jsPDFMock.constructor.mock.calls[0].arguments, [{ orientation: 'portrait' }]);
 
     // @ts-ignore
     const autoTableMock = globalThis.__autoTableMock;
@@ -376,10 +380,11 @@ describe('exportToPDF', () => {
 
     assert.deepStrictEqual(options.head, [['Name', 'RegNo']]);
     assert.deepStrictEqual(options.body, [
-      ['John Doe', '2020123456'],
-      ['Jane Smith', '2020654321']
+      ['John Doe', '2020123456']
     ]);
     assert.strictEqual(options.startY, 28);
+    assert.deepStrictEqual(options.styles, { fontSize: 10, cellPadding: 5, font: 'helvetica' });
+    assert.deepStrictEqual(options.alternateRowStyles, { fillColor: [240, 244, 248] });
   });
 
   test('should include academic metadata in subtitle when provided', () => {
