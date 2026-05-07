@@ -1,108 +1,129 @@
-/**
- * biometricService.ts
- *
- * Client-side helpers for WebAuthn-based student fingerprint enrollment and
- * attendance authentication.  All cryptographic heavy lifting is delegated to
- * Supabase Edge Functions; the browser's Web Authentication API (accessed
- * through @simplewebauthn/browser) handles the actual biometric prompt.
- */
+import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
+import { generateRegistrationOptions, verifyRegistrationResponse, generateAuthenticationOptions, verifyAuthenticationResponse } from '@simplewebauthn/server';
+import { db } from '../db/db';
+import type { LocalStudent } from '../db/db';
+import { v4 as uuidv4 } from 'uuid';
 
-import {
-  startRegistration,
-  startAuthentication,
-} from '@simplewebauthn/browser';
-import { supabase } from './supabase';
+const rpName = 'Presensys Fingerprint Blitz';
+const rpID = window.location.hostname;
+const origin = window.location.origin;
 
-const edgeFunctionsBase = (): string => {
-  const url = import.meta.env.VITE_SUPABASE_URL as string;
-  return `${url}/functions/v1`;
-};
+// Helper to convert string to Uint8Array
+const encoder = new TextEncoder();
 
-async function authHeader(): Promise<string> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  return `Bearer ${session?.access_token ?? ''}`;
-}
+export async function registerStudentFingerprint(student: LocalStudent, userId: string) {
+  const optionsJSON = await generateRegistrationOptions({
+    rpName,
+    rpID,
+    userID: encoder.encode(student.serverId),
+    userName: student.regNumber,
+    attestationType: 'none',
+    authenticatorSelection: {
+      authenticatorAttachment: 'platform',
+      userVerification: 'required',
+      residentKey: 'required',
+    },
+    supportedAlgorithmIDs: [-7, -257], // ES256, RS256
+  });
 
-/**
- * Registers a new WebAuthn credential for `studentId`.
- * Opens the device biometric prompt; throws on failure or cancellation.
- */
-export async function registerStudentBiometric(
-  studentId: string,
-  studentName: string,
-): Promise<void> {
-  const base = edgeFunctionsBase();
-  const authorization = await authHeader();
-
-  // 1. Fetch registration options (challenge) from Edge Function
-  const optionsResp = await fetch(
-    `${base}/generate-registration-options?studentId=${encodeURIComponent(studentId)}&studentName=${encodeURIComponent(studentName)}`,
-    { headers: { Authorization: authorization } },
-  );
-  if (!optionsResp.ok) {
-    throw new Error('Failed to generate registration options');
-  }
-  const optionsJSON = await optionsResp.json();
-
-  // 2. Trigger the device biometric prompt
   const attestationResponse = await startRegistration({ optionsJSON });
 
-  // 3. Send response to Edge Function for verification + credential storage
-  const verifyResp = await fetch(`${base}/verify-registration`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: authorization,
-    },
-    body: JSON.stringify({ studentId, attestationResponse }),
+  const verification = await verifyRegistrationResponse({
+    response: attestationResponse,
+    expectedChallenge: optionsJSON.challenge,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
+    requireUserVerification: true,
   });
-  if (!verifyResp.ok) {
-    const body = await verifyResp.json().catch(() => ({})) as { error?: string };
-    throw new Error(body.error ?? 'Registration verification failed');
+
+  if (verification.verified && verification.registrationInfo) {
+    const { credential } = verification.registrationInfo;
+
+    const existing = await db.studentCredentials.where('studentId').equals(student.serverId).first();
+    if (existing) {
+       await db.studentCredentials.update(existing.id!, { isDeleted: 1, synced: 0 });
+    }
+
+    const credentialIdStr = credential.id;
+    const publicKeyStr = btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(credential.publicKey)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+
+    await db.studentCredentials.add({
+      serverId: uuidv4(),
+      studentId: student.serverId,
+      credentialId: credentialIdStr,
+      publicKey: publicKeyStr,
+      counter: verification.registrationInfo.credential.counter || 0,
+      synced: 0,
+      isDeleted: 0,
+      userId
+    });
+
+    return true;
   }
+
+  throw new Error("Fingerprint registration verification failed.");
 }
 
-/**
- * Authenticates a student via their pre-registered WebAuthn credential.
- * Returns `true` when the biometric matches; `false` if the student has no
- * credential registered or the verification fails.
- * Throws on hard errors (network, cancelled by user, etc.).
- */
-export async function authenticateStudentBiometric(
-  studentId: string,
-): Promise<boolean> {
-  const base = edgeFunctionsBase();
-  const authorization = await authHeader();
-
-  // 1. Fetch authentication options (challenge + allowed credentials list)
-  const optionsResp = await fetch(
-    `${base}/generate-authentication-options?studentId=${encodeURIComponent(studentId)}`,
-    { headers: { Authorization: authorization } },
-  );
-  if (optionsResp.status === 404) {
-    // Student has no registered credential
-    return false;
+export async function verifyStudentFingerprint(student: LocalStudent) {
+  const cred = await db.studentCredentials.where('studentId').equals(student.serverId).filter(c => c.isDeleted === 0).first();
+  if (!cred) {
+    throw new Error("Student has no registered fingerprint.");
   }
-  if (!optionsResp.ok) {
-    throw new Error('Failed to generate authentication options');
-  }
-  const optionsJSON = await optionsResp.json();
 
-  // 2. Trigger device biometric
-  const authenticationResponse = await startAuthentication({ optionsJSON });
+  const base64ToUint8Array = (base64url: string) => {
+      const padding = '='.repeat((4 - base64url.length % 4) % 4);
+      const base64 = (base64url + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+          outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+  };
 
-  // 3. Verify with Edge Function
-  const verifyResp = await fetch(`${base}/verify-authentication`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: authorization,
-    },
-    body: JSON.stringify({ studentId, authenticationResponse }),
+  const credentialPublicKey = base64ToUint8Array(cred.publicKey);
+  const credentialIdBase64url = cred.credentialId;
+
+  const optionsJSON = await generateAuthenticationOptions({
+    rpID,
+    allowCredentials: [{
+      id: credentialIdBase64url,
+      transports: ['internal'],
+    }],
+    userVerification: 'required',
   });
-  if (!verifyResp.ok) return false;
-  const result = await verifyResp.json() as { verified?: boolean };
-  return result.verified === true;
+
+  const assertionResponse = await startAuthentication({ optionsJSON });
+
+  const verification = await verifyAuthenticationResponse({
+    response: assertionResponse,
+    expectedChallenge: optionsJSON.challenge,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
+    credential: {
+      id: credentialIdBase64url,
+      publicKey: credentialPublicKey,
+      counter: cred.counter,
+      transports: ['internal']
+    },
+    requireUserVerification: true,
+  });
+
+  if (verification.verified && verification.authenticationInfo) {
+    const { newCounter } = verification.authenticationInfo;
+
+    await db.studentCredentials.update(cred.id!, {
+      counter: newCounter,
+      synced: 0
+    });
+
+    return true;
+  }
+
+  throw new Error("Fingerprint verification failed.");
+}
+
+export async function hasRegisteredFingerprint(studentId: string) {
+    const count = await db.studentCredentials.where('studentId').equals(studentId).filter(c => c.isDeleted === 0).count();
+    return count > 0;
 }

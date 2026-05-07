@@ -1,15 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle, FingerprintPattern } from 'lucide-react';
 import { db, type Student } from '../db/db';
-import { exportToPDF } from '../lib/ExportUtils';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FingerprintEnrollModal from '../components/FingerprintEnrollModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
+import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
+import autoTable from 'jspdf-autotable';
 
 export default function Students() {
   const { user } = useAuthStore();
@@ -98,12 +99,23 @@ export default function Students() {
 
   // --- Export Logic ---
   const handleExportPDF = () => {
-    const tableData = (students || []).map(s => ({
-      'Full Name': s.name,
-      'Reg Number': s.regNumber
-    }));
-    exportToPDF(tableData, 'Student List', 'presensys_student_list');
-    toast.success('PDF downloaded!');
+    const doc = new jsPDF();
+    doc.setFontSize(18);
+    doc.text('Student List', 14, 22);
+    doc.setFontSize(11);
+    doc.text(`Generated on ${new Date().toLocaleDateString()}`, 14, 30);
+
+    const tableData = (students || []).map(s => [s.name, s.regNumber]);
+
+    autoTable(doc, {
+      startY: 36,
+      head: [['Full Name', 'Reg Number']],
+      body: tableData,
+      theme: 'grid',
+      headStyles: { fillColor: [13, 110, 253] }
+    });
+
+    doc.save('presensys_student_list.pdf');
   };
 
   const resetImportState = () => {
@@ -275,13 +287,9 @@ export default function Students() {
 
   // Reset to page 1 whenever the search term changes — done in an effect
   // to avoid calling setState during render, which React disallows.
-  // Removed useEffect causing sync state update
-  // using dynamic derived state for current page reset
-  const [lastSearch, setLastSearch] = useState(searchTerm);
-  if (searchTerm !== lastSearch) {
-    setLastSearch(searchTerm);
+  useEffect(() => {
     setCurrentPage(1);
-  }
+  }, [searchTerm]);
 
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   const stringToColor = (str: string) => {
@@ -427,7 +435,7 @@ export default function Students() {
                             onClick={() => setShowFingerprintModal(true)}
                           >
                             <FingerprintPattern size={18} />
-                            Register Fingerprint
+                            { 'Register/Update WebAuthn' }
                           </button>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
                           <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => setConfirmStudentDelete(selectedStudent)}>Delete Student</button>
@@ -546,7 +554,7 @@ export default function Students() {
       {showScanner && <BarcodeScanner onScanSuccess={handleScanSuccess} onClose={handleScannerClose} />}
 
       {showFingerprintModal && selectedStudent && (
-        <FingerprintEnrollModal
+        <FingerprintEnrollModal userId={user?.id || ''}
           student={selectedStudent}
           onClose={() => setShowFingerprintModal(false)}
         />
