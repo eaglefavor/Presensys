@@ -23,14 +23,15 @@ export type FingerprintErrorCode =
  * `retriable` to decide whether to offer a retry button.
  */
 export class FingerprintError extends Error {
-  constructor(
-    public readonly code: FingerprintErrorCode,
-    message: string,
-    /** True when retrying the same operation is safe and likely to succeed. */
-    public readonly retriable: boolean,
-  ) {
+  readonly code: FingerprintErrorCode;
+  /** True when retrying the same operation is safe and likely to succeed. */
+  readonly retriable: boolean;
+
+  constructor(code: FingerprintErrorCode, message: string, retriable: boolean) {
     super(message);
     this.name = 'FingerprintError';
+    this.code = code;
+    this.retriable = retriable;
   }
 }
 

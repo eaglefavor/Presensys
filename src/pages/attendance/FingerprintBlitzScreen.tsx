@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, FingerprintPattern, CheckCircle, StopCircle, UserX, AlertCircle, Loader } from 'lucide-react';
 import { db } from '../../db/db';
 import type { LocalStudent } from '../../db/db';
-import { verifyStudentFingerprint, hasRegisteredFingerprint, FingerprintError } from '../../lib/biometricService';
+import { verifyStudentFingerprint, FingerprintError } from '../../lib/biometricService';
 import toast from 'react-hot-toast';
 
 const SESSION_DURATION_S = 15 * 60; // 15 minutes
