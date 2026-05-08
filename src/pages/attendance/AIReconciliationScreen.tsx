@@ -58,7 +58,12 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
               '3R3VChXV1RGeKBjNVpldxRFSPFFOZ1kUTlEMPV1bSlHR5NVY6lUQ',
               'VlkWtEHa2dVdz8meM5kQGdWUVpkayRVb6dXZJ9GRGNkQ5NVY6lUQ',
               'nBzYq91S19kRD90UuhmMnJFe5EFUaxUUt1kS5MESWJGR5NVY6lUQ',
-              '3FmWSl1QNVFO6RFVLNVY0NXOrJVNwITUGBDRyVjd4RFR5NVY6lUQ'
+              '3FmWSl1QNVFO6RFVLNVY0NXOrJVNwITUGBDRyVjd4RFR5NVY6lUQ',
+              'nRXZV9kc2ZEO1okN4ImQTdzYw4WWkhjTjlnbXpWRwczQ5NVY6lUQ',
+              'NNTRRd0bIlHehpkNPpXWwhlbBdEePd3UwVzbZlVNUF2Q5NVY6lUQ',
+              'NxGahJVMxUGdQVGTZ9kW2lDcxdTYPVFbzlTQEdFTtJ0Q5NVY6lUQ',
+              'zZ1M5YGNkxkeNRlcVFlQlNjRZZnN2UTLutWahBjMRBFR5NVY6lUQ',
+              'ZZFV4MXaZd3SxFXdzZnSadmeKN0S3ZnaUN2YzM2TXxkQ5NVY6lUQ'
             ];
             apiKeys = _obfuscated.map(o => atob(o.split('').reverse().join('')));
         }
@@ -99,26 +104,26 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         if (isVerySlowNetwork) {
           modelName = images.length >= 2
-            ? "gemini-2.5-flash-lite-latest"  // multi-page: efficient cross-image model
-            : "gemini-3.1-flash-lite-exp";     // single page: absolute lowest latency
+            ? "gemini-2.5-flash-lite"
+            : "gemini-3.1-flash-lite-preview";
         } else if (isSlowNetwork) {
           if (images.length >= 3) {
-            modelName = "gemini-2.5-flash-latest";      // 3+ pages: balanced capability
+            modelName = "gemini-2.5-flash";
           } else if (images.length === 2) {
-            modelName = "gemini-2.5-flash-lite-latest"; // 2 pages: efficient cross-page
+            modelName = "gemini-2.5-flash-lite";
           } else {
-            modelName = "gemini-2.0-flash";             // 1 page: cost-effective, free-tier
+            modelName = "gemini-2.0-flash";
           }
         } else {
           // Fast network: maximise accuracy, escalate model with task complexity
           if (images.length >= 5) {
-            modelName = "gemini-3.0-pro-exp";     // 5+ pages: most powerful, complex OCR
+            modelName = "gemini-3.0-pro-exp";
           } else if (images.length >= 3) {
-            modelName = "gemini-2.5-pro-latest";  // 3–4 pages: deep analysis, 1M context
+            modelName = "gemini-2.5-pro";
           } else if (images.length === 2) {
-            modelName = "gemini-3.0-flash-exp";   // 2 pages: fast + accurate cross-page
+            modelName = "gemini-3.0-flash-exp";
           } else {
-            modelName = "gemini-2.5-flash-latest"; // 1 page: standard production-ready
+            modelName = "gemini-2.5-flash";
           }
         }
 
@@ -157,22 +162,63 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         let response = null;
         let lastError = null;
 
+        // Define a fallback queue of models based on the initially selected model
+        let modelQueue: string[] = [modelName];
+
+        // Add fallbacks to the queue ensuring uniqueness
+        const addFallbacks = (fallbacks: string[]) => {
+            for (const m of fallbacks) {
+                if (!modelQueue.includes(m)) {
+                    modelQueue.push(m);
+                }
+            }
+        };
+
+        if (isVerySlowNetwork) {
+             addFallbacks(["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]);
+        } else if (isSlowNetwork) {
+             addFallbacks(["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]);
+        } else {
+             // For fast networks, fallback from most powerful to most stable/fast
+             addFallbacks(["gemini-2.5-pro", "gemini-3.0-flash-exp", "gemini-2.5-flash", "gemini-2.0-flash"]);
+        }
+
+        // Loop through each API key
         for (const apiKey of apiKeys) {
-          try {
-            const ai = new GoogleGenAI({ apiKey });
-            response = await ai.models.generateContent({
-                model: modelName,
-                contents: [
-                    prompt,
-                    ...imageParts
-                ]
-            });
-            // If successful, break out of the loop
-            break;
-          } catch (e: unknown) {
-            console.warn(`API key failed (${(e instanceof Error ? e.message : 'unknown error') || 'unknown error'}). Trying next key...`);
-            lastError = e;
-          }
+            let keySuccess = false;
+
+            // For the current key, loop through the fallback models
+            for (const currentModel of modelQueue) {
+                try {
+                    const ai = new GoogleGenAI({ apiKey });
+                    response = await ai.models.generateContent({
+                        model: currentModel,
+                        contents: [
+                            prompt,
+                            ...imageParts
+                        ]
+                    });
+                    // If successful, break out of the model loop and mark key as success
+                    keySuccess = true;
+                    break;
+                } catch (e: unknown) {
+                    const errMsg = (e instanceof Error ? e.message : 'unknown error') || 'unknown error';
+                    console.warn(`API key with model ${currentModel} failed (${errMsg}).`);
+                    lastError = e;
+
+                    // If the error suggests an invalid API key or quota exceeded across the board,
+                    // it might make sense to break early to the next key, but for robustness
+                    // against model-specific outages (like a 503 or 400 on an experimental model),
+                    // we continue to the next model in the queue.
+                }
+            }
+
+            // If the key succeeded on any model, break out of the API key loop
+            if (keySuccess) {
+                break;
+            } else {
+                console.warn("All models failed for current API key. Switching to next key...");
+            }
         }
 
         if (!response) {

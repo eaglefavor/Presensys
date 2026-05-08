@@ -84,11 +84,12 @@ const Layout: React.FC = () => {
     { path: '/semesters', label: 'Semester' },
     { path: '/courses', label: 'Courses' },
     { path: '/attendance', label: 'Mark Attendance' },
+    { path: '/lecturers', label: 'Lecturers' },
     { path: '/archives', label: 'Data Archive' },
     { path: '/settings', label: 'Settings' },
   ];
 
-  const isMainNavPage = location.pathname === '/' || ['/students', '/semesters', '/courses', '/attendance', '/archives'].includes(location.pathname);
+  const isMainNavPage = location.pathname === '/' || ['/students', '/semesters', '/courses', '/attendance', '/lecturers', '/archives'].includes(location.pathname);
 
   const handleManualSync = async () => {
     if (!navigator.onLine || !user) {

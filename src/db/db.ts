@@ -1,6 +1,18 @@
 import Dexie, { type Table } from 'dexie';
 import { v4 as uuidv4 } from 'uuid';
 
+
+export interface LocalLecturer {
+  id?: number;
+  serverId: string;
+  name: string;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted: number;
+  synced: number;
+}
+
 export interface LocalSemester {
   id?: number;
   serverId: string;
@@ -9,6 +21,21 @@ export interface LocalSemester {
   endDate: string;
   isActive: boolean;
   isArchived: boolean;
+  userId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted: number;
+  synced: number;
+}
+
+
+export interface LocalStudentCredential {
+  id?: number;
+  serverId: string;
+  studentId: string;
+  credentialId: string;
+  publicKey: string;
+  counter: number;
   userId?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -37,6 +64,23 @@ export interface LocalCourse {
   title: string;
   semesterId: string;
   userId?: string;
+  dayOfWeek?: string;
+  time?: string;
+  lecturers?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted: number;
+  synced: number;
+}
+
+export interface LocalCourseSchedule {
+  id?: number;
+  serverId: string;
+  courseId: string;
+  dayOfWeek: string;
+  startTime: string;
+  endTime: string;
+  userId?: string;
   createdAt?: string;
   updatedAt?: string;
   isDeleted: number;
@@ -59,6 +103,7 @@ export interface LocalAttendanceSession {
   id?: number;
   serverId: string;
   courseId: string;
+  lecturerId?: string;
   date: string;
   title: string;
   userId?: string;
@@ -116,6 +161,9 @@ export class PresensysDB extends Dexie {
   enrollments!: Table<LocalEnrollment>;
   attendanceSessions!: Table<LocalAttendanceSession>;
   attendanceRecords!: Table<LocalAttendanceRecord>;
+  lecturers!: Table<LocalLecturer>;
+  courseSchedules!: Table<LocalCourseSchedule>;
+  studentCredentials!: Table<LocalStudentCredential>;
   outbox!: Table<LocalOutboxEntry>;
 
   private onChangeListeners: (() => void)[] = [];
@@ -123,21 +171,30 @@ export class PresensysDB extends Dexie {
   constructor() {
     super('PresensysDB');
 
-    const dataSchema = {
+    const legacyDataSchema = {
       semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
       students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
-      courses: '++id, &serverId, semesterId, code, synced, isDeleted, userId, updatedAt',
+      courses: '++id, &serverId, semesterId, code, dayOfWeek, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
-      attendanceSessions: '++id, &serverId, courseId, date, synced, isDeleted, userId, updatedAt',
+      attendanceSessions: '++id, &serverId, courseId, date, lecturerId, synced, isDeleted, userId, updatedAt',
+      lecturers: '++id, &serverId, name, synced, isDeleted, userId, updatedAt',
       attendanceRecords: '++id, &serverId, sessionId, studentId, [sessionId+studentId], synced, isDeleted, userId, updatedAt',
+      courseSchedules: '++id, &serverId, courseId, dayOfWeek, synced, isDeleted, userId, updatedAt',
+    };
+
+    const dataSchema = {
+      ...legacyDataSchema,
+      students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
+      studentCredentials: '++id, &serverId, studentId, credentialId, synced, isDeleted, userId, updatedAt',
     };
 
     // Version 11 – initial index fix
-    this.version(11).stores(dataSchema);
+    this.version(11).stores(legacyDataSchema);
 
     // Version 12 – one-time clear to resolve UUID conflicts (already deployed; keep for users upgrading from v11)
-    this.version(12).stores(dataSchema).upgrade(async (tx) => {
+    this.version(12).stores(legacyDataSchema).upgrade(async (tx) => {
       console.log('DB Upgrade (v12): Clearing local data to resolve UUID conflicts.');
+      // Keep this list aligned with the v12 schema only; studentCredentials is introduced in v18.
       const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
       await Promise.all(tables.map(t => tx.table(t).clear()));
       // Clear legacy single-cursor key; per-table cursors (sync_cursor_*) are the new standard
@@ -146,6 +203,48 @@ export class PresensysDB extends Dexie {
 
     // Version 13 – add outbox table (non-destructive; data rows unchanged)
     this.version(13).stores({
+      ...legacyDataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 14 - add dayOfWeek, time, lecturers to courses
+    this.version(14).stores({
+      ...legacyDataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 15 - add lecturers table and lecturerId to attendanceSessions
+    this.version(15).stores({
+      ...legacyDataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 16 – add courseSchedules table (flexible multi-slot schedule per course)
+    this.version(16).stores({
+      ...legacyDataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 17 – add fingerprintId index to students table
+    this.version(17).stores({
+      ...legacyDataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 18 – remove fingerprintId; credentials are now stored in Supabase
+    // student_credentials table via WebAuthn.  The index is dropped here;
+    // any previously stored fingerprintId values on existing rows are simply
+    // ignored and will be cleaned up server-side.
+    this.version(18).stores({
+      ...dataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 18 – remove fingerprintId; credentials are now stored in Supabase
+    // student_credentials table via WebAuthn.  The index is dropped here;
+    // any previously stored fingerprintId values on existing rows are simply
+    // ignored and will be cleaned up server-side.
+    this.version(18).stores({
       ...dataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
@@ -257,6 +356,9 @@ export const db = new PresensysDB();
 export type Semester = LocalSemester;
 export type Student = LocalStudent;
 export type Course = LocalCourse;
+export type CourseSchedule = LocalCourseSchedule;
 export type Enrollment = LocalEnrollment;
 export type AttendanceSession = LocalAttendanceSession;
+export type Lecturer = LocalLecturer;
 export type AttendanceRecord = LocalAttendanceRecord;
+export type StudentCredential = LocalStudentCredential;

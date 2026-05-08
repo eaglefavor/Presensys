@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2, Bug } from 'lucide-react';
+import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2, Bug, Clock, Zap } from 'lucide-react';
 import { db, type LocalSemester, type LocalStudent, type LocalCourse, type LocalEnrollment, type LocalAttendanceSession, type LocalAttendanceRecord } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
@@ -10,8 +10,57 @@ import { realtimeSync } from '../lib/RealtimeSyncEngine';
 type DexieTableKey = 'semesters' | 'students' | 'courses' | 'enrollments' | 'attendanceSessions' | 'attendanceRecords';
 type DexieTableRecord = LocalSemester | LocalStudent | LocalCourse | LocalEnrollment | LocalAttendanceSession | LocalAttendanceRecord;
 
+function toMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
 export default function Dashboard() {
   const activeSemester = useAppStore(state => state.activeSemester);
+
+  const now = new Date();
+  const todayDayOfWeek = now.toLocaleDateString('en-US', { weekday: 'long' });
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  // Query courseSchedules for today's courses (new flexible schedule system)
+  const todaysCourses = useLiveQuery(async () => {
+    if (!activeSemester) return [];
+
+    // Find all active schedules for today or 'Everyday'
+    const todaySlots = await db.courseSchedules
+      .filter(s => s.isDeleted !== 1 && (s.dayOfWeek === todayDayOfWeek || s.dayOfWeek === 'Everyday'))
+      .toArray();
+
+    if (todaySlots.length === 0) {
+      // Fallback: legacy courses that use the old dayOfWeek field on the course itself
+      return db.courses
+        .where('semesterId').equals(activeSemester.serverId)
+        .filter(c => c.isDeleted !== 1 && c.dayOfWeek === todayDayOfWeek)
+        .toArray()
+        .then(courses => courses.map(c => ({ ...c, slots: [] as typeof todaySlots, isHappeningNow: false })));
+    }
+
+    const courseIds = [...new Set(todaySlots.map(s => s.courseId))];
+    const courses = await db.courses
+      .where('serverId').anyOf(courseIds)
+      .filter(c => c.isDeleted !== 1 && c.semesterId === activeSemester.serverId)
+      .toArray();
+
+    return courses.map(c => {
+      const courseSlots = todaySlots.filter(s => s.courseId === c.serverId);
+      const isHappeningNow = courseSlots.some(s =>
+        toMinutes(s.startTime) <= currentMinutes && currentMinutes < toMinutes(s.endTime)
+      );
+      return { ...c, slots: courseSlots, isHappeningNow };
+    }).sort((a, b) => {
+      // Sort by earliest start time today, with "happening now" first
+      if (a.isHappeningNow !== b.isHappeningNow) return a.isHappeningNow ? -1 : 1;
+      const aStart = a.slots.length > 0 ? toMinutes(a.slots[0].startTime) : 9999;
+      const bStart = b.slots.length > 0 ? toMinutes(b.slots[0].startTime) : 9999;
+      return aStart - bStart;
+    });
+  }, [activeSemester, todayDayOfWeek]);
+
 
   const handleDebugSync = async () => {
     console.log('--- DEBUG: STARTING SYNC DUMP ---');
@@ -91,6 +140,13 @@ export default function Dashboard() {
     return Math.round(sum / attendanceStats.length);
   }, [attendanceStats]);
 
+  const allLecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []) || [];
+  const lecturerMap = useMemo(() => new Map(allLecturers.map(l => [l.serverId, l.name])), [allLecturers]);
+  const resolveLecturerNames = (field: string | undefined) => {
+    if (!field) return '';
+    return field.split(',').map(id => lecturerMap.get(id.trim()) || id.trim()).filter(Boolean).join(', ');
+  };
+
   return (
     <div className="dashboard-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       {/* Simplistic Header */}
@@ -144,6 +200,44 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+
+        {/* Today Section */}
+        {todaysCourses && todaysCourses.length > 0 && (
+          <>
+            <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 px-1">Today's Courses ({todayDayOfWeek})</h6>
+            <div className="d-flex flex-column gap-2 mb-4">
+              {todaysCourses.map(course => (
+                <div key={course.id} className={`card border-0 shadow-sm overflow-hidden${course.isHappeningNow ? ' border-2 border-success' : ''}`} style={course.isHappeningNow ? { borderColor: 'var(--bs-success) !important', boxShadow: '0 0 0 2px rgba(25,135,84,0.25)' } : {}}>
+                  <div className="card-body p-3 d-flex align-items-center gap-3">
+                    <div className={`icon-box-small rounded-2 d-flex align-items-center justify-content-center ${course.isHappeningNow ? 'bg-success bg-opacity-15 text-success' : 'bg-primary bg-opacity-10 text-primary'}`} style={{ width: '44px', height: '44px' }}>
+                      {course.isHappeningNow ? <Zap size={20} /> : <Clock size={20} />}
+                    </div>
+                    <div className="flex-grow-1 overflow-hidden">
+                      <div className="d-flex align-items-center gap-2">
+                        <h6 className="fw-bold mb-0 text-dark text-truncate">{course.code}</h6>
+                        {course.isHappeningNow && (
+                          <span className="badge bg-success xx-small fw-bold" style={{ fontSize: '9px' }}>NOW</span>
+                        )}
+                      </div>
+                      <div className="xx-small fw-bold text-muted">
+                        {course.slots.length > 0
+                          ? course.slots.map(s => `${s.startTime}–${s.endTime}`).join(', ')
+                          : course.time || 'Time Not Set'
+                        } • {resolveLecturerNames(course.lecturers) || 'No Lecturers Assigned'}
+                      </div>
+                    </div>
+                    <div>
+                      <Link to="/attendance" state={{ selectedCourseId: course.serverId }} className={`btn btn-sm rounded-pill px-3 fw-bold xx-small d-flex align-items-center gap-1 shadow-sm ${course.isHappeningNow ? 'btn-success' : 'btn-primary'}`}>
+                        <Plus size={12} /> {course.isHappeningNow ? 'Mark Now' : 'Start'}
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
 
         {/* Course List Section (Feed Style) */}
         <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 px-1">Active Performance</h6>

@@ -123,6 +123,7 @@ export default function Settings() {
           loading={loading}
           handlePasswordUpdate={handlePasswordUpdate}
         />
+
       </div>
     </div>
   );

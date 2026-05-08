@@ -29,7 +29,7 @@ type SortField = 'name' | 'regNumber' | 'percentage' | 'absentCount';
 type SortDir = 'asc' | 'desc';
 type FilterChip = '' | 'atrisk' | 'perfect' | 'excused';
 
-interface CourseOption { id: string; code: string; title: string; }
+interface CourseOption { id: string; code: string; title: string; lecturers?: string; }
 
 interface CompilationRow {
   name: string; regNumber: string;
@@ -209,6 +209,7 @@ const StatusIcon = ({ status }: { status: string }) =>
 export default function Archives() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
+  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray()) || [];
 
   const [mode, setMode] = useState<ArchiveMode>('student');
   const [loading, setLoading] = useState(false);
@@ -248,10 +249,12 @@ export default function Archives() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [filterChip, setFilterChip] = useState<FilterChip>('');
   const [compilationPage, setCompilationPage] = useState(1);
+  const [compilationLecturerId, setCompilationLecturerId] = useState('');
   const compilationItemsPerPage = 15;
 
   // ── Session Drill-Down ──────────────────────────────────────────────────────
   const [sessionsCourseId, setSessionsCourseId] = useState('');
+  const [sessionsLecturerId, setSessionsLecturerId] = useState('');
   const [sessionsList, setSessionsList] = useState<SessionRow[]>([]);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
   const [rollCallMap, setRollCallMap] = useState<Record<string, RollCallEntry[]>>({});
@@ -265,6 +268,7 @@ export default function Archives() {
 
   // ── At-Risk ─────────────────────────────────────────────────────────────────
   const [atRiskCourseId, setAtRiskCourseId] = useState('');
+  const [atRiskLecturerId, setAtRiskLecturerId] = useState('');
   const [atRiskThreshold, setAtRiskThreshold] = useState(75);
   const [atRiskStartDate, setAtRiskStartDate] = useState('');
   const [atRiskEndDate, setAtRiskEndDate] = useState('');
@@ -283,7 +287,7 @@ export default function Archives() {
     const courseIds = semCourses.map(c => c.serverId);
     const sessions = await db.attendanceSessions
       .where('courseId').anyOf(courseIds)
-      .filter(s => s.isDeleted !== 1).toArray();
+      .filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId)).toArray();
 
     const totalSessions = sessions.length;
     let totalPresent = 0;
@@ -302,7 +306,7 @@ export default function Archives() {
       avgRate: totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : 0,
       courseCount: semCourses.length,
     };
-  }, [activeSemester]);
+  }, [activeSemester, sessionsLecturerId]);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -319,10 +323,10 @@ export default function Archives() {
     if (!user) return;
     const local = await db.courses.filter(c => c.isDeleted !== 1 && (!activeSemester || c.semesterId === activeSemester.serverId)).toArray();
     if (local.length > 0) {
-      setCourses(local.map(c => ({ id: c.serverId, code: c.code, title: c.title })));
+      setCourses(local.map(c => ({ id: c.serverId, code: c.code, title: c.title, lecturers: c.lecturers || '' })));
       return;
     }
-    let query = supabase.from('courses').select('id, code, title').eq('user_id', user.id).eq('is_deleted', 0);
+    let query = supabase.from('courses').select('id, code, title, lecturers').eq('user_id', user.id).eq('is_deleted', 0);
     if (activeSemester) query = query.eq('semester_id', activeSemester.serverId);
     const { data } = await query;
     if (data) setCourses(data);
@@ -330,6 +334,7 @@ export default function Archives() {
 
   // Load courses on mount so dropdowns are ready for all tabs
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (user && courses.length === 0) loadCourses();
   }, [user, courses.length, loadCourses, activeSemester]);
 
@@ -337,6 +342,46 @@ export default function Archives() {
     setMode(newMode);
     if (newMode !== 'student' && courses.length === 0) loadCourses();
   };
+
+  const getCourseLecturerOptions = useCallback((courseId: string) => {
+    if (!courseId) return lecturers;
+    const course = courses.find(c => c.id === courseId);
+    const raw = course?.lecturers?.trim();
+    if (!raw) return lecturers;
+    const ids = new Set(raw.split(',').map(s => s.trim()).filter(Boolean));
+    return lecturers.filter(l => ids.has(l.serverId));
+  }, [courses, lecturers]);
+
+  const compilationLecturers = useMemo(
+    () => getCourseLecturerOptions(selectedCourseId),
+    [getCourseLecturerOptions, selectedCourseId]
+  );
+  const sessionsLecturers = useMemo(
+    () => getCourseLecturerOptions(sessionsCourseId),
+    [getCourseLecturerOptions, sessionsCourseId]
+  );
+  const atRiskLecturers = useMemo(
+    () => getCourseLecturerOptions(atRiskCourseId),
+    [getCourseLecturerOptions, atRiskCourseId]
+  );
+
+  useEffect(() => {
+    if (compilationLecturerId && !compilationLecturers.some(l => l.serverId === compilationLecturerId)) {
+      setCompilationLecturerId('');
+    }
+  }, [compilationLecturerId, compilationLecturers]);
+
+  useEffect(() => {
+    if (sessionsLecturerId && !sessionsLecturers.some(l => l.serverId === sessionsLecturerId)) {
+      setSessionsLecturerId('');
+    }
+  }, [sessionsLecturerId, sessionsLecturers]);
+
+  useEffect(() => {
+    if (atRiskLecturerId && !atRiskLecturers.some(l => l.serverId === atRiskLecturerId)) {
+      setAtRiskLecturerId('');
+    }
+  }, [atRiskLecturerId, atRiskLecturers]);
 
   // ── Name autocomplete ──────────────────────────────────────────────────────
   const handleQueryChange = async (value: string) => {
@@ -365,7 +410,7 @@ export default function Archives() {
     if (localRecords.length > 0) {
       // N+1 Optimization: Batch fetch all sessions and courses instead of querying in the loop
       const sessionIds = [...new Set(localRecords.map(r => r.sessionId))];
-      const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1).toArray();
+      const sessions = await db.attendanceSessions.where('serverId').anyOf(sessionIds).filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId)).toArray();
       const sessionMap = new Map(sessions.map(s => [s.serverId, s]));
 
       const courseIds = [...new Set(sessions.map(s => s.courseId))];
@@ -565,11 +610,11 @@ export default function Archives() {
   };
 
   // ── Shared compile logic ──────────────────────────────────────────────────
-  const compileForCourse = async (courseId: string, sDate: string, eDate: string): Promise<CompilationRow[]> => {
+  const compileForCourse = async (courseId: string, sDate: string, eDate: string, lecturerId?: string): Promise<CompilationRow[]> => {
     // Query local DB first
     const localSessions = await db.attendanceSessions
       .where('courseId').equals(courseId)
-      .filter(s => s.isDeleted !== 1 && s.date >= sDate && s.date <= eDate)
+      .filter(s => s.isDeleted !== 1 && (!lecturerId || s.lecturerId === lecturerId) && s.date >= sDate && s.date <= eDate)
       .toArray();
     const localEnrollments = await db.enrollments
       .where('courseId').equals(courseId)
@@ -618,11 +663,12 @@ export default function Archives() {
 
     // Fall back to Supabase for historical data not yet in local DB
     if (!navigator.onLine) { return []; }
-    const { data: sessions, error: sessErr } = await supabase
+    let sessionQuery = supabase
       .from('attendance_sessions').select('id, date, title')
       .eq('course_id', courseId).eq('is_deleted', 0)
-      .gte('date', sDate).lte('date', eDate)
-      .order('date', { ascending: true });
+      .gte('date', sDate).lte('date', eDate);
+    if (lecturerId) sessionQuery = sessionQuery.eq('lecturer_id', lecturerId);
+    const { data: sessions, error: sessErr } = await sessionQuery.order('date', { ascending: true });
     if (sessErr || !sessions || sessions.length === 0) return [];
     const { data: records } = await supabase
       .from('attendance_records').select('student_id, status, session_id')
@@ -666,7 +712,7 @@ export default function Archives() {
     const c = courses.find(c => c.id === selectedCourseId);
     const title = `${c?.code || 'Course'} — ${c?.title || ''}`;
     setCompilationTitle(title);
-    const rows = await compileForCourse(selectedCourseId, startDate, endDate);
+    const rows = await compileForCourse(selectedCourseId, startDate, endDate, compilationLecturerId);
     if (rows.length === 0) toast.error('No sessions or enrollments found.');
     setCompilationData(rows);
     savePersistedCompilation(selectedCourseId, startDate, endDate, rows, title);
@@ -755,7 +801,7 @@ export default function Archives() {
     // Query local DB first
     const localSessions = await db.attendanceSessions
       .where('courseId').equals(sessionsCourseId)
-      .filter(s => s.isDeleted !== 1)
+      .filter(s => s.isDeleted !== 1 && (!sessionsLecturerId || s.lecturerId === sessionsLecturerId))
       .toArray();
     const localEnrollments = await db.enrollments
       .where('courseId').equals(sessionsCourseId)
@@ -798,10 +844,12 @@ export default function Archives() {
 
     // Fall back to Supabase for historical data
     if (!navigator.onLine) { toast.error('Session data requires an internet connection.'); setLoading(false); return; }
+    let sessionsQuery = supabase.from('attendance_sessions').select('id, date, title')
+      .eq('course_id', sessionsCourseId).eq('is_deleted', 0);
+    if (sessionsLecturerId) sessionsQuery = sessionsQuery.eq('lecturer_id', sessionsLecturerId);
+
     const [sessRes, enrollRes] = await Promise.all([
-      supabase.from('attendance_sessions').select('id, date, title')
-        .eq('course_id', sessionsCourseId).eq('is_deleted', 0)
-        .order('date', { ascending: false }),
+      sessionsQuery.order('date', { ascending: false }),
       supabase.from('enrollments').select('student_id')
         .eq('course_id', sessionsCourseId).eq('is_deleted', 0),
     ]);
@@ -982,7 +1030,7 @@ export default function Archives() {
     setLoading(true); setAtRiskData([]);
     const c = courses.find(c => c.id === atRiskCourseId);
     setAtRiskTitle(`${c?.code || 'Course'} — ${c?.title || ''}`);
-    const rows = await compileForCourse(atRiskCourseId, atRiskStartDate, atRiskEndDate);
+    const rows = await compileForCourse(atRiskCourseId, atRiskStartDate, atRiskEndDate, atRiskLecturerId);
     const atRisk = rows.filter(r => r.percentage < atRiskThreshold);
     setAtRiskData(atRisk);
     if (atRisk.length === 0) toast.success('No at-risk students found! 🎉');
@@ -1124,6 +1172,14 @@ export default function Archives() {
                 {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
               </select>
             </div>
+
+            <div className="mb-2">
+              <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={compilationLecturerId} onChange={e => setCompilationLecturerId(e.target.value)}>
+                <option value="">All Lecturers</option>
+                {compilationLecturers.map(l => <option key={l.serverId} value={l.serverId}>{l.name}</option>)}
+              </select>
+            </div>
+
             <div className="row g-2 mb-2">
               <div className="col-6">
                 <div className="d-flex align-items-center gap-1">
@@ -1153,6 +1209,14 @@ export default function Archives() {
                 {courses.map(c => <option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}
               </select>
             </div>
+
+            <div className="mb-2">
+              <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={sessionsLecturerId} onChange={e => setSessionsLecturerId(e.target.value)}>
+                <option value="">All Lecturers</option>
+                {sessionsLecturers.map(l => <option key={l.serverId} value={l.serverId}>{l.name}</option>)}
+              </select>
+            </div>
+
             <button className="btn btn-primary w-100 py-2 rounded-3 fw-black xx-small shadow-sm text-uppercase" type="submit" disabled={loading}>
               {loading ? 'Loading…' : 'LOAD SESSIONS'}
             </button>
@@ -1181,6 +1245,12 @@ export default function Archives() {
         {/* At-Risk form */}
         {mode === 'atrisk' && (
           <form onSubmit={handleAtRiskCompile}>
+            <div className="mb-2">
+              <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={atRiskLecturerId} onChange={e => setAtRiskLecturerId(e.target.value)}>
+                <option value="">All Lecturers</option>
+                {atRiskLecturers.map(l => <option key={l.serverId} value={l.serverId}>{l.name}</option>)}
+              </select>
+            </div>
             <div className="mb-2">
               <select className="form-select rounded-3 fw-bold border-light bg-light py-2" value={atRiskCourseId} onChange={e => setAtRiskCourseId(e.target.value)} required>
                 <option value="">Select Course…</option>
