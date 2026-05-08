@@ -1,7 +1,7 @@
 import { startRegistration, startAuthentication } from '@simplewebauthn/browser';
 import { db } from '../db/db';
 import type { LocalStudent } from '../db/db';
-import { supabase, supabaseUrl } from './supabase';
+import { supabase, supabaseUrl, supabaseAnonKey } from './supabase';
 
 // ─── Error Taxonomy ───────────────────────────────────────────────────────────
 
@@ -81,7 +81,7 @@ async function edgeGet(path: string, authorization: string): Promise<Response> {
   try {
     return await fetch(`${EDGE_FN_BASE}/${path}`, {
       method: 'GET',
-      headers: { Authorization: authorization },
+      headers: { Authorization: authorization, apikey: supabaseAnonKey },
     });
   } catch (err) {
     fpLog('fetch-error', { path, err: String(err) });
@@ -96,7 +96,7 @@ async function edgePost(path: string, authorization: string, body: unknown): Pro
   try {
     return await fetch(`${EDGE_FN_BASE}/${path}`, {
       method: 'POST',
-      headers: { Authorization: authorization, 'Content-Type': 'application/json' },
+      headers: { Authorization: authorization, apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
   } catch (err) {
