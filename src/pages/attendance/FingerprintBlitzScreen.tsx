@@ -225,12 +225,14 @@ export default function FingerprintBlitzScreen({
   const scanIconColor =
     scanState === 'scanning' ? 'text-primary' :
     scanState === 'success'  ? 'text-success' :
-    scanState === 'failed'   ? 'text-danger'  : 'text-muted';
+    scanState === 'failed'   ? 'text-danger'  :
+                               'text-muted';
 
   const scanBgColor =
     scanState === 'scanning' ? 'bg-primary bg-opacity-10' :
     scanState === 'success'  ? 'bg-success bg-opacity-10' :
-    scanState === 'failed'   ? 'bg-danger bg-opacity-10'  : 'bg-light';
+    scanState === 'failed'   ? 'bg-danger bg-opacity-10'  :
+                               'bg-light';
 
   return (
     <div className="d-flex flex-column min-vh-100 bg-white">
