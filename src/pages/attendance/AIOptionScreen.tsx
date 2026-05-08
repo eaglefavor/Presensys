@@ -94,7 +94,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, o
             <div>
               <h3 className="h5 fw-bold mb-1">Fingerprint Blitz</h3>
               <p className="text-muted small mb-0">
-                Step through each enrolled student and verify their fingerprint using the device's built-in biometric sensor. No external hardware required.
+                Students touch the sensor — automatically matched and marked present in real-time. Requires the local bridge daemon.
               </p>
             </div>
           </button>
