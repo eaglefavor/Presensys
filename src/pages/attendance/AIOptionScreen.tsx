@@ -1,14 +1,15 @@
-import { Camera, MousePointerClick, Zap, ArrowLeft } from 'lucide-react';
+import { Camera, MousePointerClick, Zap, ArrowLeft, FingerprintPattern } from 'lucide-react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { isFingerprintEnabled } from '../../lib/fingerprintFeatureFlag';
 
 interface Props {
   onCancel: () => void;
   onSelectManual: () => void;
-  // onSelectAI is currently disabled
   onSelectAI?: () => void;
+  onSelectFingerprint?: () => void;
 }
 
-export default function AIOptionScreen({ onCancel, onSelectManual }: Props) {
+export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, onSelectFingerprint }: Props) {
   const { isOnline } = useNetworkStatus();
 
   return (
@@ -55,8 +56,8 @@ export default function AIOptionScreen({ onCancel, onSelectManual }: Props) {
         <div className="position-relative">
           <button
             className={`btn ${!isOnline ? 'btn-outline-secondary' : 'btn-outline-primary border-2'} p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all`}
-            onClick={() => {}}
-            disabled={true} style={{ opacity: 0.6 }}
+            onClick={onSelectAI}
+            disabled={!isOnline} style={{ opacity: isOnline ? 1 : 0.6 }}
           >
             <div className="d-flex justify-content-between align-items-center w-100">
               <div className="bg-warning bg-opacity-10 text-warning p-3 rounded-circle">
@@ -64,7 +65,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual }: Props) {
               </div>
               <div className="bg-primary text-white text-uppercase px-2 py-1 rounded-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
                 <Zap size={10} className="me-1 mb-1" />
-                Coming Soon
+                AI
               </div>
             </div>
             <div>
@@ -74,9 +75,33 @@ export default function AIOptionScreen({ onCancel, onSelectManual }: Props) {
               </p>
             </div>
           </button>
-
-
         </div>
+
+        {/* Fingerprint Blitz Option — only shown when the feature flag is on */}
+        {isFingerprintEnabled() && (
+        <div className="position-relative">
+          <button
+            className="btn btn-outline-success border-2 p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all"
+            onClick={onSelectFingerprint}
+          >
+            <div className="d-flex justify-content-between align-items-center w-100">
+              <div className="bg-success bg-opacity-10 text-success p-3 rounded-circle">
+                <FingerprintPattern size={32} />
+              </div>
+              <div className="bg-success text-white text-uppercase px-2 py-1 rounded-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
+                <Zap size={10} className="me-1 mb-1" />
+                BIOMETRIC
+              </div>
+            </div>
+            <div>
+              <h3 className="h5 fw-bold mb-1">Fingerprint Blitz</h3>
+              <p className="text-muted small mb-0">
+                Students touch the sensor — automatically matched and marked present in real-time. Requires the local bridge daemon.
+              </p>
+            </div>
+          </button>
+        </div>
+        )}
       </div>
     </div>
   );

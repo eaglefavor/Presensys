@@ -6,6 +6,8 @@ const MOCKS = {
   'xlsx': 'export const utils = { book_new: () => ({}), json_to_sheet: () => ({}), book_append_sheet: () => ({}) }; export const writeFile = () => {};',
   'jspdf': 'export default class jsPDF { constructor(options) { if (globalThis.__jsPDFMock?.constructor) globalThis.__jsPDFMock.constructor(options); this.setFontSize = (size) => { if (globalThis.__jsPDFMock?.setFontSize) globalThis.__jsPDFMock.setFontSize(size); return this; }; this.setFont = (font, style) => { if (globalThis.__jsPDFMock?.setFont) globalThis.__jsPDFMock.setFont(font, style); return this; }; this.text = (text, x, y) => { if (globalThis.__jsPDFMock?.text) globalThis.__jsPDFMock.text(text, x, y); return this; }; this.setTextColor = (c) => { if (globalThis.__jsPDFMock?.setTextColor) globalThis.__jsPDFMock.setTextColor(c); return this; }; this.save = (filename) => { if (globalThis.__jsPDFMock?.save) globalThis.__jsPDFMock.save(filename); return this; }; } };',
   'jspdf-autotable': 'export default function autoTable(doc, options) { if (globalThis.__autoTableMock) globalThis.__autoTableMock(doc, options); };',
+  '@supabase/supabase-js': 'export const createClient = (url, key) => ({ url, key, auth: { getSession: async () => ({ data: { session: { access_token: "test-token" } }, error: null }) }, from: () => ({ select: () => Promise.resolve({ data: [], error: null }) }) });',
+  '@simplewebauthn/browser': 'export const startRegistration = async (opts) => { if (globalThis.__swaBrowserMock?.startRegistration) return globalThis.__swaBrowserMock.startRegistration(opts); throw new Error("startRegistration not mocked"); }; export const startAuthentication = async (opts) => { if (globalThis.__swaBrowserMock?.startAuthentication) return globalThis.__swaBrowserMock.startAuthentication(opts); throw new Error("startAuthentication not mocked"); };',
 };
 
 export async function resolve(specifier, context, nextResolve) {
@@ -36,5 +38,16 @@ export async function load(url, context, nextLoad) {
       source: MOCKS[name],
     };
   }
+
+  if (url.endsWith('.ts') || url.endsWith('.tsx') || url.endsWith('.js') || url.endsWith('.jsx')) {
+    const loaded = await nextLoad(url, context);
+    if (loaded && loaded.source) {
+      let source = loaded.source;
+      if (typeof source !== 'string') source = source.toString();
+      source = source.replace(/import\.meta\.env(?:\?.DEV|\.DEV|)/g, 'false');
+      return { ...loaded, source };
+    }
+  }
   return nextLoad(url, context);
+
 }

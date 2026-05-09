@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle } from 'lucide-react';
+import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle, FingerprintPattern } from 'lucide-react';
 import { db, type Student } from '../db/db';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
 import ConfirmDialog from '../components/ConfirmDialog';
+import FingerprintEnrollModal from '../components/FingerprintEnrollModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
 import jsPDF from 'jspdf';
@@ -35,6 +36,9 @@ export default function Students() {
   const [activeScanRowIndex, setActiveScanRowIndex] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
+
+  // Fingerprint enrollment
+  const [showFingerprintModal, setShowFingerprintModal] = useState(false);
 
   // Live attendance stats for the selected student detail panel
   const selectedStudentStats = useLiveQuery(async () => {
@@ -426,6 +430,13 @@ export default function Students() {
 
                         <div className="d-flex flex-column gap-2">
                           <button className="btn btn-primary-unified w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={handleEditClick}><Edit2 size={18} className="me-2" /> Edit Student</button>
+                          <button
+                            className="btn btn-outline-secondary w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
+                            onClick={() => setShowFingerprintModal(true)}
+                          >
+                            <FingerprintPattern size={18} />
+                            { 'Register/Update WebAuthn' }
+                          </button>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
                           <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => setConfirmStudentDelete(selectedStudent)}>Delete Student</button>
                         </div>
@@ -541,6 +552,13 @@ export default function Students() {
       )}
 
       {showScanner && <BarcodeScanner onScanSuccess={handleScanSuccess} onClose={handleScannerClose} />}
+
+      {showFingerprintModal && selectedStudent && (
+        <FingerprintEnrollModal userId={user?.id || ''}
+          student={selectedStudent}
+          onClose={() => setShowFingerprintModal(false)}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmBulkDelete}
