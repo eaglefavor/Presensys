@@ -164,11 +164,13 @@ function inferFetchFailureHints(err: unknown, targetUrl: string): FetchFailureHi
     // ignore URL parsing failures, network fallback hint below covers this
   }
 
-  hints.push({
-    type: 'NETWORK',
-    confidence: hints.length === 0 ? 'high' : 'medium',
-    reason: 'Request could not reach the fingerprint edge endpoint.',
-  });
+  if (hints.length === 0) {
+    hints.push({
+      type: 'NETWORK',
+      confidence: 'high',
+      reason: 'Request could not reach the fingerprint edge endpoint.',
+    });
+  }
 
   return hints;
 }
@@ -274,8 +276,7 @@ function mapBrowserError(err: unknown, phase: 'register' | 'authenticate'): Fing
  */
 export async function registerStudentFingerprint(student: LocalStudent, _userId: string): Promise<void> {
   assertPrerequisites();
-  void _userId;
-  fpLog('register:start', { studentId: student.serverId });
+  fpLog('register:start', { studentId: student.serverId, hasUserId: Boolean(_userId) });
 
   const auth = await getAuthHeader();
 
