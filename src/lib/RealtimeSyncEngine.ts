@@ -316,6 +316,7 @@ export class RealtimeSyncEngine {
       })),
       pull('courses', db.courses, (c) => ({
         serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
+        // Legacy schema used `day`; newer migrations may use `day_of_week`.
         dayOfWeek: c.day_of_week ?? c.day,
         time: c.time,
         lecturers: c.lecturers,
@@ -382,6 +383,7 @@ pull('course_schedules', db.courseSchedules, (cs) => ({
         code: item.code,
         title: item.title,
         semester_id: item.semesterId,
+        // Keep writing legacy `day` so older deployments continue syncing.
         day: item.dayOfWeek ?? null,
         time: item.time ?? null,
         lecturers: item.lecturers ?? null,
@@ -934,6 +936,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
           code: r.code,
           title: r.title,
           semesterId: r.semester_id,
+          // Legacy schema used `day`; newer migrations may use `day_of_week`.
           dayOfWeek: r.day_of_week ?? r.day,
           time: r.time,
           lecturers: r.lecturers,
