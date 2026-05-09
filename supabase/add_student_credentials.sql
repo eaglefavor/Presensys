@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS student_credentials (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+  student_id UUID REFERENCES students(id) ON DELETE CASCADE,
   credential_id TEXT UNIQUE NOT NULL,
   public_key TEXT NOT NULL,
   counter INTEGER DEFAULT 0,
@@ -9,10 +9,6 @@ CREATE TABLE IF NOT EXISTS student_credentials (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_student_credentials_active_per_student
-  ON student_credentials (user_id, student_id)
-  WHERE is_deleted = 0;
 
 ALTER TABLE student_credentials ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can see their own student_credentials" ON student_credentials FOR ALL USING (auth.uid() = user_id);
