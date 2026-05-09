@@ -178,7 +178,7 @@ function inferFetchFailureHints(err: unknown, targetUrl: string): FetchFailureHi
   if (hints.length === 0) {
     hints.push({
       type: 'NETWORK',
-      confidence: 'high',
+      confidence: 'medium',
       reason: 'Request could not reach the fingerprint edge endpoint.',
     });
   }
@@ -297,7 +297,8 @@ function mapBrowserError(err: unknown, phase: 'register' | 'authenticate'): Fing
  */
 export async function registerStudentFingerprint(student: LocalStudent, _userId: string): Promise<void> {
   assertPrerequisites();
-  fpLog('register:start', { studentId: student.serverId, hasUserId: Boolean(_userId) });
+  if (!_userId) fpLog('register:missing-user-id');
+  fpLog('register:start', { studentId: student.serverId });
 
   const auth = await getAuthHeader();
 
