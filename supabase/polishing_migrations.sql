@@ -108,8 +108,8 @@ DECLARE
   tbl TEXT;
 BEGIN
   FOREACH tbl IN ARRAY ARRAY[
-    'semesters', 'students', 'courses', 'enrollments',
-    'attendance_sessions', 'attendance_records'
+    'semesters', 'students', 'courses', 'lecturers', 'course_schedules',
+    'enrollments', 'attendance_sessions', 'attendance_records'
   ] LOOP
     EXECUTE format(
       'DROP TRIGGER IF EXISTS set_updated_at ON public.%I;
@@ -137,6 +137,12 @@ CREATE INDEX IF NOT EXISTS idx_students_user_updated
 
 CREATE INDEX IF NOT EXISTS idx_courses_user_updated
   ON public.courses (user_id, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_lecturers_user_updated
+  ON public.lecturers (user_id, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_course_schedules_user_updated
+  ON public.course_schedules (user_id, updated_at);
 
 CREATE INDEX IF NOT EXISTS idx_enrollments_user_updated
   ON public.enrollments (user_id, updated_at);

@@ -94,6 +94,30 @@ CREATE POLICY "courses_insert"    ON courses FOR INSERT  WITH CHECK (auth.uid() 
 CREATE POLICY "courses_update"    ON courses FOR UPDATE  USING      (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "courses_delete"    ON courses FOR DELETE  USING      (auth.uid() = user_id);
 
+-- LECTURERS
+ALTER TABLE IF EXISTS lecturers ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can see their own data" ON lecturers;
+DROP POLICY IF EXISTS "lecturers_select" ON lecturers;
+DROP POLICY IF EXISTS "lecturers_insert" ON lecturers;
+DROP POLICY IF EXISTS "lecturers_update" ON lecturers;
+DROP POLICY IF EXISTS "lecturers_delete" ON lecturers;
+CREATE POLICY "lecturers_select" ON lecturers FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "lecturers_insert" ON lecturers FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "lecturers_update" ON lecturers FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "lecturers_delete" ON lecturers FOR DELETE USING (auth.uid() = user_id);
+
+-- COURSE_SCHEDULES
+ALTER TABLE IF EXISTS course_schedules ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users can see their own data" ON course_schedules;
+DROP POLICY IF EXISTS "course_schedules_select" ON course_schedules;
+DROP POLICY IF EXISTS "course_schedules_insert" ON course_schedules;
+DROP POLICY IF EXISTS "course_schedules_update" ON course_schedules;
+DROP POLICY IF EXISTS "course_schedules_delete" ON course_schedules;
+CREATE POLICY "course_schedules_select" ON course_schedules FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "course_schedules_insert" ON course_schedules FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "course_schedules_update" ON course_schedules FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "course_schedules_delete" ON course_schedules FOR DELETE USING (auth.uid() = user_id);
+
 -- ENROLLMENTS
 DROP POLICY IF EXISTS "Enable all access for now" ON enrollments;
 DROP POLICY IF EXISTS "Users manage own enrollments" ON enrollments;
