@@ -1,11 +1,11 @@
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { X, FingerprintPattern, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { type LocalStudent } from '../db/db';
-import { registerStudentFingerprint, hasRegisteredFingerprint, checkFingerprintSupport, FingerprintError } from '../lib/biometricService';
+import { registerStudentFingerprint, hasRegisteredFingerprint } from '../lib/biometricService';
 import toast from 'react-hot-toast';
 
-type Status = 'not-supported' | 'ready' | 'capturing' | 'captured' | 'error';
+type Status = 'ready' | 'capturing' | 'captured' | 'error';
 
 interface Props {
   student: LocalStudent;
@@ -17,44 +17,27 @@ export default function FingerprintEnrollModal({ student, onClose, userId }: Pro
   const [status, setStatus] = useState<Status>('ready');
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [hasExisting, setHasExisting] = useState(false);
-  /** Prevents duplicate capture calls if the user taps the button quickly. */
-  const captureActiveRef = useRef(false);
 
   useEffect(() => {
-    // Preflight: verify the device/browser can perform WebAuthn before
-    // the user attempts to enroll, so we surface the reason immediately.
-    const support = checkFingerprintSupport();
-    if (!support.supported) {
-      setStatus('not-supported');
-      setErrorMsg(support.reason ?? 'WebAuthn is not supported on this device.');
-      return;
-    }
     hasRegisteredFingerprint(student.serverId).then(setHasExisting);
   }, [student.serverId]);
 
   const handleCapture = async () => {
-    // Guard: ignore duplicate taps or calls while a capture is already in flight
-    if (captureActiveRef.current) return;
-    captureActiveRef.current = true;
     setStatus('capturing');
-    setErrorMsg('');
     try {
       await registerStudentFingerprint(student, userId);
       setStatus('captured');
       toast.success(`Fingerprint registered for ${student.name}`);
       setTimeout(onClose, 2000);
     } catch (err: unknown) {
-      const fpErr = err instanceof FingerprintError ? err : null;
       setStatus('error');
-      setErrorMsg(fpErr?.message ?? (err as Error)?.message ?? 'Failed to capture fingerprint.');
-    } finally {
-      captureActiveRef.current = false;
+      setErrorMsg((err as Error).message || 'Failed to capture fingerprint.');
     }
   };
 
   const statusIcon = () => {
     switch (status) {
-      case 'not-supported':
+
       case 'error':      return <AlertCircle size={48} className="text-danger mx-auto mb-3" />;
       case 'ready':      return <FingerprintPattern size={48} className="text-primary mx-auto mb-3" />;
       case 'capturing':  return <Loader size={48} className="text-primary mx-auto mb-3 animate-spin" />;
@@ -64,11 +47,10 @@ export default function FingerprintEnrollModal({ student, onClose, userId }: Pro
 
   const statusText = () => {
     switch (status) {
-      case 'not-supported': return errorMsg || 'Not supported on this device';
-      case 'ready':         return 'Ready to capture';
-      case 'capturing':     return 'Touch sensor to authenticate…';
-      case 'captured':      return 'Fingerprint captured!';
-      case 'error':         return errorMsg || 'Capture failed';
+      case 'ready':      return 'Ready to capture';
+      case 'capturing':  return 'Touch sensor to authenticate…';
+      case 'captured':   return 'Fingerprint captured!';
+      case 'error':      return errorMsg || 'Capture failed';
     }
   };
 
@@ -103,7 +85,7 @@ export default function FingerprintEnrollModal({ student, onClose, userId }: Pro
 
               <div className="d-flex flex-column align-items-center py-2">
                 {statusIcon()}
-                <p className={`fw-bold small mb-0 ${status === 'error' || status === 'not-supported' ? 'text-danger' : status === 'captured' ? 'text-success' : 'text-muted'}`}>
+                <p className={`fw-bold small mb-0 ${status === 'error' ? 'text-danger' : status === 'captured' ? 'text-success' : 'text-muted'}`}>
                   {statusText()}
                 </p>
               </div>
@@ -113,9 +95,14 @@ export default function FingerprintEnrollModal({ student, onClose, userId }: Pro
               {status !== 'capturing' && status !== 'captured' && (
                 <button className="btn btn-light flex-grow-1 fw-bold rounded-3 py-2" onClick={onClose}>Cancel</button>
               )}
-              {(status === 'ready' || status === 'error') && (
+              {status === 'ready' && (
                 <button className="btn btn-primary flex-grow-1 fw-bold rounded-3 py-2" onClick={handleCapture}>
-                  {status === 'error' ? 'Retry' : 'Start Capture'}
+                  Start Capture
+                </button>
+              )}
+              {status === 'error' && (
+                <button className="btn btn-primary flex-grow-1 fw-bold rounded-3 py-2" onClick={handleCapture}>
+                  Retry
                 </button>
               )}
             </div>
