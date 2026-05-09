@@ -1,5 +1,6 @@
 import { Camera, MousePointerClick, Zap, ArrowLeft, FingerprintPattern } from 'lucide-react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
+import { isFingerprintEnabled } from '../../lib/fingerprintFeatureFlag';
 
 interface Props {
   onCancel: () => void;
@@ -76,7 +77,8 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, o
           </button>
         </div>
 
-        {/* Fingerprint Blitz Option */}
+        {/* Fingerprint Blitz Option — only shown when the feature flag is on */}
+        {isFingerprintEnabled() && (
         <div className="position-relative">
           <button
             className="btn btn-outline-success border-2 p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all"
@@ -99,6 +101,7 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, o
             </div>
           </button>
         </div>
+        )}
       </div>
     </div>
   );

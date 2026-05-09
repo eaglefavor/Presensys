@@ -1,13 +1,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, FingerprintPattern, CheckCircle, StopCircle, UserX, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FingerprintPattern, CheckCircle, StopCircle, UserX, AlertCircle, Loader } from 'lucide-react';
 import { db } from '../../db/db';
 import type { LocalStudent } from '../../db/db';
-import { verifyStudentFingerprint, hasRegisteredFingerprint } from '../../lib/biometricService';
+import { verifyStudentFingerprint, FingerprintError } from '../../lib/biometricService';
 import toast from 'react-hot-toast';
 
-const SESSION_DURATION_S = 15 * 60; // 15 minutes in seconds
+const SESSION_DURATION_S = 15 * 60; // 15 minutes
+/** Maximum additional attempts after the first failure before auto-advancing. */
+const MAX_RETRIES_PER_STUDENT = 2;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ScanState = 'idle' | 'scanning' | 'success' | 'failed';
 
 interface MatchToast {
   id: number;
@@ -40,35 +46,46 @@ export default function FingerprintBlitzScreen({
   // Blitz state
   const [studentList, setStudentList] = useState<LocalStudent[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isScanning, setIsScanning] = useState(false);
+  const [scanState, setScanState] = useState<ScanState>('idle');
   const [scanError, setScanError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+  /**
+   * Ref-based lock prevents double-taps from launching two concurrent scans
+   * since React state updates are asynchronous and the button could be
+   * pressed twice before the first state change re-renders.
+   */
+  const scanLockRef = useRef(false);
 
-  // Preload
+  // ─── Preload: single batch query instead of N individual lookups ──────────
   useEffect(() => {
     db.attendanceRecords
       .where('sessionId').equals(activeSessionId)
       .filter(r => r.isDeleted !== 1 && r.status === 'present')
       .toArray()
-      .then(existing => {
+      .then(async existing => {
         const existingIds = new Set(existing.map(r => r.studentId));
         markedRef.current = existingIds;
         setPresentCount(existing.length);
 
-        // Filter enrollments to only those who have a registered fingerprint AND haven't been marked yet
-        const prepareList = async () => {
-           const withFingerprints: LocalStudent[] = [];
-           for (const student of enrollments) {
-              if (!existingIds.has(student.serverId) && await hasRegisteredFingerprint(student.serverId)) {
-                  withFingerprints.push(student);
-              }
-           }
-           setStudentList(withFingerprints);
-        };
-        prepareList();
+        const unmarked = enrollments.filter(s => !existingIds.has(s.serverId));
+        if (unmarked.length === 0) {
+          setStudentList([]);
+          return;
+        }
+
+        // Single Dexie query for all relevant credentials (O(1) instead of O(n))
+        const studentIds = unmarked.map(s => s.serverId);
+        const credentials = await db.studentCredentials
+          .where('studentId').anyOf(studentIds)
+          .filter(c => c.isDeleted === 0)
+          .toArray();
+        const enrolledSet = new Set(credentials.map(c => c.studentId));
+
+        setStudentList(unmarked.filter(s => enrolledSet.has(s.serverId)));
       });
   }, [activeSessionId, enrollments]);
 
-  // Countdown timer
+  // ─── Countdown timer ─────────────────────────────────────────────────────
   const onStopRef = useRef(onStop);
   useEffect(() => { onStopRef.current = onStop; }, [onStop]);
 
@@ -87,99 +104,142 @@ export default function FingerprintBlitzScreen({
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, []);
 
+  // ─── Attendance write ─────────────────────────────────────────────────────
   const markStudentPresent = async (student: LocalStudent) => {
     const now = Date.now();
-    try {
-      const existing = await db.attendanceRecords
-        .where('[sessionId+studentId]')
-        .equals([activeSessionId, student.serverId])
-        .first();
+    // Upsert so the write is idempotent if called more than once for a student
+    const existing = await db.attendanceRecords
+      .where('[sessionId+studentId]')
+      .equals([activeSessionId, student.serverId])
+      .first();
 
-      if (existing) {
-        await db.attendanceRecords.update(existing.id!, { status: 'present', isDeleted: 0, synced: 0, timestamp: now });
-      } else {
-        await db.attendanceRecords.add({
-          serverId: '',
-          sessionId: activeSessionId,
-          studentId: student.serverId,
-          status: 'present',
-          timestamp: now,
-          synced: 0,
-          userId,
-          isDeleted: 0,
-        });
-      }
-
-      markedRef.current.add(student.serverId);
-      setPresentCount(c => c + 1);
-
-      const id = ++toastCounter.current;
-      setToastQueue(q => [...q, { id, name: student.name, regNumber: student.regNumber }]);
-      setTimeout(() => setToastQueue(q => q.filter(t => t.id !== id)), 3000);
-
-      if (window.navigator.vibrate) window.navigator.vibrate([30, 10, 30]);
-    } catch (err) {
-      console.error('FingerprintBlitz: failed to write record', err);
+    if (existing) {
+      await db.attendanceRecords.update(existing.id!, { status: 'present', isDeleted: 0, synced: 0, timestamp: now });
+    } else {
+      await db.attendanceRecords.add({
+        serverId: '',
+        sessionId: activeSessionId,
+        studentId: student.serverId,
+        status: 'present',
+        timestamp: now,
+        synced: 0,
+        userId,
+        isDeleted: 0,
+      });
     }
+
+    markedRef.current.add(student.serverId);
+    setPresentCount(c => c + 1);
+
+    const id = ++toastCounter.current;
+    setToastQueue(q => [...q, { id, name: student.name, regNumber: student.regNumber }]);
+    setTimeout(() => setToastQueue(q => q.filter(t => t.id !== id)), 3000);
+
+    if (window.navigator.vibrate) window.navigator.vibrate([30, 10, 30]);
   };
 
-  const handleNextScan = async () => {
-    setIsScanning(true);
-    setScanError('');
-
-    if (currentIndex >= studentList.length) return;
-    const student = studentList[currentIndex];
-
-    setIsScanning(true);
-    setScanError('');
-
-    try {
-      const success = await verifyStudentFingerprint(student);
-
-      if (success) {
-        await markStudentPresent(student);
-        moveToNext();
-      }
-    } catch (err: unknown) {
-      console.error("Scan failed", err);
-      setScanError((err as Error).message || "Verification failed. Try again.");
-    } finally {
-      setIsScanning(false);
-    }
-  };
-
+  // ─── Navigation ───────────────────────────────────────────────────────────
   const moveToNext = () => {
-      setScanError('');
-      if (currentIndex < studentList.length - 1) {
-          setCurrentIndex(prev => prev + 1);
-      } else {
-          toast('All enrolled students scanned!', { icon: '✅' });
-          handleStop();
-      }
+    setScanError('');
+    setScanState('idle');
+    setRetryCount(0);
+    if (currentIndex < studentList.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      toast('All enrolled students scanned!', { icon: '✅' });
+      handleStop();
+    }
   };
 
-  const handleSkip = () => {
-      moveToNext();
-  };
+  const handleSkip = () => moveToNext();
 
   const handleStop = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     onStop();
   };
 
+  /** Clears the timer so it does not fire after the user navigates back. */
+  const handleCancel = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    onCancel();
+  };
+
+  // ─── Scan ─────────────────────────────────────────────────────────────────
+  const handleNextScan = async () => {
+    if (scanLockRef.current || scanState === 'scanning') return;
+    if (currentIndex >= studentList.length) return;
+
+    scanLockRef.current = true;
+    setScanState('scanning');
+    setScanError('');
+
+    // Capture at call-time to avoid stale-closure issues after awaiting
+    const student = studentList[currentIndex];
+
+    try {
+      await verifyStudentFingerprint(student);
+      await markStudentPresent(student);
+      setScanState('success');
+      setTimeout(() => moveToNext(), 600); // brief success flash before advancing
+    } catch (err: unknown) {
+      const fpErr = err instanceof FingerprintError ? err : null;
+      const errMsg = fpErr?.message ?? (err as Error)?.message ?? 'Scan failed. Try again.';
+      const isRetriable = fpErr?.retriable ?? true;
+
+      setScanError(errMsg);
+      setScanState('failed');
+
+      const newRetryCount = retryCount + 1;
+      setRetryCount(newRetryCount);
+
+      if (fpErr?.code === 'OFFLINE') {
+        // Guide the user to manual attendance; blitz cannot work without network
+        setTimeout(() => handleStop(), 2500);
+      } else if (!isRetriable || newRetryCount > MAX_RETRIES_PER_STUDENT) {
+        // Auto-advance for non-retriable errors or when retries are exhausted
+        setTimeout(() => moveToNext(), 2000);
+      }
+      // Otherwise leave the UI in 'failed' state so the user can retry manually
+    } finally {
+      scanLockRef.current = false;
+    }
+  };
+
+  // ─── Derived values ───────────────────────────────────────────────────────
   const mm = String(Math.floor(secondsLeft / 60)).padStart(2, '0');
   const ss = String(secondsLeft % 60).padStart(2, '0');
   const progress = ((SESSION_DURATION_S - secondsLeft) / SESSION_DURATION_S) * 100;
   const total = enrollments.length;
-
   const currentStudent = studentList[currentIndex];
+
+  /** True while an auto-advance timeout is pending (no manual action needed). */
+  const isAutoAdvancing =
+    scanState === 'failed' &&
+    (retryCount > MAX_RETRIES_PER_STUDENT || scanError.toLowerCase().includes('offline'));
+
+  const isScanButtonDisabled =
+    scanState === 'scanning' ||
+    scanState === 'success' ||
+    isAutoAdvancing;
+
+  const scanIconColor =
+    scanState === 'scanning' ? 'text-primary' :
+    scanState === 'success'  ? 'text-success' :
+    scanState === 'failed'   ? 'text-danger'  :
+                               'text-muted';
+
+  const scanBgColor =
+    scanState === 'scanning' ? 'bg-primary bg-opacity-10' :
+    scanState === 'success'  ? 'bg-success bg-opacity-10' :
+    scanState === 'failed'   ? 'bg-danger bg-opacity-10'  :
+                               'bg-light';
 
   return (
     <div className="d-flex flex-column min-vh-100 bg-white">
       {/* Header */}
       <div className="bg-white sticky-top border-bottom" style={{ zIndex: 100 }}>
         <div className="d-flex align-items-center justify-content-between p-3">
-          <button className="btn btn-light rounded-circle p-2 border-0" onClick={onCancel}>
+          <button className="btn btn-light rounded-circle p-2 border-0" onClick={handleCancel}>
             <ArrowLeft size={24} />
           </button>
           <h1 className="h6 fw-black mb-0 text-dark text-uppercase letter-spacing-n1 flex-grow-1 text-center pe-5">
@@ -224,32 +284,66 @@ export default function FingerprintBlitzScreen({
 
         {/* Scan Area */}
         {currentStudent ? (
-            <div className="card border-0 shadow-sm rounded-4 overflow-hidden text-center p-4">
-                <h3 className="h5 fw-black mb-1">{currentStudent.name}</h3>
-                <p className="text-muted small fw-bold font-monospace mb-4">{currentStudent.regNumber}</p>
+          <div className="card border-0 shadow-sm rounded-4 overflow-hidden text-center p-4">
+            <h3 className="h5 fw-black mb-1">{currentStudent.name}</h3>
+            <p className="text-muted small fw-bold font-monospace mb-4">{currentStudent.regNumber}</p>
 
-                <div className={`d-inline-flex justify-content-center align-items-center p-4 rounded-circle mb-4 ${isScanning ? 'bg-primary bg-opacity-10' : scanError ? 'bg-danger bg-opacity-10' : 'bg-light'}`} style={{ width: 100, height: 100 }}>
-                    <FingerprintPattern size={48} className={isScanning ? 'text-primary' : scanError ? 'text-danger' : 'text-muted'} />
-                </div>
-
-                {scanError && <p className="text-danger small fw-bold mb-3 d-flex align-items-center justify-content-center gap-1"><AlertCircle size={16}/> {scanError}</p>}
-
-                <div className="d-flex gap-2 w-100">
-                    <button className="btn btn-light fw-bold py-3 flex-grow-1" onClick={handleSkip} disabled={isScanning}>
-                        <UserX size={20} className="me-2" /> Skip
-                    </button>
-                    <button className="btn btn-primary fw-bold py-3 flex-grow-1" onClick={handleNextScan} disabled={isScanning}>
-                        {isScanning ? 'Scanning...' : 'Scan Finger'}
-                    </button>
-                </div>
-                <div className="mt-3 text-muted xx-small fw-bold">Student {currentIndex + 1} of {studentList.length}</div>
+            <div
+              className={`d-inline-flex justify-content-center align-items-center p-4 rounded-circle mb-4 ${scanBgColor}`}
+              style={{ width: 100, height: 100 }}
+            >
+              {scanState === 'scanning' ? (
+                <Loader size={48} className="text-primary animate-spin" />
+              ) : scanState === 'success' ? (
+                <CheckCircle size={48} className="text-success" />
+              ) : (
+                <FingerprintPattern size={48} className={scanIconColor} />
+              )}
             </div>
+
+            {scanState === 'failed' && scanError && (
+              <p className="text-danger small fw-bold mb-3 d-flex align-items-center justify-content-center gap-1">
+                <AlertCircle size={16} /> {scanError}
+              </p>
+            )}
+
+            {retryCount > 0 && scanState !== 'scanning' && !isAutoAdvancing && (
+              <p className="text-muted xx-small fw-bold mb-3">
+                Attempt {retryCount + 1} of {MAX_RETRIES_PER_STUDENT + 1}
+              </p>
+            )}
+
+            {isAutoAdvancing && (
+              <p className="text-muted xx-small fw-bold mb-3">Advancing to next student…</p>
+            )}
+
+            <div className="d-flex gap-2 w-100">
+              <button
+                className="btn btn-light fw-bold py-3 flex-grow-1"
+                onClick={handleSkip}
+                disabled={scanState === 'scanning' || scanState === 'success'}
+              >
+                <UserX size={20} className="me-2" /> Skip
+              </button>
+              <button
+                className="btn btn-primary fw-bold py-3 flex-grow-1"
+                onClick={handleNextScan}
+                disabled={isScanButtonDisabled}
+              >
+                {scanState === 'scanning' ? 'Scanning…' :
+                 scanState === 'failed' && retryCount > 0 ? 'Retry Scan' : 'Scan Finger'}
+              </button>
+            </div>
+            <div className="mt-3 text-muted xx-small fw-bold">
+              Student {currentIndex + 1} of {studentList.length}
+            </div>
+          </div>
         ) : (
-            <div className="text-center py-5">
-                <CheckCircle size={48} className="text-success mx-auto mb-3" />
-                <h3 className="h5 fw-black text-dark">All Caught Up!</h3>
-                <p className="text-muted small">No more students with registered fingerprints to scan.</p>
-            </div>
+          <div className="text-center py-5">
+            <CheckCircle size={48} className="text-success mx-auto mb-3" />
+            <h3 className="h5 fw-black text-dark">All Caught Up!</h3>
+            <p className="text-muted small">No more students with registered fingerprints to scan.</p>
+          </div>
         )}
 
         {/* Match toast cards */}
