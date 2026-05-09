@@ -172,7 +172,7 @@ export class PresensysDB extends Dexie {
     super('PresensysDB');
 
     const dataSchema = {
-      semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
+      semesters: '++id, &serverId, name, startDate, endDate, isActive, synced, isDeleted, userId, updatedAt',
       students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
       courses: '++id, &serverId, semesterId, code, dayOfWeek, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
@@ -227,6 +227,12 @@ export class PresensysDB extends Dexie {
 
     // Version 18 - webauthn credentials
     this.version(18).stores({
+      ...dataSchema,
+      outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
+    });
+
+    // Version 19 - add semesters.endDate index for orderBy queries
+    this.version(19).stores({
       ...dataSchema,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
