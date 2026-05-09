@@ -67,44 +67,200 @@ function assertPrerequisites(): void {
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-async function getAuthHeader(): Promise<string> {
+async function getAuthHeader(expectedUserId?: string): Promise<string> {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session) {
     throw new FingerprintError('UNKNOWN', 'Session expired. Please log in again.', false);
+  }
+  if (
+    expectedUserId &&
+    session.user?.id &&
+    session.user.id !== expectedUserId
+  ) {
+    throw new FingerprintError('UNKNOWN', 'Authenticated user mismatch. Please log in again.', false);
   }
   return `Bearer ${session.access_token}`;
 }
 
 const EDGE_FN_BASE = `${supabaseUrl}/functions/v1`;
 
-async function edgeGet(path: string, authorization: string): Promise<Response> {
+type FetchFailureHintType =
+  | 'MIXED_CONTENT'
+  | 'CORS'
+  | 'TLS'
+  | 'DNS'
+  | 'NETWORK';
+
+type FetchFailureHint = {
+  type: FetchFailureHintType;
+  confidence: 'high' | 'medium';
+  reason: string;
+};
+
+function buildEdgeUrl(path: string): string {
+  return `${EDGE_FN_BASE}/${path}`;
+}
+
+function sanitizeUrlForLog(url: string): string {
   try {
-    return await fetch(`${EDGE_FN_BASE}/${path}`, {
+    const parsed = new URL(url);
+    for (const key of parsed.searchParams.keys()) {
+      parsed.searchParams.set(key, '<redacted>');
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+function isLikelyGenericFetchFailure(msg: string): boolean {
+  // Browser wording varies (e.g. Chrome "Failed to fetch", Firefox "NetworkError when attempting to fetch resource").
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network error') ||
+    msg.includes('fetch failed') ||
+    msg.includes('load failed')
+  );
+}
+
+function inferFetchFailureHints(err: unknown, targetUrl: string): FetchFailureHint[] {
+  const hints: FetchFailureHint[] = [];
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+
+  if (msg.includes('cors') || msg.includes('access-control-allow-origin')) {
+    hints.push({
+      type: 'CORS',
+      confidence: 'high',
+      reason: 'Browser indicates a cross-origin policy/CORS rejection.',
+    });
+  }
+  if (
+    msg.includes('tls') ||
+    msg.includes('ssl') ||
+    msg.includes('certificate') ||
+    msg.includes('cert_')
+  ) {
+    hints.push({
+      type: 'TLS',
+      confidence: 'high',
+      reason: 'Browser/network error text suggests TLS or certificate failure.',
+    });
+  }
+  if (
+    msg.includes('dns') ||
+    msg.includes('name_not_resolved') ||
+    msg.includes('host not found') ||
+    msg.includes('nxdomain')
+  ) {
+    hints.push({
+      type: 'DNS',
+      confidence: 'high',
+      reason: 'Browser/network error text suggests DNS resolution failure.',
+    });
+  }
+
+  try {
+    if (typeof window !== 'undefined') {
+      const page = window.location;
+      const target = new URL(targetUrl);
+      if (page.protocol === 'https:' && target.protocol === 'http:') {
+        hints.push({
+          type: 'MIXED_CONTENT',
+          confidence: 'high',
+          reason: 'HTTPS page cannot call an insecure HTTP endpoint.',
+        });
+      } else if (target.origin !== page.origin && isLikelyGenericFetchFailure(msg)) {
+        hints.push({
+          type: 'CORS',
+          confidence: 'medium',
+          reason: 'Cross-origin request failed without response (possible CORS/network issue).',
+        });
+      }
+    }
+  } catch {
+    // ignore URL parsing failures, network fallback hint below covers this
+  }
+
+  if (hints.length === 0) {
+    hints.push({
+      type: 'NETWORK',
+      confidence: 'medium',
+      reason: 'Request could not reach the fingerprint edge endpoint.',
+    });
+  }
+
+  return hints;
+}
+
+function networkErrorMessageFromHints(hints: FetchFailureHint[]): string {
+  // Deterministic precedence for high-confidence hints.
+  const hintPriority: Record<FetchFailureHintType, number> = {
+    MIXED_CONTENT: 1,
+    TLS: 2,
+    DNS: 3,
+    CORS: 4,
+    NETWORK: 5,
+  };
+  const highHint = hints
+    .filter(h => h.confidence === 'high')
+    .sort((a, b) => hintPriority[a.type] - hintPriority[b.type])[0];
+  switch (highHint?.type) {
+    case 'MIXED_CONTENT':
+      return 'Network error: HTTPS page cannot call an HTTP fingerprint endpoint. Use an HTTPS edge URL.';
+    case 'CORS':
+      return 'Network error: fingerprint endpoint may be blocked by CORS policy. Check allowed origins.';
+    case 'TLS':
+      return 'Network error: TLS/certificate handshake failed for the fingerprint endpoint.';
+    case 'DNS':
+      return 'Network error: fingerprint endpoint hostname could not be resolved (DNS failure).';
+    default:
+      return 'Network error. Please check your connection and edge endpoint settings, then try again.';
+  }
+}
+
+async function edgeGet(path: string, authorization: string): Promise<Response> {
+  const targetUrl = buildEdgeUrl(path);
+  try {
+    return await fetch(targetUrl, {
       method: 'GET',
       headers: { Authorization: authorization, apikey: supabaseAnonKey },
     });
   } catch (err) {
-    fpLog('fetch-error', { path, err: String(err) });
+    const hints = inferFetchFailureHints(err, targetUrl);
+    fpLog('fetch-error', {
+      path,
+      targetUrl: sanitizeUrlForLog(targetUrl),
+      err: String(err),
+      hints,
+    });
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       throw new FingerprintError('OFFLINE', 'No internet connection. Use manual attendance instead.', false);
     }
-    throw new FingerprintError('NETWORK_ERROR', 'Network error. Please check your connection and try again.', true);
+    throw new FingerprintError('NETWORK_ERROR', networkErrorMessageFromHints(hints), true);
   }
 }
 
 async function edgePost(path: string, authorization: string, body: unknown): Promise<Response> {
+  const targetUrl = buildEdgeUrl(path);
   try {
-    return await fetch(`${EDGE_FN_BASE}/${path}`, {
+    return await fetch(targetUrl, {
       method: 'POST',
       headers: { Authorization: authorization, apikey: supabaseAnonKey, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
   } catch (err) {
-    fpLog('fetch-error', { path, err: String(err) });
+    const hints = inferFetchFailureHints(err, targetUrl);
+    fpLog('fetch-error', {
+      path,
+      targetUrl: sanitizeUrlForLog(targetUrl),
+      err: String(err),
+      hints,
+    });
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       throw new FingerprintError('OFFLINE', 'No internet connection. Use manual attendance instead.', false);
     }
-    throw new FingerprintError('NETWORK_ERROR', 'Network error. Please check your connection and try again.', true);
+    throw new FingerprintError('NETWORK_ERROR', networkErrorMessageFromHints(hints), true);
   }
 }
 
@@ -150,7 +306,7 @@ export async function registerStudentFingerprint(student: LocalStudent, _userId:
   assertPrerequisites();
   fpLog('register:start', { studentId: student.serverId });
 
-  const auth = await getAuthHeader();
+  const auth = await getAuthHeader(_userId);
 
   // 1. Fetch registration challenge from the server
   const optRes = await edgeGet(
