@@ -26,6 +26,14 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
+async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
+  try {
+    return await req.json();
+  } catch {
+    return {};
+  }
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -53,8 +61,11 @@ serve(async (req: Request) => {
     }
 
     const url = new URL(req.url);
-    const studentId = url.searchParams.get('studentId');
-    const studentName = url.searchParams.get('studentName') ?? 'Student';
+    const body = req.method === 'POST' ? await readJsonBody(req) : {};
+    const studentId = url.searchParams.get('studentId')
+      ?? (typeof body.studentId === 'string' ? body.studentId : null);
+    const studentName = url.searchParams.get('studentName')
+      ?? (typeof body.studentName === 'string' ? body.studentName : 'Student');
 
     if (!studentId) {
       return new Response(JSON.stringify({ error: 'studentId is required' }), {

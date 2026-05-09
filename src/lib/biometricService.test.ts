@@ -191,6 +191,26 @@ describe('registerStudentFingerprint', () => {
     await assert.doesNotReject(() => registerStudentFingerprint(STUDENT, 'user-1'));
   });
 
+  test('falls back to POST when GET options request fails to fetch', async () => {
+    let optionsAttempts = 0;
+    mockFetch(async (url, init) => {
+      if (url.includes('generate-registration-options')) {
+        optionsAttempts += 1;
+        if ((init?.method ?? 'GET') === 'GET') {
+          throw new TypeError('Failed to fetch');
+        }
+        return respondJson(200, { challenge: 'abc', rp: {}, user: {}, pubKeyCredParams: [] });
+      }
+      if (url.includes('verify-registration')) {
+        return respondJson(200, { verified: true });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    await assert.doesNotReject(() => registerStudentFingerprint(STUDENT, 'user-1'));
+    assert.equal(optionsAttempts, 2);
+  });
+
   test('throws FingerprintError NETWORK_ERROR when options fetch fails', async () => {
     mockFetch(async () => { throw new TypeError('Failed to fetch'); });
 

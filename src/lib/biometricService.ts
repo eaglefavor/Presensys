@@ -264,6 +264,18 @@ async function edgePost(path: string, authorization: string, body: unknown): Pro
   }
 }
 
+async function edgeOptions(path: string, authorization: string, payload: Record<string, string>): Promise<Response> {
+  const query = new URLSearchParams(payload).toString();
+  try {
+    return await edgeGet(`${path}?${query}`, authorization);
+  } catch (err) {
+    const fpErr = err instanceof FingerprintError ? err : null;
+    if (!fpErr || fpErr.code !== 'NETWORK_ERROR') throw err;
+    fpLog('options:get-fallback-post', { path });
+    return edgePost(path, authorization, payload);
+  }
+}
+
 function mapEdgeError(status: number, body: Record<string, unknown>, phase: string): FingerprintError {
   const msg = typeof body.error === 'string' ? body.error : 'Unexpected server error.';
   fpLog(`${phase}:edge-error`, { status, msg });
@@ -309,10 +321,10 @@ export async function registerStudentFingerprint(student: LocalStudent, _userId:
   const auth = await getAuthHeader(_userId);
 
   // 1. Fetch registration challenge from the server
-  const optRes = await edgeGet(
-    `generate-registration-options?studentId=${encodeURIComponent(student.serverId)}&studentName=${encodeURIComponent(student.name)}`,
-    auth,
-  );
+  const optRes = await edgeOptions('generate-registration-options', auth, {
+    studentId: student.serverId,
+    studentName: student.name,
+  });
   if (!optRes.ok) {
     throw mapEdgeError(optRes.status, await optRes.json().catch(() => ({})), 'register:options');
   }
@@ -362,10 +374,9 @@ export async function verifyStudentFingerprint(student: LocalStudent): Promise<v
   const auth = await getAuthHeader();
 
   // 1. Fetch authentication challenge from the server
-  const optRes = await edgeGet(
-    `generate-authentication-options?studentId=${encodeURIComponent(student.serverId)}`,
-    auth,
-  );
+  const optRes = await edgeOptions('generate-authentication-options', auth, {
+    studentId: student.serverId,
+  });
   if (optRes.status === 404) {
     fpLog('verify:no-credential', { studentId: student.serverId });
     throw new FingerprintError('CREDENTIAL_NOT_FOUND', 'No fingerprint registered for this student.', false);
