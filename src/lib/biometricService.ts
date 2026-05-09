@@ -264,12 +264,32 @@ async function edgePost(path: string, authorization: string, body: unknown): Pro
   }
 }
 
-async function edgeOptions(path: string, authorization: string, payload: Record<string, string>): Promise<Response> {
-  const query = new URLSearchParams(payload).toString();
+/**
+ * Fetches WebAuthn options from an edge function.
+ *
+ * Primary path uses GET with query params for backward compatibility.
+ * If that request fails with a transport-level NETWORK_ERROR, we retry once
+ * using POST with a JSON payload to tolerate environments where query-route
+ * edge calls fail to fetch.
+ *
+ * @param path Edge function path (without `/functions/v1` prefix)
+ * @param authorization Bearer authorization header value
+ * @param payload Option parameters sent as query params and POST JSON body
+ */
+async function edgeOptions(path: string, authorization: string, payload: Record<string, unknown>): Promise<Response> {
+  const queryParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(payload)) {
+    if (value !== undefined && value !== null) {
+      queryParams.set(key, String(value));
+    }
+  }
+  const query = queryParams.toString();
   try {
     return await edgeGet(`${path}?${query}`, authorization);
   } catch (err) {
     const fpErr = err instanceof FingerprintError ? err : null;
+    // Only transport/network failures should retry with POST; semantic
+    // server responses (4xx/5xx) are already handled by the caller.
     if (!fpErr || fpErr.code !== 'NETWORK_ERROR') throw err;
     fpLog('options:get-fallback-post', { path });
     return edgePost(path, authorization, payload);

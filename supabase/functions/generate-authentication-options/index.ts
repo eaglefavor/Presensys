@@ -24,11 +24,16 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 };
 
-async function readJsonBody(req: Request): Promise<Record<string, unknown>> {
+async function readJsonBody(req: Request): Promise<{ body: Record<string, unknown>; malformed: boolean }> {
   try {
-    return await req.json();
-  } catch {
-    return {};
+    const body = await req.json();
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      return { body: body as Record<string, unknown>, malformed: false };
+    }
+    return { body: {}, malformed: true };
+  } catch (err) {
+    console.warn('generate-authentication-options: invalid JSON body', err);
+    return { body: {}, malformed: true };
   }
 }
 
@@ -58,7 +63,16 @@ serve(async (req: Request) => {
     }
 
     const url = new URL(req.url);
-    const body = req.method === 'POST' ? await readJsonBody(req) : {};
+    const parsedBody = req.method === 'POST'
+      ? await readJsonBody(req)
+      : { body: {}, malformed: false };
+    if (parsedBody.malformed) {
+      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    const body = parsedBody.body;
     const studentId = url.searchParams.get('studentId')
       ?? (typeof body.studentId === 'string' ? body.studentId : null);
     if (!studentId) {

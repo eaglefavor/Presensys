@@ -211,8 +211,12 @@ describe('registerStudentFingerprint', () => {
     assert.equal(optionsAttempts, 2);
   });
 
-  test('throws FingerprintError NETWORK_ERROR when options fetch fails', async () => {
-    mockFetch(async () => { throw new TypeError('Failed to fetch'); });
+  test('throws FingerprintError when both GET and POST options requests fail to fetch', async () => {
+    let attempts = 0;
+    mockFetch(async () => {
+      attempts += 1;
+      throw new TypeError('Failed to fetch');
+    });
 
     await assert.rejects(
       () => registerStudentFingerprint(STUDENT, 'user-1'),
@@ -220,6 +224,7 @@ describe('registerStudentFingerprint', () => {
         assert.ok(err instanceof FingerprintError);
         // Either NETWORK_ERROR or OFFLINE depending on navigator.onLine
         assert.ok(['NETWORK_ERROR', 'OFFLINE'].includes(err.code));
+        assert.equal(attempts, 2);
         return true;
       },
     );
