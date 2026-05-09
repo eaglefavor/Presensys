@@ -171,8 +171,8 @@ export class PresensysDB extends Dexie {
   constructor() {
     super('PresensysDB');
 
-    const dataSchema = {
-      semesters: '++id, &serverId, name, startDate, endDate, isActive, synced, isDeleted, userId, updatedAt',
+    const dataSchemaV18 = {
+      semesters: '++id, &serverId, name, startDate, isActive, synced, isDeleted, userId, updatedAt',
       students: '++id, &serverId, &regNumber, name, synced, isDeleted, userId, updatedAt',
       courses: '++id, &serverId, semesterId, code, dayOfWeek, synced, isDeleted, userId, updatedAt',
       enrollments: '++id, &serverId, studentId, courseId, [studentId+courseId], synced, isDeleted, userId, updatedAt',
@@ -182,12 +182,16 @@ export class PresensysDB extends Dexie {
             courseSchedules: '++id, &serverId, courseId, dayOfWeek, synced, isDeleted, userId, updatedAt',
       studentCredentials: '++id, &serverId, studentId, credentialId, synced, isDeleted, userId, updatedAt',
     };
+    const dataSchemaV19 = {
+      ...dataSchemaV18,
+      semesters: '++id, &serverId, name, startDate, endDate, isActive, synced, isDeleted, userId, updatedAt',
+    };
 
     // Version 11 – initial index fix
-    this.version(11).stores(dataSchema);
+    this.version(11).stores(dataSchemaV18);
 
     // Version 12 – one-time clear to resolve UUID conflicts (already deployed; keep for users upgrading from v11)
-    this.version(12).stores(dataSchema).upgrade(async (tx) => {
+    this.version(12).stores(dataSchemaV18).upgrade(async (tx) => {
       console.log('DB Upgrade (v12): Clearing local data to resolve UUID conflicts.');
       const tables = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords', 'studentCredentials'];
       await Promise.all(tables.map(t => tx.table(t).clear()));
@@ -197,43 +201,43 @@ export class PresensysDB extends Dexie {
 
     // Version 13 – add outbox table (non-destructive; data rows unchanged)
     this.version(13).stores({
-      ...dataSchema,
+      ...dataSchemaV18,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 14 - add dayOfWeek, time, lecturers to courses
     this.version(14).stores({
-      ...dataSchema,
+      ...dataSchemaV18,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 15 - add lecturers table and lecturerId to attendanceSessions
     this.version(15).stores({
-      ...dataSchema,
+      ...dataSchemaV18,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 16 – add courseSchedules table (flexible multi-slot schedule per course)
     this.version(16).stores({
-      ...dataSchema,
+      ...dataSchemaV18,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 17 - unused
     this.version(17).stores({
-      ...dataSchema,
+      ...dataSchemaV18,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 18 - webauthn credentials
     this.version(18).stores({
-      ...dataSchema,
+      ...dataSchemaV18,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
     // Version 19 - add semesters.endDate index for orderBy queries
     this.version(19).stores({
-      ...dataSchema,
+      ...dataSchemaV19,
       outbox: '++id, tableName, serverId, [tableName+serverId], createdAt, done, attempts',
     });
 
