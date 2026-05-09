@@ -67,10 +67,17 @@ function assertPrerequisites(): void {
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
-async function getAuthHeader(): Promise<string> {
+async function getAuthHeader(expectedUserId?: string): Promise<string> {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session) {
     throw new FingerprintError('UNKNOWN', 'Session expired. Please log in again.', false);
+  }
+  if (
+    expectedUserId &&
+    session.user?.id &&
+    session.user.id !== expectedUserId
+  ) {
+    throw new FingerprintError('UNKNOWN', 'Authenticated user mismatch. Please log in again.', false);
   }
   return `Bearer ${session.access_token}`;
 }
@@ -297,10 +304,9 @@ function mapBrowserError(err: unknown, phase: 'register' | 'authenticate'): Fing
  */
 export async function registerStudentFingerprint(student: LocalStudent, _userId: string): Promise<void> {
   assertPrerequisites();
-  if (!_userId) fpLog('register:missing-user-id');
   fpLog('register:start', { studentId: student.serverId });
 
-  const auth = await getAuthHeader();
+  const auth = await getAuthHeader(_userId);
 
   // 1. Fetch registration challenge from the server
   const optRes = await edgeGet(
