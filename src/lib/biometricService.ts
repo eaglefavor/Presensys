@@ -106,9 +106,20 @@ function sanitizeUrlForLog(url: string): string {
   }
 }
 
+function isLikelyGenericFetchFailure(msg: string): boolean {
+  // Browser wording varies (e.g. Chrome "Failed to fetch", Firefox "NetworkError when attempting to fetch resource").
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('networkerror') ||
+    msg.includes('network error') ||
+    msg.includes('fetch failed') ||
+    msg.includes('load failed')
+  );
+}
+
 function inferFetchFailureHints(err: unknown, targetUrl: string): FetchFailureHint[] {
   const hints: FetchFailureHint[] = [];
-  const msg = String(err).toLowerCase();
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
 
   if (msg.includes('cors') || msg.includes('access-control-allow-origin')) {
     hints.push({
@@ -152,7 +163,7 @@ function inferFetchFailureHints(err: unknown, targetUrl: string): FetchFailureHi
           confidence: 'high',
           reason: 'HTTPS page cannot call an insecure HTTP endpoint.',
         });
-      } else if (target.origin !== page.origin && msg.includes('failed to fetch')) {
+      } else if (target.origin !== page.origin && isLikelyGenericFetchFailure(msg)) {
         hints.push({
           type: 'CORS',
           confidence: 'medium',
@@ -176,7 +187,17 @@ function inferFetchFailureHints(err: unknown, targetUrl: string): FetchFailureHi
 }
 
 function networkErrorMessageFromHints(hints: FetchFailureHint[]): string {
-  const highHint = hints.find(h => h.confidence === 'high');
+  // Deterministic precedence for high-confidence hints.
+  const hintPriority: Record<FetchFailureHintType, number> = {
+    MIXED_CONTENT: 1,
+    TLS: 2,
+    DNS: 3,
+    CORS: 4,
+    NETWORK: 5,
+  };
+  const highHint = hints
+    .filter(h => h.confidence === 'high')
+    .sort((a, b) => hintPriority[a.type] - hintPriority[b.type])[0];
   switch (highHint?.type) {
     case 'MIXED_CONTENT':
       return 'Network error: HTTPS page cannot call an HTTP fingerprint endpoint. Use an HTTPS edge URL.';
