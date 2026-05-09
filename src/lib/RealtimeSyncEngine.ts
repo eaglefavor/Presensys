@@ -316,6 +316,9 @@ export class RealtimeSyncEngine {
       })),
       pull('courses', db.courses, (c) => ({
         serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
+        dayOfWeek: c.day_of_week ?? c.day,
+        time: c.time,
+        lecturers: c.lecturers,
         userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
       })),
       pull('enrollments', db.enrollments, (e) => ({
@@ -379,6 +382,9 @@ pull('course_schedules', db.courseSchedules, (cs) => ({
         code: item.code,
         title: item.title,
         semester_id: item.semesterId,
+        day: item.dayOfWeek ?? null,
+        time: item.time ?? null,
+        lecturers: item.lecturers ?? null,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
@@ -923,7 +929,17 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       case 'students':
         return { ...base, regNumber: r.reg_number, name: r.name, email: r.email, phone: r.phone };
       case 'courses':
-        return { ...base, code: r.code, title: r.title, semesterId: r.semester_id };
+        return {
+          ...base,
+          code: r.code,
+          title: r.title,
+          semesterId: r.semester_id,
+          dayOfWeek: r.day_of_week ?? r.day,
+          time: r.time,
+          lecturers: r.lecturers,
+        };
+      case 'lecturers':
+        return { ...base, name: r.name };
       case 'course_schedules':
         return { ...base, courseId: r.course_id, dayOfWeek: r.day_of_week, startTime: r.start_time, endTime: r.end_time };
       case 'enrollments':
@@ -935,6 +951,14 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
           ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status,
           // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
           timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
+        };
+      case 'student_credentials':
+        return {
+          ...base,
+          studentId: r.student_id,
+          credentialId: r.credential_id,
+          publicKey: r.public_key,
+          counter: r.counter,
         };
       default:
         return base;

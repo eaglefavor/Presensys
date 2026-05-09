@@ -43,6 +43,35 @@ CREATE TABLE IF NOT EXISTS courses (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS day TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS time TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS lecturers TEXT;
+
+-- 3b. LECTURERS
+CREATE TABLE IF NOT EXISTS lecturers (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT NOT NULL,
+  user_id UUID DEFAULT auth.uid(),
+  is_deleted INTEGER DEFAULT 0,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3c. COURSE SCHEDULES
+CREATE TABLE IF NOT EXISTS course_schedules (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  course_id UUID REFERENCES courses(id) ON DELETE CASCADE NOT NULL,
+  day_of_week TEXT NOT NULL CHECK (day_of_week IN (
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday',
+    'Saturday', 'Sunday', 'Everyday'
+  )),
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  user_id UUID DEFAULT auth.uid(),
+  is_deleted INTEGER DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- 4. ENROLLMENTS
 CREATE TABLE IF NOT EXISTS enrollments (
@@ -67,6 +96,7 @@ CREATE TABLE IF NOT EXISTS attendance_sessions (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+ALTER TABLE attendance_sessions ADD COLUMN IF NOT EXISTS lecturer_id UUID REFERENCES lecturers(id) ON DELETE SET NULL;
 
 -- 6. ATTENDANCE RECORDS
 CREATE TABLE IF NOT EXISTS attendance_records (
@@ -86,6 +116,8 @@ CREATE TABLE IF NOT EXISTS attendance_records (
 ALTER TABLE semesters ENABLE ROW LEVEL SECURITY;
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lecturers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE course_schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attendance_records ENABLE ROW LEVEL SECURITY;
@@ -94,6 +126,8 @@ ALTER TABLE attendance_records ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Users can see their own data" ON semesters;
 DROP POLICY IF EXISTS "Users can see their own data" ON students;
 DROP POLICY IF EXISTS "Users can see their own data" ON courses;
+DROP POLICY IF EXISTS "Users can see their own data" ON lecturers;
+DROP POLICY IF EXISTS "Users can see their own data" ON course_schedules;
 DROP POLICY IF EXISTS "Users can see their own data" ON enrollments;
 DROP POLICY IF EXISTS "Users can see their own data" ON attendance_sessions;
 DROP POLICY IF EXISTS "Users can see their own data" ON attendance_records;
@@ -101,6 +135,8 @@ DROP POLICY IF EXISTS "Users can see their own data" ON attendance_records;
 CREATE POLICY "Users can see their own data" ON semesters FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can see their own data" ON students FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can see their own data" ON courses FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can see their own data" ON lecturers FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can see their own data" ON course_schedules FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can see their own data" ON enrollments FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can see their own data" ON attendance_sessions FOR ALL USING (auth.uid() = user_id);
 CREATE POLICY "Users can see their own data" ON attendance_records FOR ALL USING (auth.uid() = user_id);
@@ -116,6 +152,12 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'courses') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE courses;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'lecturers') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE lecturers;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'course_schedules') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE course_schedules;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'enrollments') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE enrollments;
