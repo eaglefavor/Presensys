@@ -163,7 +163,7 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         let lastError = null;
 
         // Define a fallback queue of models based on the initially selected model
-        let modelQueue: string[] = [modelName];
+        const modelQueue: string[] = [modelName];
 
         // Add fallbacks to the queue ensuring uniqueness
         const addFallbacks = (fallbacks: string[]) => {

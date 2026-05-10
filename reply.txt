@@ -1,0 +1,8 @@
+To answer your question directly: **Binary Encoding** (along with the Bundle/Batching layer) is significantly more feasible to integrate into the current Presensys infrastructure first.
+
+Here's why:
+
+1. **Application-Layer Control**: Binary Encoding (using Zstandard or Protobuf) and Request Batching can be implemented entirely within the application layer. We can modify `src/lib/RealtimeSyncEngine.ts` to compress and batch requests before sending them, and we can easily deploy a custom Edge Function (via Supabase) to decompress and process the bundle on the server side. This is fully within our control and requires no changes to the underlying infrastructure.
+2. **Infrastructure Constraints**: Implementing **QUIC Transport (0-RTT)** requires deep infrastructure support. Supabase currently relies on standard HTTPS and WebSockets routed through load balancers and CDNs (like Cloudflare or AWS). Modifying these core networking protocols to support custom QUIC endpoints is generally not feasible within a managed database-as-a-service environment like Supabase without significant workarounds or dedicated proxies.
+
+Therefore, starting with the **Binary Protocol Serialization** and the **"Bundle" Transport Layer** (Phase 1 & Phase 4 of your proposal, implemented via Edge Functions) will yield immediate, massive performance improvements on 2G networks without hitting infrastructure roadblocks.
