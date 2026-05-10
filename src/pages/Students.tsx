@@ -152,6 +152,18 @@ export default function Students() {
     setShowScanner(true);
   };
 
+  const addManualRow = () => setManualRows([...manualRows, {name: '', regNumber: ''}]);
+  const updateManualRow = (index: number, field: 'name' | 'regNumber', value: string) => {
+    const newRows = [...manualRows];
+    newRows[index][field] = value;
+    if (field === 'regNumber') {
+      if (value.length > 0 && !/^\d*$/.test(value)) return;
+      if (value.length === 10) newRows[index].error = undefined;
+      else if (value.length > 0) newRows[index].error = "Must be 10 digits";
+    }
+    setManualRows(newRows);
+  };
+
   const handleScanSuccess = useCallback((decodedText: string) => {
     const regNoMatch = decodedText.match(/(\d{10})/); 
     const finalValue = regNoMatch ? regNoMatch[0] : decodedText;
@@ -181,18 +193,7 @@ export default function Students() {
     setImportMode('paste'); 
   };
 
-  const addManualRow = () => setManualRows([...manualRows, {name: '', regNumber: ''}]);
   
-  const updateManualRow = (index: number, field: 'name' | 'regNumber', value: string) => {
-    const newRows = [...manualRows];
-    newRows[index][field] = value;
-    if (field === 'regNumber') {
-      if (value.length > 0 && !/^\d*$/.test(value)) return;
-      if (value.length === 10) newRows[index].error = undefined;
-      else if (value.length > 0) newRows[index].error = "Must be 10 digits";
-    }
-    setManualRows(newRows);
-  };
 
   const removeManualRow = (index: number) => {
     if (manualRows.length > 1) {
@@ -240,8 +241,8 @@ export default function Students() {
       const seenRegs = new Set();
       let hasErrors = false;
 
-      for (const s of dataToSave) {
-        s.regNumber = s.regNumber.replace(/\s/g, '');
+      const cleanedData = dataToSave.map(s => ({ ...s, regNumber: s.regNumber.replace(/\s/g, '') }));
+      for (const s of cleanedData) {
         if (!/^\d{10}$/.test(s.regNumber)) {
           toast.error(`Invalid Reg Number: ${s.regNumber}. Must be exactly 10 digits.`);
           hasErrors = true; break;
@@ -418,23 +419,23 @@ export default function Students() {
                   <div className="modal-body px-4 text-center">
                     {!isEditing ? (
                       <>
-                        <div className="avatar-circle-lg mx-auto mb-3 shadow-lg text-white fw-black" style={{ backgroundColor: stringToColor(selectedStudent.name) }}>{getInitials(selectedStudent.name)}</div>
+                        <div className="avatar-circle-lg mx-auto mb-3 shadow-sm fw-black" style={{ backgroundColor: 'var(--primary-blue)', color: '#cfb53b', border: '3px solid #cfb53b' }}>{getInitials(selectedStudent.name)}</div>
                         <h4 className="fw-black mb-1" style={{ color: 'var(--primary-blue)' }}>{selectedStudent.name}</h4>
                         <p className="xx-small fw-bold text-muted font-monospace tracking-widest mb-4">{selectedStudent.regNumber}</p>
                         
                         <div className="row g-2 mb-4 text-start">
-                          <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><GraduationCap size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">STATUS</div><div className="small fw-black text-dark">ACTIVE</div></div></div>
-                          <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><Calendar size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">JOINED</div><div className="small fw-black text-dark">{selectedStudent.createdAt ? new Date(selectedStudent.createdAt).getFullYear() : '—'}</div></div></div>
-                          <div className="col-4"><div className="bg-light p-3 rounded-3 text-center"><History size={20} className="text-primary mb-1 mx-auto" /><div className="xx-small fw-bold text-muted">ATTEND</div><div className="small fw-black text-dark">{selectedStudentStats ? `${selectedStudentStats.percentage}%` : '…'}</div></div></div>
+                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><GraduationCap size={20} className="mb-1 mx-auto" style={{ color: '#cfb53b' }} /><div className="xx-small fw-bold text-muted">STATUS</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>ACTIVE</div></div></div>
+                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><Calendar size={20} className="mb-1 mx-auto" style={{ color: '#cfb53b' }} /><div className="xx-small fw-bold text-muted">JOINED</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>{selectedStudent.createdAt ? new Date(selectedStudent.createdAt).getFullYear() : '—'}</div></div></div>
+                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><History size={20} className="mb-1 mx-auto" style={{ color: '#cfb53b' }} /><div className="xx-small fw-bold text-muted">ATTEND</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>{selectedStudentStats ? `${selectedStudentStats.percentage}%` : '…'}</div></div></div>
                         </div>
 
                         <div className="d-flex flex-column gap-2">
-                          <button className="btn btn-primary-unified w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={handleEditClick}><Edit2 size={18} className="me-2" /> Edit Student</button>
+                          <button className="btn btn-primary-unified w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={handleEditClick}><Edit2 size={18} className="me-2" style={{ color: '#cfb53b' }} /> Edit Student</button>
                           <button
-                            className="btn btn-outline-secondary w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
+                            className="btn btn-outline-primary w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
                             onClick={() => setShowFingerprintModal(true)}
                           >
-                            <FingerprintPattern size={18} />
+                            <FingerprintPattern size={18} style={{ color: '#cfb53b' }} />
                             { 'Register/Update WebAuthn' }
                           </button>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
