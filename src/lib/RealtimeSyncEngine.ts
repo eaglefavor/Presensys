@@ -495,7 +495,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     updatedAt?: string;
   }>(
     tableName: TableName,
-    table: any,
+    table: unknown,
     mapFn: (item: T) => Record<string, unknown> | null,
   ) {
     const unsynced: T[] = await table.filter((i: T) => i.synced === 0).toArray();
@@ -530,7 +530,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
         .select('id')
         .in('id', tombstones.map(t => t.serverId));
 
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set((serverRows ?? []).map((r: { id: string }) => r.id));
 
       // Records that were created and deleted entirely offline → just purge locally
       const toPurgeLocally = tombstones.filter(t => !existsOnServer.has(t.serverId));
@@ -565,7 +565,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     updatedAt?: string;
   }>(
     tableName: TableName,
-    table: any,
+    table: unknown,
     records: T[],
     mapFn: (item: T) => Record<string, unknown> | null,
     outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }>,
@@ -647,7 +647,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       const { data: serverRows } = await supabase
         .from('students').select('id')
         .in('id', tombstones.map(t => t.serverId));
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set((serverRows ?? []).map((r: { id: string }) => r.id));
 
       const toPurge = tombstones.filter(t => !existsOnServer.has(t.serverId));
       if (toPurge.length > 0) await db.students.bulkDelete(toPurge.map(t => t.id!));
@@ -811,7 +811,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     for (const dexieName of Object.values(tableMapping)) {
       const table = (db as any)[dexieName];
       const toPurge: number[] = await table
-        .filter((r: any) => r.isDeleted === 1 && r.synced === 1)
+        .filter((r: { id: string }) => r.isDeleted === 1 && r.synced === 1)
         .primaryKeys();
       if (toPurge.length > 0) await table.bulkDelete(toPurge);
     }
@@ -882,7 +882,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       });
   }
 
-  private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
+  private async handleRealtimeEvent(tableName: string, table: unknown, payload: unknown) {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
