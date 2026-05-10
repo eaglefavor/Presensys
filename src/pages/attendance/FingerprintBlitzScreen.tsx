@@ -142,7 +142,12 @@ export default function FingerprintBlitzScreen({
       }
     } catch (err: unknown) {
       console.error("Scan failed", err);
-      setScanError((err as Error).message || "Verification failed. Try again.");
+      const e = err as Error;
+      if (e.name === "NotAllowedError") {
+        setScanError("Fingerprint not found on this device. If browser data was cleared, please delete and re-register the fingerprint for this student.");
+      } else {
+        setScanError(e.message || "Verification failed. Try again.");
+      }
     } finally {
       setIsScanning(false);
     }
