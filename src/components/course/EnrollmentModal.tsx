@@ -41,9 +41,9 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
         setOriginalEnrollments(new Set(ids));
       });
     } else {
-/* eslint-disable react-hooks/set-state-in-effect */
+
       setLocalEnrollments(new Set());
-      /* eslint-enable react-hooks/set-state-in-effect */
+
       setOriginalEnrollments(new Set());
     }
   }, [show, courseId]);
@@ -92,9 +92,9 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
 
   // Reset modal page when filters or search change
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
+
       setModalPage(1);
-      /* eslint-enable react-hooks/set-state-in-effect */
+
   }, [debouncedSearch, enrollFilter]);
 
   const handleToggleLocal = (studentId: string) => {

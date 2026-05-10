@@ -42,11 +42,7 @@ export default function Admin() {
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<string | null>(null);
   const { user: currentUser } = useAuthStore();
 
-  useEffect(() => {
-    fetchCodes();
-    fetchStats();
-    fetchUsers();
-  }, []);
+
 
   async function fetchCodes() {
     const { data, error } = await supabase
@@ -82,7 +78,7 @@ export default function Admin() {
     if (error) {
       toast.error('Failed to generate code: ' + error.message);
     } else {
-      await fetchCodes();
+      await     fetchCodes();
     }
     setLoading(false);
   };
@@ -97,6 +93,14 @@ export default function Admin() {
     }
     setLoadingUsers(false);
   };
+
+  useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchCodes();
+    fetchStats();
+    fetchUsers();
+
+  }, []);
 
   async function deleteUser(id: string) {
     const { data, error } = await supabase.rpc('delete_user', { target_user_id: id });
@@ -121,7 +125,7 @@ export default function Admin() {
       toast.error('Failed to delete code.');
       return;
     }
-    await fetchCodes();
+    await     fetchCodes();
   };
 
   function copyToClipboard(code: string, id: number) {

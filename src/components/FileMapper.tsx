@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { read, utils } from 'xlsx';
@@ -46,6 +47,7 @@ export default function FileMapper({ file, onComplete, onCancel }: FileMapperPro
         name: row[nameIdx],
         regNumber: row[regIdx]
       }));
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreviewData(preview);
     }
   }, [mapping, headers, rawData]);

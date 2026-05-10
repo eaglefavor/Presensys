@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   db,
   type LocalSemester,
@@ -221,10 +222,11 @@ export class RealtimeSyncEngine {
     // If a table has never been pulled, use epoch-zero to get everything.
     const EPOCH = new Date(0).toISOString();
 
-    const pull = async (
+
+            const pull = async (
       tableName: TableName,
       dexieTable: any,
-      mapToLocal: (serverRow: any) => Record<string, unknown>,
+            mapToLocal: (serverRow: any) => Record<string, unknown>,
     ): Promise<boolean> => {
       const cursorKey = TABLE_CURSOR_KEY(tableName);
       const cursor = localStorage.getItem(cursorKey) ?? EPOCH;
@@ -404,7 +406,7 @@ pull('course_schedules', db.courseSchedules, (cs) => ({
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
       };
-    });
+    }, 'student_id,course_id');
 
     // Push lecturers
     await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
@@ -446,7 +448,7 @@ pull('course_schedules', db.courseSchedules, (cs) => ({
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
       };
-    });
+    }, 'session_id,student_id');
 
     // Push course schedules
 await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules, (item) => {
@@ -474,7 +476,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
       };
-    });
+    }, 'credential_id');
   }
 
   /**
@@ -487,6 +489,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
    *    to prevent an infinite retry loop for permanently broken items.
    * 3. Foreign-key validity is checked via mapFn returning null (unchanged).
    */
+
   private async pushTable<T extends {
     id?: number;
     synced: number;
@@ -497,6 +500,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     tableName: TableName,
     table: any,
     mapFn: (item: T) => Record<string, unknown> | null,
+    conflictColumns?: string
   ) {
     const unsynced: T[] = await table.filter((i: T) => i.synced === 0).toArray();
     if (unsynced.length === 0) return;
@@ -530,7 +534,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
         .select('id')
         .in('id', tombstones.map(t => t.serverId));
 
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+                  const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
 
       // Records that were created and deleted entirely offline → just purge locally
       const toPurgeLocally = tombstones.filter(t => !existsOnServer.has(t.serverId));
@@ -548,17 +552,18 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       // Records that exist on server → push the soft-delete
       const tombstonesToPush = tombstones.filter(t => existsOnServer.has(t.serverId));
       if (tombstonesToPush.length > 0) {
-        await this.executeUpsert(tableName, table, tombstonesToPush, mapFn, outboxAttempts);
+        await this.executeUpsert(tableName, table, tombstonesToPush, mapFn, outboxAttempts, conflictColumns);
       }
     }
 
     // ── Push live records ─────────────────────────────────────────────────────
     if (liveRecords.length > 0) {
-      await this.executeUpsert(tableName, table, liveRecords, mapFn, outboxAttempts);
+      await this.executeUpsert(tableName, table, liveRecords, mapFn, outboxAttempts, conflictColumns);
     }
   }
 
   /** Execute the actual Supabase upsert and handle success / failure bookkeeping. */
+
   private async executeUpsert<T extends {
     id?: number;
     serverId: string;
@@ -569,6 +574,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     records: T[],
     mapFn: (item: T) => Record<string, unknown> | null,
     outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }>,
+    conflictColumns?: string
   ) {
     const payload = records.map(mapFn).filter((p): p is Record<string, unknown> => p !== null);
     if (payload.length === 0) {
@@ -582,19 +588,52 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     const { data, error } = await supabase.from(tableName).upsert(payload).select();
 
     if (error) {
-      console.error(`Sync: Error pushing to ${tableName}`, error);
-      // Increment attempt counter for each failed record
-      for (const record of records) {
-        const ob = outboxAttempts.get(record.serverId);
-        if (ob) {
-          await db.outbox.update(ob.id, { attempts: ob.entry.attempts + 1 }).catch(() => {});
+      if (error.code === '23505' && conflictColumns) {
+        // Unique constraint violation. Fallback to 1-by-1 upsert using the specific conflict columns,
+        // omitting 'id' to adopt the canonical server ID if it already exists.
+        for (let i = 0; i < payload.length; i++) {
+          const itemPayload = { ...payload[i] };
+          const originalLocalId = records[i].serverId;
+          delete itemPayload.id; // Allow server to update existing row without ID conflict
+
+          const { data: singleData, error: singleError } = await supabase
+            .from(tableName)
+            .upsert(itemPayload, { onConflict: conflictColumns })
+            .select();
+
+          if (singleError) {
+            console.error(`Sync: Error pushing single record to ${tableName}`, singleError);
+            const ob = outboxAttempts.get(originalLocalId);
+            if (ob) await db.outbox.update(ob.id, { attempts: ob.entry.attempts + 1 }).catch(() => {});
+          } else if (singleData && singleData.length > 0) {
+            const serverItem = singleData[0];
+            const localItem = records.find(u => u.serverId === originalLocalId);
+            if (localItem) {
+              await table.update(localItem.id!, {
+                serverId: serverItem.id,
+                synced: 1,
+                updatedAt: serverItem.updated_at
+              });
+              const ob = outboxAttempts.get(originalLocalId);
+              if (ob) await db.outbox.update(ob.id, { done: 1 }).catch(() => {});
+            }
+          }
+        }
+      } else {
+        console.error(`Sync: Error pushing to ${tableName}`, error);
+        // Increment attempt counter for each failed record
+        for (const record of records) {
+          const ob = outboxAttempts.get(record.serverId);
+          if (ob) {
+            await db.outbox.update(ob.id, { attempts: ob.entry.attempts + 1 }).catch(() => {});
+          }
         }
       }
     } else if (data) {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
 
-      for (const serverItem of data as any[]) {
+                  for (const serverItem of data as any[]) {
         const localItem = records.find(u => u.serverId === serverItem.id);
         if (!localItem) continue;
         updates.push({
@@ -647,7 +686,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       const { data: serverRows } = await supabase
         .from('students').select('id')
         .in('id', tombstones.map(t => t.serverId));
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+                  const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
 
       const toPurge = tombstones.filter(t => !existsOnServer.has(t.serverId));
       if (toPurge.length > 0) await db.students.bulkDelete(toPurge.map(t => t.id!));
@@ -729,7 +768,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     } else if (data) {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
-      for (const serverItem of data as any[]) {
+                  for (const serverItem of data as any[]) {
         const localItem = liveRecords.find(u => u.serverId === serverItem.id);
         if (localItem) {
           updates.push({ key: localItem.id!, changes: { synced: 1, updatedAt: serverItem.updated_at } });
@@ -808,6 +847,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       student_credentials: 'studentCredentials',
     };
 
+
     for (const dexieName of Object.values(tableMapping)) {
       const table = (db as any)[dexieName];
       const toPurge: number[] = await table
@@ -882,7 +922,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       });
   }
 
-  private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
+          private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -918,7 +958,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     }
   }
 
-  private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
+        private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
     const base = {
       serverId: r.id,
       userId: r.user_id,
