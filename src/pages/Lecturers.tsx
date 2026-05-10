@@ -13,7 +13,7 @@ export default function Lecturers() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [form, setForm] = useState({ id: 0, serverId: '', name: '' });
+  const [form, setForm] = useState({ id: 0, serverId: crypto.randomUUID(), name: '' });
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
@@ -28,7 +28,7 @@ export default function Lecturers() {
       const existing = await db.lecturers.filter(l => l.isDeleted !== 1 && l.name.toLowerCase() === form.name.trim().toLowerCase()).first();
       if (existing) { toast.error('A lecturer with this name already exists.'); return; }
       await db.lecturers.add({
-        serverId: '',
+        serverId: crypto.randomUUID(),
         name: form.name.trim(),
         userId: user.id,
         synced: 0,
@@ -38,7 +38,7 @@ export default function Lecturers() {
     }
     setShowAddModal(false);
     setIsEditing(false);
-    setForm({ id: 0, serverId: '', name: '' });
+    setForm({ id: 0, serverId: crypto.randomUUID(), name: '' });
   };
 
   const handleEditClick = (id: number, serverId: string, name: string) => {
@@ -74,7 +74,7 @@ export default function Lecturers() {
           <button
             className="btn btn-primary rounded-circle p-3 shadow-lg d-flex align-items-center justify-content-center"
             style={{ width: '52px', height: '52px' }}
-            onClick={() => { setIsEditing(false); setForm({ id: 0, serverId: '', name: '' }); setShowAddModal(true); }}
+            onClick={() => { setIsEditing(false); setForm({ id: 0, serverId: crypto.randomUUID(), name: '' }); setShowAddModal(true); }}
           >
             <Plus size={24} />
           </button>

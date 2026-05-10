@@ -165,7 +165,7 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
           if (brandNewStudentIds.length > 0) {
             await db.enrollments.bulkAdd(
               brandNewStudentIds.map(studentId => ({
-                serverId: '',
+                serverId: crypto.randomUUID(),
                 studentId,
                 courseId,
                 userId: user.id,

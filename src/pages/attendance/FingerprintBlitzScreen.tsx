@@ -99,7 +99,7 @@ export default function FingerprintBlitzScreen({
         await db.attendanceRecords.update(existing.id!, { status: 'present', isDeleted: 0, synced: 0, timestamp: now });
       } else {
         await db.attendanceRecords.add({
-          serverId: '',
+          serverId: crypto.randomUUID(),
           sessionId: activeSessionId,
           studentId: student.serverId,
           status: 'present',
