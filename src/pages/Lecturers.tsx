@@ -42,7 +42,7 @@ export default function Lecturers() {
   };
 
   const handleEditClick = (id: number, serverId: string, name: string) => {
-    setForm({ id, serverId, name });
+    setForm({ id, serverId: serverId as ReturnType<typeof crypto.randomUUID>, name });
     setIsEditing(true);
     setShowAddModal(true);
   };

@@ -195,7 +195,7 @@ export default function Courses() {
 
   const handleEditClick = (course: import('../db/db').Course) => {
     const existingSlots = allSchedules?.filter(s => s.courseId === course.serverId) ?? [];
-    setCourseForm({ id: course.id || 0, serverId: course.serverId, code: course.code, title: course.title, lecturers: course.lecturers || '' });
+    setCourseForm({ id: course.id || 0, serverId: course.serverId as ReturnType<typeof crypto.randomUUID>, code: course.code, title: course.title, lecturers: course.lecturers || '' });
     setSlots(existingSlots.map(s => ({
       key: s.serverId,
       serverId: s.serverId,
