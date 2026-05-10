@@ -43,7 +43,7 @@ const LS_LAST_SYNCED_KEY = 'sync_last_synced_at';
 const MAX_OUTBOX_ATTEMPTS = 5;
 
 /** Max rows per pull page — avoids Supabase's 1 000-row default cap. */
-const PULL_PAGE_SIZE = 500;
+// const PULL_PAGE_SIZE = 500;
 
 /** Network-aware debounce (ms) before a triggered sync fires. */
 const DEBOUNCE_MAP: Record<string, number> = {
@@ -217,144 +217,112 @@ export class RealtimeSyncEngine {
   private async pullChanges() {
     if (!this.userId) return;
 
-    // Each table has its own cursor (ISO string from max(updated_at) of last pull).
-    // If a table has never been pulled, use epoch-zero to get everything.
     const EPOCH = new Date(0).toISOString();
+    // PULL_PAGE_SIZE is no longer needed since we use Edge Function
 
-    const pull = async (
-      tableName: TableName,
-      dexieTable: any,
-      mapToLocal: (serverRow: any) => Record<string, unknown>,
-    ): Promise<boolean> => {
-      const cursorKey = TABLE_CURSOR_KEY(tableName);
-      const cursor = localStorage.getItem(cursorKey) ?? EPOCH;
-      const isFreshSync = cursor === EPOCH;
+    const cursors: Record<string, string> = {};
+    const tableNames: TableName[] = [
+      'semesters', 'students', 'courses', 'enrollments', 'attendance_sessions',
+      'lecturers', 'attendance_records', 'course_schedules', 'student_credentials'
+    ];
 
-      let offset = 0;
-      let maxUpdatedAt = '';
+    for (const t of tableNames) {
+      cursors[t] = localStorage.getItem(TABLE_CURSOR_KEY(t)) ?? EPOCH;
+    }
 
-      while (true) {
-        let query = supabase
-          .from(tableName)
-          .select('*')
-          .eq('user_id', this.userId)
-          .gt('updated_at', cursor)
-          .order('updated_at', { ascending: true })
-          .range(offset, offset + PULL_PAGE_SIZE - 1);
+    try {
+      const { data: edgeResponse, error } = await supabase.functions.invoke('sync-pull-bundle', {
+        body: { cursors, userId: this.userId }
+      });
 
-        // On a fresh pull, skip tombstones to avoid importing delete-history
-        if (isFreshSync) {
-          query = query.eq('is_deleted', 0);
-        }
+      if (error) throw error;
+      if (!edgeResponse || !edgeResponse.results) return;
 
-        const { data, error } = await query;
+      const processTable = async (
+        tableName: TableName,
+        dexieTable: unknown,
+        mapToLocal: (serverRow: { id: string, updated_at?: string, [key: string]: unknown }) => Record<string, unknown>
+      ) => {
+        const tableData = edgeResponse.results[tableName];
+        if (!tableData || tableData.length === 0) return;
 
-        if (error) {
-          console.error(`Sync: Error pulling ${tableName}`, error);
-          return false;
-        }
+        let maxUpdatedAt = '';
 
-        if (!data || data.length === 0) break;
-
-        await db.transaction('rw', dexieTable, async () => {
-          for (const serverRow of data) {
-            const localItem = await dexieTable.where('serverId').equals(serverRow.id).first();
+        await db.transaction('rw', dexieTable as any, async () => {
+          for (const serverRow of tableData as { id: string, updated_at?: string, [key: string]: unknown }[]) {
+            const localItem = await (dexieTable as any).where('serverId').equals(serverRow.id).first();
             const mapped = mapToLocal(serverRow);
 
             if (localItem) {
               if (localItem.synced === 0) {
-                // Pending local write exists.  Apply Last-Write-Wins: compare timestamps.
                 const serverTs: string = serverRow.updated_at ?? '';
                 const localTs: string = localItem.updatedAt ?? '';
-                if (serverTs <= localTs) {
-                  // Local change is newer or same age → keep local, push will overwrite server
-                  continue;
-                }
-                // Server is strictly newer → server wins, accept server state
+                if (serverTs <= localTs) continue;
               }
-              await dexieTable.update(localItem.id, { ...mapped, synced: 1 });
+              await (dexieTable as any).update(localItem.id!, { ...mapped, synced: 1 });
             } else {
-              await dexieTable.add({ ...mapped, synced: 1 });
+              await (dexieTable as any).add({ ...mapped, synced: 1 });
+            }
+            if (serverRow.updated_at && serverRow.updated_at > maxUpdatedAt) {
+              maxUpdatedAt = serverRow.updated_at;
             }
           }
         });
 
-        // Advance per-table cursor to max(updated_at) from this batch.
-        const batchMax = (data as any[]).reduce((best: string, row: any) => {
-          const ts: string = row.updated_at ?? '';
-          return ts > best ? ts : best;
-        }, '');
-        if (batchMax > maxUpdatedAt) maxUpdatedAt = batchMax;
+        if (maxUpdatedAt) {
+          localStorage.setItem(TABLE_CURSOR_KEY(tableName), maxUpdatedAt);
+        }
+      };
 
-        if (data.length < PULL_PAGE_SIZE) break; // last page
-        offset += PULL_PAGE_SIZE;
-      }
-
-      if (maxUpdatedAt) {
-        localStorage.setItem(cursorKey, maxUpdatedAt);
-      } else if (isFreshSync) {
-        // Fresh sync with zero records → mark as done so we don't re-request everything.
-        localStorage.setItem(cursorKey, new Date().toISOString());
-      }
-
-      return true;
-    };
-
-    // Pull all tables independently — a failure in one does NOT block the others,
-    // and only that table's cursor stays behind.
-    await Promise.allSettled([
-      pull('semesters', db.semesters, (s) => ({
-        serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
-        isActive: s.is_active, isArchived: s.is_archived,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('students', db.students, (s) => ({
-        serverId: s.id, regNumber: s.reg_number, name: s.name,
-        email: s.email, phone: s.phone,
-
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('courses', db.courses, (c) => ({
-        serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
-        // Legacy schema used `day`; newer migrations may use `day_of_week`.
-        dayOfWeek: c.day_of_week ?? c.day,
-        time: c.time,
-        lecturers: c.lecturers,
-        userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
-      })),
-      pull('enrollments', db.enrollments, (e) => ({
-        serverId: e.id, studentId: e.student_id, courseId: e.course_id,
-        userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
-      })),
-      pull('attendance_sessions', db.attendanceSessions, (s) => ({
-        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('lecturers', db.lecturers, (l) => ({
-        serverId: l.id, name: l.name,
-        userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
-      })),
-      pull('attendance_records', db.attendanceRecords, (r) => ({
-        serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
-        status: r.status,
-        // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
-        timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
-        userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
-      })),
-pull('course_schedules', db.courseSchedules, (cs) => ({
-        serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
-        startTime: cs.start_time, endTime: cs.end_time,
-        userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
-      })),
-      pull('student_credentials', db.studentCredentials, (sc) => ({
-        serverId: sc.id, studentId: sc.student_id, credentialId: sc.credential_id,
-        publicKey: sc.public_key, counter: sc.counter,
-        userId: sc.user_id, isDeleted: sc.is_deleted, updatedAt: sc.updated_at, createdAt: sc.created_at,
-      })),
-    ]);
+      await Promise.all([
+        processTable('semesters', db.semesters, (s) => ({
+          serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
+          isActive: s.is_active, isArchived: s.is_archived,
+          userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
+        })),
+        processTable('students', db.students, (st) => ({
+          serverId: st.id, regNumber: st.reg_number, name: st.name, email: st.email, phone: st.phone,
+          userId: st.user_id, isDeleted: st.is_deleted, updatedAt: st.updated_at, createdAt: st.created_at,
+        })),
+        processTable('courses', db.courses, (c) => ({
+          serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
+          dayOfWeek: c.day_of_week ?? c.day, time: c.time, lecturers: c.lecturers,
+          userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
+        })),
+        processTable('enrollments', db.enrollments, (e) => ({
+          serverId: e.id, studentId: e.student_id, courseId: e.course_id,
+          userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
+        })),
+        processTable('attendance_sessions', db.attendanceSessions, (s) => ({
+          serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
+          userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
+        })),
+        processTable('lecturers', db.lecturers, (l) => ({
+          serverId: l.id, name: l.name,
+          userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
+        })),
+        processTable('attendance_records', db.attendanceRecords, (r) => ({
+          serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
+          status: r.status,
+          timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
+          userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
+        })),
+        processTable('course_schedules', db.courseSchedules, (cs) => ({
+          serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
+          startTime: cs.start_time, endTime: cs.end_time,
+          userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
+        })),
+        processTable('student_credentials', db.studentCredentials, (sc) => ({
+          serverId: sc.id, studentId: sc.student_id, credentialId: sc.credential_id,
+          publicKey: sc.public_key, counter: sc.counter,
+          userId: sc.user_id, isDeleted: sc.is_deleted, updatedAt: sc.updated_at, createdAt: sc.created_at,
+        })),
+      ]);
+    } catch (err) {
+      console.error('Failed to pull sync bundle', err);
+      throw err;
+    }
   }
-
-  // ─── Push ────────────────────────────────────────────────────────────────────
 
   private async pushChanges() {
     if (!this.userId) return;
