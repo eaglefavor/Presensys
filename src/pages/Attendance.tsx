@@ -1,34 +1,30 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Calendar } from 'lucide-react';
+import {
+  Plus, Calendar, UserCheck, UserX, Search,
+  CheckCircle, XCircle, HelpCircle,
+  RotateCcw, Settings2, Book, ChevronRight, ArrowLeft, Clock, Download, Share2, FileText, FileSpreadsheet, Pencil, Check, Trash2
+} from 'lucide-react';
 import { db, type LocalAttendanceRecord } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
+import { motion, AnimatePresence } from 'framer-motion';
 import { exportToCSV, exportToXLSX, exportToPDF, exportToText, downloadText, shareData } from '../lib/ExportUtils';
+import ConfirmDialog from '../components/ConfirmDialog';
 import toast from 'react-hot-toast';
 import AIOptionScreen from './attendance/AIOptionScreen';
 import AICameraScreen from './attendance/AICameraScreen';
 import AIReconciliationScreen from './attendance/AIReconciliationScreen';
-import CourseSelection from './attendance/CourseSelection';
-import SessionsList from './attendance/SessionsList';
-import ManualMarking from './attendance/ManualMarking';
-import FingerprintBlitzScreen from './attendance/FingerprintBlitzScreen';
-
-type AttendanceMethod = 'manual' | 'ai-camera' | 'fingerprint';
-const SESSION_PROMPT_BACKDROP_Z_INDEX = 3000;
-const SESSION_PROMPT_MODAL_Z_INDEX = 3001;
 
 export default function Attendance() {
   const { user } = useAuthStore();
-  const location = useLocation();
   const activeSemester = useAppStore(state => state.activeSemester);
   const courses = useLiveQuery(
     () => activeSemester ? db.courses.where('semesterId').equals(activeSemester.serverId).filter(c => c.isDeleted !== 1).toArray() : [],
     [activeSemester]
   );
   
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(location.state?.selectedCourseId || null);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [markSearch, setMarkSearch] = useState('');
   const [debouncedMarkSearch, setDebouncedMarkSearch] = useState('');
@@ -75,14 +71,13 @@ export default function Attendance() {
     );
   }, [enrollments, debouncedMarkSearch]);
 
-  const [studentPage, setStudentPage] = useState(1);
   useEffect(() => {
-    // Avoid setting state in effect unless necessary
-    // setStudentPage(1);
+    setStudentPage(1);
   }, [debouncedMarkSearch]);
 
   // View 1 & 2 logic
   const [coursePage, setCoursePage] = useState(1);
+  const [studentPage, setStudentPage] = useState(1);
   const itemsPerPage = 5;
   const totalCoursePages = Math.ceil((courses?.length || 0) / itemsPerPage);
   const displayedCourses = courses?.slice((coursePage - 1) * itemsPerPage, coursePage * itemsPerPage);
@@ -100,20 +95,16 @@ export default function Attendance() {
   const [confirmBulkMarkStatus, setConfirmBulkMarkStatus] = useState<'present' | 'absent' | null>(null);
   const [confirmResetRecords, setConfirmResetRecords] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, 'present' | 'absent' | 'excused' | 'reset'>>({});
-  const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | 'fingerprint' | null>(null);
+  const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | null>(null);
   const [aiImages, setAiImages] = useState<string[]>([]);
-  const [pendingMethodChoice, setPendingMethodChoice] = useState<AttendanceMethod | null>(null);
-  const [initializingMethod, setInitializingMethod] = useState<AttendanceMethod | null>(null);
 
-  const handleCreateSession = async (lecturerId: string) => {
-    if (!lecturerId) return;
+  const handleCreateSession = async () => {
     if (!selectedCourseId || !user) return;
     const newSession = {
       serverId: '',
       courseId: selectedCourseId,
       date: new Date().toISOString().split('T')[0],
       title: `Session ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
-      lecturerId,
       userId: user.id,
       synced: 0,
       isDeleted: 0
@@ -248,109 +239,13 @@ export default function Attendance() {
   const handleSessionSelect = (sessionId: string) => {
     setActiveSessionId(sessionId);
     setPendingChanges({});
-    setPendingMethodChoice(null);
     setAttendanceMode('choosing');
   };
 
   const handleCancelSession = () => {
     setActiveSessionId(null);
     setPendingChanges({});
-    setPendingMethodChoice(null);
     setAttendanceMode(null);
-  };
-
-  const initializeSessionDefaults = async (resetSession: boolean) => {
-    if (!activeSessionId || !user || !enrollments) {
-      console.warn('initializeSessionDefaults skipped: missing session, user, or enrollments.');
-      return;
-    }
-    const now = Date.now();
-
-    await db.transaction('rw', db.attendanceRecords, async () => {
-      const existing = await db.attendanceRecords.where('sessionId').equals(activeSessionId).toArray();
-      const activeExisting = existing.filter(r => r.isDeleted !== 1);
-
-      if (resetSession && activeExisting.length > 0) {
-        const clearableRecords = activeExisting.filter(
-          (r): r is LocalAttendanceRecord & { id: number } => r.id !== undefined
-        );
-        const clearUpdates = clearableRecords.map(r => ({ key: r.id, changes: { isDeleted: 1, synced: 0, timestamp: now } }));
-        if (clearUpdates.length > 0) await db.attendanceRecords.bulkUpdate(clearUpdates);
-      }
-
-      const activeMap = new Map<string, LocalAttendanceRecord>();
-      for (const record of activeExisting) {
-        if (!activeMap.has(record.studentId)) activeMap.set(record.studentId, record);
-      }
-
-      const deletedMap = new Map<string, LocalAttendanceRecord>();
-      for (const record of existing) {
-        if (record.isDeleted === 1 && !deletedMap.has(record.studentId)) {
-          deletedMap.set(record.studentId, record);
-        }
-      }
-
-      const toRevive: { key: number, changes: Record<string, unknown> }[] = [];
-      const toAdd: Omit<LocalAttendanceRecord, 'id'>[] = [];
-
-      for (const student of enrollments) {
-        if (!resetSession && activeMap.has(student.serverId)) continue;
-
-        const deletedRecord = deletedMap.get(student.serverId);
-        if (deletedRecord?.id !== undefined) {
-          toRevive.push({
-            key: deletedRecord.id,
-            changes: { status: 'absent', isDeleted: 0, synced: 0, timestamp: now }
-          });
-          continue;
-        }
-
-        toAdd.push({
-          serverId: '',
-          sessionId: activeSessionId,
-          studentId: student.serverId,
-          status: 'absent',
-          timestamp: now,
-          synced: 0,
-          userId: user.id,
-          isDeleted: 0
-        });
-      }
-
-      if (toRevive.length > 0) await db.attendanceRecords.bulkUpdate(toRevive);
-      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd);
-    });
-  };
-
-  const beginAttendanceMethod = async (method: AttendanceMethod, resetSession: boolean) => {
-    if (initializingMethod) {
-      toast('Preparing session, please wait…');
-      return;
-    }
-    setInitializingMethod(method);
-    try {
-      await initializeSessionDefaults(resetSession);
-      setPendingChanges({});
-      setAttendanceMode(method);
-    } catch (err) {
-      console.error('Failed to initialize attendance session', err);
-      toast.error('Failed to prepare this session. Please try again.');
-    } finally {
-      setInitializingMethod(null);
-    }
-  };
-
-  const handleMethodChoice = (method: AttendanceMethod) => {
-    if (initializingMethod) {
-      toast('Preparing session, please wait…');
-      return;
-    }
-    const hasSavedAttendance = (records?.length || 0) > 0;
-    if (hasSavedAttendance) {
-      setPendingMethodChoice(method);
-      return;
-    }
-    void beginAttendanceMethod(method, false);
   };
 
   const handleSessionExport = (format: 'csv' | 'xlsx' | 'pdf' | 'text' | 'share') => {
@@ -381,7 +276,7 @@ export default function Attendance() {
     }
   };
 
-  const combinedRecords = (() => {
+  const combinedRecords = useMemo(() => {
     const map = new Map<string, 'present' | 'absent' | 'excused' | null>();
     const active = records?.filter(r => r.isDeleted !== 1) || [];
     active.forEach(r => map.set(r.studentId, r.status));
@@ -393,9 +288,9 @@ export default function Attendance() {
       }
     }
     return map;
-  })();
+  }, [records, pendingChanges]);
 
-  const stats = (() => {
+  const stats = useMemo(() => {
     let present = 0, absent = 0, excused = 0;
     combinedRecords.forEach(status => {
       if (status === 'present') present++;
@@ -408,7 +303,7 @@ export default function Attendance() {
       excused,
       total: enrollments?.length || 0
     };
-  })();
+  }, [combinedRecords, enrollments]);
 
   if (!activeSemester) return (
     <div className="text-center py-5 mt-5 px-4 animate-in">
@@ -421,15 +316,48 @@ export default function Attendance() {
   // View 1: Select Course
   if (!selectedCourseId) {
     return (
-      <CourseSelection
-        courses={courses}
-        coursePage={coursePage}
-        setCoursePage={setCoursePage}
-        totalCoursePages={totalCoursePages}
-        displayedCourses={displayedCourses}
-        itemsPerPage={itemsPerPage}
-        onSelectCourse={setSelectedCourseId}
-      />
+      <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
+        <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
+          <h1 className="h4 fw-black mb-0 text-primary text-uppercase letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>MARK ATTENDANCE</h1>
+          <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Select a course to begin</p>
+        </div>
+        <div className="px-4 container-mobile d-flex flex-column gap-2">
+          {courses === undefined ? (
+            <div className="text-center py-5">
+              <div className="spinner-border spinner-border-sm text-primary" role="status" />
+            </div>
+          ) : (
+            <AnimatePresence mode="popLayout">
+              {displayedCourses?.map(course => (
+                <motion.div key={course.serverId} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                  <div className="card border-0 bg-white shadow-sm p-3 d-flex flex-row align-items-center gap-3 cursor-pointer rounded-4 transition-all active-scale" onClick={() => setSelectedCourseId(course.serverId)}>
+                    <div className="bg-primary bg-opacity-10 text-primary p-2 rounded-2 shadow-inner"><Book size={24} /></div>
+                    <div className="flex-grow-1 overflow-hidden">
+                      <h6 className="fw-black mb-0 text-dark text-uppercase letter-spacing-n1">{course.code}</h6>
+                      <p className="xx-small fw-bold text-muted mb-0 text-uppercase truncate">{course.title}</p>
+                    </div>
+                    <ChevronRight size={18} className="text-muted opacity-50" />
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          )}
+
+          {courses && courses.length > itemsPerPage && (
+            <div className="d-flex justify-content-between align-items-center mt-4">
+              <button className="btn btn-light btn-sm fw-bold rounded-pill px-3 shadow-sm border" disabled={coursePage === 1} onClick={() => setCoursePage(p => Math.max(p - 1, 1))}>PREV</button>
+              <span className="xx-small fw-black text-muted uppercase">Page {coursePage} of {totalCoursePages}</span>
+              <button className="btn btn-light btn-sm fw-bold rounded-pill px-3 shadow-sm border" disabled={coursePage === totalCoursePages} onClick={() => setCoursePage(p => Math.min(p + 1, totalCoursePages))}>NEXT</button>
+            </div>
+          )}
+
+          {courses !== undefined && courses.length === 0 && (
+            <div className="text-center py-5 bg-white rounded-4 border-dashed border-2">
+              <p className="xx-small fw-black text-muted text-uppercase tracking-widest mb-0">No courses available</p>
+            </div>
+          )}
+        </div>
+      </div>
     );
   }
 
@@ -437,92 +365,92 @@ export default function Attendance() {
   if (!activeSessionId) {
     const selectedCourse = courses?.find(c => c.serverId === selectedCourseId);
     return (
-      <SessionsList
-        sessions={sessions}
-        selectedCourse={selectedCourse}
-        renamingSessionId={renamingSessionId}
-        deletingSessionId={deletingSessionId}
-        renameValue={renameValue}
-        onClearSelectedCourse={() => setSelectedCourseId(null)}
-        onCreateSession={handleCreateSession}
-        onRenameSession={handleRenameSession}
-        onDeleteSession={handleDeleteSession}
-        onSessionSelect={handleSessionSelect}
-        setRenamingSessionId={setRenamingSessionId}
-        setDeletingSessionId={setDeletingSessionId}
-        setRenameValue={setRenameValue}
+      <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
+        <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm">
+          <div className="d-flex align-items-center gap-3 mb-4">
+            <button className="btn btn-light rounded-circle p-2 shadow-sm" onClick={() => setSelectedCourseId(null)}><ArrowLeft size={20} /></button>
+            <div>
+              <h1 className="h5 fw-black mb-0 text-dark text-uppercase letter-spacing-n1">{selectedCourse?.code}</h1>
+              <p className="xx-small fw-bold text-muted mb-0 text-uppercase tracking-widest">Attendance Feed</p>
+            </div>
+          </div>
+          <button className="btn btn-primary w-100 py-3 rounded-pill fw-black shadow-lg d-flex align-items-center justify-content-center gap-2 text-uppercase letter-spacing-n1" onClick={handleCreateSession}>
+            <Plus size={20} /> START NEW SESSION
+          </button>
+        </div>
+        <div className="px-4 container-mobile">
+          <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-3 ps-1">Recent Sessions</h6>
+          <div className="d-flex flex-column gap-2">
+            {sessions?.map(session => (
+              <div key={session.serverId} className="card border-0 bg-white shadow-sm rounded-4">
+                {renamingSessionId === session.serverId ? (
+                  <div className="p-3 d-flex align-items-center gap-2">
+                    <input
+                      className="form-control form-control-sm rounded-3 fw-bold border-primary"
+                      value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRenameSession(); if (e.key === 'Escape') setRenamingSessionId(null); }}
+                      autoFocus
+                    />
+                    <button className="btn btn-primary btn-sm rounded-3 px-3 fw-bold" onClick={handleRenameSession}><Check size={14} /></button>
+                    <button className="btn btn-light btn-sm rounded-3 px-3 fw-bold border" onClick={() => setRenamingSessionId(null)}>✕</button>
+                  </div>
+                ) : (
+                  <div className="p-3 d-flex flex-row align-items-center gap-3 cursor-pointer active-scale" onClick={() => handleSessionSelect(session.serverId)}>
+                    <div className="bg-light text-primary p-2 rounded-2"><Calendar size={20} /></div>
+                    <div className="flex-grow-1">
+                      <h6 className="fw-bold mb-0 text-dark text-uppercase small">{session.title}</h6>
+                      <div className="xx-small fw-bold text-muted text-uppercase d-flex align-items-center gap-1 mt-1"><Clock size={10} /> {new Date(session.date).toLocaleDateString(undefined, { dateStyle: 'medium' })}</div>
+                    </div>
+                    <button
+                      className="btn btn-light btn-sm rounded-circle p-1 border-0 text-muted me-1"
+                      style={{ width: 30, height: 30 }}
+                      onClick={e => { e.stopPropagation(); setRenameValue(session.title); setRenamingSessionId(session.serverId); }}
+                      title="Rename session"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                    <button
+                      className="btn btn-light btn-sm rounded-circle p-1 border-0 text-danger me-1"
+                      style={{ width: 30, height: 30 }}
+                      onClick={e => { e.stopPropagation(); setDeletingSessionId(session.serverId); }}
+                      title="Delete session"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    <ChevronRight size={16} className="text-muted opacity-50" />
+                  </div>
+                )}
+              </div>
+            ))}
+            {sessions?.length === 0 && (
+              <div className="text-center py-5 bg-white rounded-4 border-dashed">
+                <p className="xx-small fw-bold text-muted uppercase">No sessions found</p>
+              </div>
+            )}
+      <ConfirmDialog
+        open={deletingSessionId !== null}
+        title="Delete Session"
+        message="Are you sure you want to delete this session? This action can be reversed by an administrator."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => deletingSessionId && handleDeleteSession(deletingSessionId)}
+        onCancel={() => setDeletingSessionId(null)}
       />
+          </div>
+        </div>
+      </div>
     );
   }
 
   // View 3: Marking Mode (AI option selection / camera / reconciliation)
   if (attendanceMode === 'choosing') {
     return (
-      <>
-        <AIOptionScreen
-          onCancel={() => handleCancelSession()}
-          onSelectManual={() => handleMethodChoice('manual')}
-          onSelectAI={() => handleMethodChoice('ai-camera')}
-          onSelectFingerprint={() => handleMethodChoice('fingerprint')}
-        />
-
-        {pendingMethodChoice && (
-          <>
-            <div
-              className="modal-backdrop fade show d-block"
-              style={{ backgroundColor: 'rgba(0,0,0,0.45)', zIndex: SESSION_PROMPT_BACKDROP_Z_INDEX }}
-              onClick={() => setPendingMethodChoice(null)}
-            />
-            <div
-              className="modal fade show d-flex align-items-center justify-content-center"
-              style={{ zIndex: SESSION_PROMPT_MODAL_Z_INDEX }}
-              role="dialog"
-              aria-modal="true"
-            >
-              <div className="modal-dialog modal-dialog-centered px-4 w-100" style={{ maxWidth: '430px' }}>
-                <div className="modal-content border-0 shadow rounded-4 overflow-hidden">
-                  <div className="modal-body p-4">
-                    <h5 className="fw-black mb-2 text-dark">Attendance Already Saved</h5>
-                    <p className="text-muted small mb-0">
-                      This session already has saved attendance. Do you want to reset and record a completely new session, or continue editing the existing data?
-                    </p>
-                  </div>
-                  <div className="modal-footer border-0 px-4 pb-4 pt-0 d-flex flex-column gap-2">
-                    <div className="d-flex gap-2 w-100">
-                      <button
-                        className="btn btn-light flex-grow-1 fw-bold py-2 rounded-3"
-                        onClick={() => setPendingMethodChoice(null)}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="btn btn-primary flex-grow-1 fw-bold py-2 rounded-3"
-                        onClick={() => {
-                          const method = pendingMethodChoice;
-                          setPendingMethodChoice(null);
-                          if (method) void beginAttendanceMethod(method, false);
-                        }}
-                      >
-                        Edit Existing
-                      </button>
-                    </div>
-                    <button
-                      className="btn btn-danger w-100 fw-bold py-2 rounded-3"
-                      onClick={() => {
-                        const method = pendingMethodChoice;
-                        setPendingMethodChoice(null);
-                        if (method) void beginAttendanceMethod(method, true);
-                      }}
-                    >
-                      Reset Session
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
-      </>
+      <AIOptionScreen
+        onCancel={() => handleCancelSession()}
+        onSelectManual={() => setAttendanceMode('manual')}
+        onSelectAI={() => setAttendanceMode('ai-camera')}
+      />
     );
   }
 
@@ -551,58 +479,186 @@ export default function Attendance() {
     );
   }
 
-  if (attendanceMode === 'fingerprint' && activeSessionId && user) {
-    return (
-      <FingerprintBlitzScreen
-        activeSessionId={activeSessionId}
-        enrollments={enrollments || []}
-        userId={user.id}
-        onStop={() => setAttendanceMode('manual')}
-        onCancel={() => setAttendanceMode('choosing')}
-      />
-    );
-  }
-
   // View 4: Manual Marking Mode
   const currentSession = sessions?.find(s => s.serverId === activeSessionId);
   
-  return (
-    <ManualMarking
-      currentSession={currentSession}
-      renamingSessionId={renamingSessionId}
-      deletingSessionId={deletingSessionId}
-      renameValue={renameValue}
-      stats={stats}
-      pendingChanges={pendingChanges}
-      markSearch={markSearch}
-      confirmBulkMarkStatus={confirmBulkMarkStatus}
-      confirmResetRecords={confirmResetRecords}
-      displayedEnrollments={displayedEnrollments || []}
-      combinedRecords={combinedRecords}
-      studentPage={studentPage}
-      totalStudentPages={totalStudentPages}
-      filteredEnrollments={filteredEnrollments}
-      enrollments={enrollments}
-      itemsPerStudentPage={itemsPerStudentPage}
 
-      onCancelSession={handleCancelSession}
-      onRenameSession={handleRenameSession}
-      onDeleteSession={handleDeleteSession}
-      setRenamingSessionId={setRenamingSessionId}
-      setDeletingSessionId={setDeletingSessionId}
-      setRenameValue={setRenameValue}
-      setPendingChanges={setPendingChanges}
-      handleSaveAttendance={handleSaveAttendance}
-      setMarkSearch={setMarkSearch}
-      handleBulkMark={handleBulkMark}
-      handleResetRecords={handleResetRecords}
-      handleSessionExport={handleSessionExport}
-      updateRecord={updateRecord}
-      setStudentPage={setStudentPage}
-      setConfirmBulkMarkStatus={setConfirmBulkMarkStatus}
-      doBulkMark={doBulkMark}
-      setConfirmResetRecords={setConfirmResetRecords}
-      doResetRecords={doResetRecords}
-    />
+
+
+  return (
+    <div className="attendance-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
+      <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm sticky-top" style={{ zIndex: 100 }}>
+        <div className="d-flex justify-content-between align-items-start mb-3">
+          <div className="d-flex align-items-center gap-3 overflow-hidden">
+            <button className="btn btn-light rounded-circle p-2 shadow-sm flex-shrink-0" onClick={handleCancelSession}><ArrowLeft size={20} /></button>
+            <div className="overflow-hidden flex-grow-1">
+              {renamingSessionId === activeSessionId ? (
+                <div className="d-flex align-items-center gap-2">
+                  <input
+                    className="form-control form-control-sm rounded-3 fw-bold border-primary"
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenameSession(); if (e.key === 'Escape') setRenamingSessionId(null); }}
+                    autoFocus
+                  />
+                  <button className="btn btn-primary btn-sm rounded-3 px-2 fw-bold flex-shrink-0" onClick={handleRenameSession}><Check size={13} /></button>
+                  <button className="btn btn-light btn-sm rounded-3 px-2 fw-bold border flex-shrink-0" onClick={() => setRenamingSessionId(null)}>✕</button>
+                </div>
+              ) : (
+                <div className="d-flex align-items-center gap-2">
+                  <h1 className="h6 fw-black mb-0 text-dark text-uppercase letter-spacing-n1 truncate">{currentSession?.title}</h1>
+                  <button
+                    className="btn btn-light btn-sm rounded-circle p-1 border-0 text-muted flex-shrink-0"
+                    style={{ width: 26, height: 26 }}
+                    onClick={() => { setRenameValue(currentSession?.title || ''); setRenamingSessionId(activeSessionId); }}
+                    title="Rename session"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    className="btn btn-light btn-sm rounded-circle p-1 border-0 text-danger flex-shrink-0"
+                    style={{ width: 26, height: 26 }}
+                    onClick={() => { if (activeSessionId) setDeletingSessionId(activeSessionId); }}
+                    title="Delete session"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
+              <p className="xx-small fw-black text-muted mb-0 uppercase tracking-widest">{stats.present + stats.absent + stats.excused} / {stats.total} MARKED</p>
+            </div>
+          </div>
+          <div className="bg-primary text-white rounded-pill px-3 py-1 fw-black xx-small shadow-sm">{Math.round((stats.present/stats.total)*100 || 0)}%</div>
+        </div>
+
+        {/* Stats Row */}
+        <div className="row g-2 mb-3">
+            <div className="col-4"><div className="bg-light p-2 rounded-3 text-center border"><div className="h6 mb-0 fw-black text-success">{stats.present}</div><div className="xx-small fw-bold text-muted">PRESENT</div></div></div>
+            <div className="col-4"><div className="bg-light p-2 rounded-3 text-center border"><div className="h6 mb-0 fw-black text-danger">{stats.absent}</div><div className="xx-small fw-bold text-muted">ABSENT</div></div></div>
+            <div className="col-4"><div className="bg-light p-2 rounded-3 text-center border"><div className="h6 mb-0 fw-black text-warning">{stats.excused}</div><div className="xx-small fw-bold text-muted">EXCUSED</div></div></div>
+        </div>
+
+        {/* Search & Bulk Bar */}
+
+        {Object.keys(pendingChanges).length > 0 && (
+          <div className="d-flex justify-content-between align-items-center bg-warning bg-opacity-10 text-warning-emphasis p-3 rounded-4 mb-3 border border-warning border-opacity-50">
+            <div className="d-flex align-items-center gap-2">
+              <span className="fw-bold small">{Object.keys(pendingChanges).length} unsaved change(s)</span>
+            </div>
+            <div className="d-flex gap-2">
+              <button className="btn btn-sm btn-light border fw-bold" onClick={() => setPendingChanges({})}>Discard</button>
+              <button className="btn btn-sm btn-warning fw-bold px-3" onClick={handleSaveAttendance}>Save Changes</button>
+            </div>
+          </div>
+        )}
+
+        <div className="d-flex gap-2">
+
+            <div className="modern-input-unified p-1 d-flex align-items-center bg-light shadow-inner flex-grow-1">
+                <Search size={16} className="text-muted ms-2" />
+                <input type="text" className="form-control border-0 bg-transparent py-1 small fw-bold" placeholder="Find student..." value={markSearch} onChange={e => setMarkSearch(e.target.value)} />
+            </div>
+            <div className="dropdown">
+                <button className="btn btn-light border rounded-3 p-2 shadow-sm" type="button" data-bs-toggle="dropdown"><Settings2 size={20} /></button>
+                <ul className="dropdown-menu dropdown-menu-end shadow-lg border-0 rounded-4 p-2">
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleBulkMark('present')}><UserCheck size={16} className="text-success" /> Mark All Present</button></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleBulkMark('absent')}><UserX size={16} className="text-danger" /> Mark All Absent</button></li>
+                    <li><hr className="dropdown-divider" /></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2 text-danger" onClick={handleResetRecords}><RotateCcw size={16} /> Reset Selection</button></li>
+                    <li><hr className="dropdown-divider" /></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleSessionExport('csv')}><FileText size={16} className="text-success" /> Export CSV</button></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleSessionExport('xlsx')}><FileSpreadsheet size={16} className="text-primary" /> Export Excel</button></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleSessionExport('pdf')}><FileText size={16} className="text-danger" /> Export PDF</button></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleSessionExport('text')}><Download size={16} className="text-muted" /> Export Text</button></li>
+                    <li><button className="dropdown-item fw-bold small rounded-3 d-flex align-items-center gap-2 py-2" onClick={() => handleSessionExport('share')}><Share2 size={16} className="text-info" /> Share</button></li>
+                </ul>
+            </div>
+        </div>
+      </div>
+
+      <div className="px-4 container-mobile d-flex flex-column gap-2">
+        <AnimatePresence mode="popLayout">
+          {displayedEnrollments.map((student: { serverId: string, name: string, regNumber: string }) => {
+            const status = combinedRecords.get(student.serverId);
+            return (
+              <motion.div key={student.serverId} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="card border-0 bg-white shadow-sm overflow-hidden rounded-4">
+                <div className="card-body p-3 d-flex align-items-center gap-3">
+                  <div className="flex-grow-1 overflow-hidden">
+                    <h6 className="fw-bold mb-0 text-dark text-truncate text-uppercase small letter-spacing-n1">{student.name}</h6>
+                    <div className="d-flex align-items-center gap-2 mt-1">
+                      <span className="xx-small fw-black text-muted font-monospace tracking-widest">{student.regNumber}</span>
+                      {!status && (
+                        <span className="badge rounded-2 fw-bold" style={{ fontSize: '7px', backgroundColor: 'rgba(108,117,125,0.1)', color: '#6c757d', border: '1px dashed #adb5bd' }}>UNMARKED</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="d-flex gap-1 bg-light p-1 rounded-3">
+                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'present' ? 'bg-success text-white shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.serverId, 'present')}><CheckCircle size={20} /></button>
+                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'absent' ? 'bg-danger text-white shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.serverId, 'absent')}><XCircle size={20} /></button>
+                    <button className={`btn btn-sm border-0 rounded-2 p-2 transition-all ${status === 'excused' ? 'bg-warning text-dark shadow-sm scale-110' : 'bg-transparent text-muted'}`} onClick={() => updateRecord(student.serverId, 'excused')}><HelpCircle size={20} /></button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+
+
+        {filteredEnrollments && filteredEnrollments.length > itemsPerStudentPage && (
+          <div className="d-flex justify-content-between align-items-center mt-2 pb-2">
+            <button className="btn btn-light btn-sm fw-bold rounded-pill px-3 shadow-sm border" disabled={studentPage === 1} onClick={() => setStudentPage(p => Math.max(p - 1, 1))}>PREV</button>
+            <span className="xx-small fw-black text-muted uppercase">Page {studentPage} of {totalStudentPages}</span>
+            <button className="btn btn-light btn-sm fw-bold rounded-pill px-3 shadow-sm border" disabled={studentPage === totalStudentPages} onClick={() => setStudentPage(p => Math.min(p + 1, totalStudentPages))}>NEXT</button>
+          </div>
+        )}
+
+        {enrollments?.length === 0 && (
+          <div className="text-center py-5 bg-white rounded-4 border-dashed border-2">
+            <p className="xx-small fw-black text-muted text-uppercase tracking-widest mb-0">No students enrolled in this course</p>
+          </div>
+        )}
+
+        {filteredEnrollments.length === 0 && enrollments && enrollments.length > 0 && (
+          <div className="text-center py-5 opacity-50">
+            <Search size={40} className="text-muted mb-2 mx-auto" />
+            <p className="xx-small fw-black text-muted uppercase">No matches found for "{markSearch}"</p>
+          </div>
+        )}
+      </div>
+
+      {/* Confirm: Bulk mark */}
+
+      <ConfirmDialog
+        open={deletingSessionId !== null}
+        title="Delete Session"
+        message="Are you sure you want to delete this session? This action can be reversed by an administrator."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => deletingSessionId && handleDeleteSession(deletingSessionId)}
+        onCancel={() => setDeletingSessionId(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkMarkStatus !== null}
+        title={`MARK ALL ${confirmBulkMarkStatus?.toUpperCase()}`}
+        message={`Mark all ${filteredEnrollments.length} displayed student${filteredEnrollments.length !== 1 ? 's' : ''} as ${confirmBulkMarkStatus?.toUpperCase()}?`}
+        confirmLabel="Mark All"
+        variant={confirmBulkMarkStatus === 'present' ? 'primary' : 'danger'}
+        onConfirm={async () => { const s = confirmBulkMarkStatus!; setConfirmBulkMarkStatus(null); await doBulkMark(s); }}
+        onCancel={() => setConfirmBulkMarkStatus(null)}
+      />
+
+      {/* Confirm: Reset records */}
+      <ConfirmDialog
+        open={confirmResetRecords}
+        title="CLEAR ATTENDANCE"
+        message={`Clear attendance for the ${filteredEnrollments.length} displayed student${filteredEnrollments.length !== 1 ? 's' : ''}? This cannot be undone.`}
+        confirmLabel="Clear"
+        variant="danger"
+        onConfirm={async () => { setConfirmResetRecords(false); await doResetRecords(); }}
+        onCancel={() => setConfirmResetRecords(false)}
+      />
+
+    </div>
   );
 }

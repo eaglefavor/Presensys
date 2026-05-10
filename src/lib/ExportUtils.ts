@@ -114,9 +114,7 @@ export function exportToXLSX(data: ExportRow[], filename: string, meta?: ExportM
  * Export data as a formatted PDF file download.
  */
 export function exportToPDF(data: ExportRow[], title: string, filename: string, meta?: ExportMeta) {
-  const headers = data.length > 0 ? Object.keys(data[0]) : [];
-  const orientation = headers.length > 5 ? 'landscape' : 'portrait';
-  const doc = new jsPDF({ orientation });
+  const doc = new jsPDF({ orientation: 'landscape' });
   
   // Title
   doc.setFontSize(16);
@@ -124,7 +122,7 @@ export function exportToPDF(data: ExportRow[], title: string, filename: string, 
   doc.text(title, 14, 15);
   
   // Subtitle with date + academic info
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100);
   const metaParts = [
@@ -138,15 +136,16 @@ export function exportToPDF(data: ExportRow[], title: string, filename: string, 
   doc.setTextColor(0);
 
   if (data.length > 0) {
+    const headers = Object.keys(data[0]);
     const rows = data.map(row => headers.map(h => String(row[h] ?? '')));
 
     autoTable(doc, {
       head: [headers],
       body: rows,
       startY: 28,
-      styles: { fontSize: 10, cellPadding: 5, font: 'helvetica' },
-      headStyles: { fillColor: [13, 110, 253], textColor: 255, fontStyle: 'bold', fontSize: 11 },
-      alternateRowStyles: { fillColor: [240, 244, 248] }, // Softer, more pleasing gray-blue
+      styles: { fontSize: 8, cellPadding: 3, font: 'helvetica' },
+      headStyles: { fillColor: [13, 110, 253], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
       margin: { left: 14, right: 14 },
     });
   }

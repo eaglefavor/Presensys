@@ -1,4 +1,3 @@
-import { SplashLogo } from './components/SplashLogo';
 import { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
@@ -23,12 +22,14 @@ const Auth = lazy(() => import('./pages/Auth'));
 const VerifyAccess = lazy(() => import('./pages/VerifyAccess'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Settings = lazy(() => import('./pages/Settings'));
-const Lecturers = lazy(() => import('./pages/Lecturers'));
 
 function PageLoader() {
   return (
     <div className="d-flex align-items-center justify-content-center py-5 min-vh-100">
-      <SplashLogo />
+      <div className="text-center">
+        <div className="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+        <div className="xx-small fw-bold text-muted text-uppercase" style={{ letterSpacing: '2px', fontSize: '10px' }}>Loading...</div>
+      </div>
     </div>
   );
 }
@@ -107,7 +108,9 @@ function App() {
   if (loading) {
     return (
       <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light">
-        <SplashLogo />
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading...</span>
+        </div>
       </div>
     );
   }
@@ -136,7 +139,6 @@ function App() {
             <Route path="attendance" element={<Attendance />} />
             <Route path="archives" element={<Archives />} />
             <Route path="settings" element={<Settings />} />
-            <Route path="lecturers" element={<Lecturers />} />
 
             {/* Admin only route — requires server-confirmed profile to prevent localStorage spoofing */}
             {profileVerified && normalizedRole === 'admin' && (

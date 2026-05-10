@@ -1,0 +1,6 @@
+🧹 Fix unused import in Auth refactoring
+
+🎯 What: Removed the unused `import React from 'react';` from `GoogleAuthButton.tsx`, `EmailAuthForm.tsx`, and `ForgotPasswordForm.tsx`.
+💡 Why: The previous refactoring commit introduced an unused import, causing `pnpm build` to fail because of `tsc -b` complaining about `TS6133: 'React' is declared but its value is never read.`
+✅ Verification: Ran `pnpm run build` and it passed.
+✨ Result: Build pipeline is fixed.

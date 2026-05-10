@@ -16,12 +16,8 @@ export default function Semesters() {
   const [showModal, setShowModal] = useState(false);
   const [selectedSemester, setSelectedSemester] = useState<Semester | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Semester | null>(null);
-  const currentYear = new Date().getFullYear();
-  const [session, setSession] = useState(`${currentYear}/${currentYear + 1}`);
-  const [term, setTerm] = useState<'First' | 'Second'>('First');
-  const generatedName = `${session} ${term} Semester`;
-
   const [newSemester, setNewSemester] = useState({
+    name: '',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0],
   });
@@ -44,20 +40,9 @@ export default function Semesters() {
         toast.error('Start date cannot be after end date.');
         return;
       }
-
-      const existing = await db.semesters
-        .filter(s => s.name === generatedName && s.isDeleted === 0)
-        .first();
-
-      if (existing) {
-        toast.error('This semester already exists in your records.');
-        return;
-      }
-
       await db.semesters.add({
         serverId: '',
         ...newSemester,
-        name: generatedName,
         isActive: false,
         isArchived: false,
         synced: 0,
@@ -65,7 +50,7 @@ export default function Semesters() {
         isDeleted: 0
       });
       setShowModal(false);
-      setNewSemester({ startDate: new Date().toISOString().split('T')[0], endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0] });
+      setNewSemester({ name: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date(new Date().setMonth(new Date().getMonth() + 4)).toISOString().split('T')[0] });
     } catch (error) {
       console.error('Failed to create semester:', error);
     } finally {
@@ -219,66 +204,10 @@ export default function Semesters() {
               <div className="modal-header border-bottom-0 p-4 pb-0"><h5 className="fw-black mb-0 text-primary uppercase letter-spacing-n1">NEW CYCLE</h5><button type="button" className="btn-close" aria-label="Close" onClick={() => setShowModal(false)}></button></div>
               <form onSubmit={handleAddSemester}>
                 <div className="modal-body p-4">
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1">SESSION</label>
-                    <div className="modern-input-unified p-1">
-                      <select
-                        className="form-select border-0 bg-transparent fw-bold"
-                        value={session}
-                        onChange={e => setSession(e.target.value)}
-                        required
-                      >
-                        {Array.from({ length: 10 }).map((_, i) => {
-                          const year = currentYear - 3 + i;
-                          return <option key={year} value={`${year}/${year + 1}`}>{year}/{year + 1}</option>;
-                        })}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1 mb-2 d-block">TERM</label>
-                    <div className="d-flex gap-2">
-                      <button
-                        type="button"
-                        className={`btn flex-grow-1 py-2 fw-bold ${term === 'First' ? 'btn-primary' : 'btn-light border'}`}
-                        onClick={() => setTerm('First')}
-                      >
-                        1st Term
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn flex-grow-1 py-2 fw-bold ${term === 'Second' ? 'btn-primary' : 'btn-light border'}`}
-                        onClick={() => setTerm('Second')}
-                      >
-                        2nd Term
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1">PREVIEW</label>
-                    <div className="modern-input-unified p-2 bg-light rounded-3 text-center">
-                      <span className="fw-bold text-primary">{generatedName}</span>
-                    </div>
-                  </div>
-                  <div className="row g-3">
-                    <div className="col-6">
-                      <label className="xx-small fw-bold text-muted ps-1">START DATE</label>
-                      <div className="modern-input-unified p-1">
-                        <input type="date" className="form-control border-0 bg-transparent small fw-bold" required value={newSemester.startDate} onChange={e => setNewSemester({ ...newSemester, startDate: e.target.value })} />
-                      </div>
-                    </div>
-                    <div className="col-6">
-                      <label className="xx-small fw-bold text-muted ps-1">END DATE</label>
-                      <div className="modern-input-unified p-1">
-                        <input type="date" className="form-control border-0 bg-transparent small fw-bold" required min={newSemester.startDate} value={newSemester.endDate} onChange={e => setNewSemester({ ...newSemester, endDate: e.target.value })} />
-                      </div>
-                    </div>
-                  </div>
+                  <div className="mb-3"><label className="xx-small fw-bold text-muted ps-1">CYCLE TITLE</label><div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold" placeholder="e.g. 2025/2026 First Semester" required value={newSemester.name} onChange={e => setNewSemester({ ...newSemester, name: e.target.value })} /></div></div>
+                  <div className="row g-3"><div className="col-6"><label className="xx-small fw-bold text-muted ps-1">START DATE</label><div className="modern-input-unified p-1"><input type="date" className="form-control border-0 bg-transparent small fw-bold" required value={newSemester.startDate} onChange={e => setNewSemester({ ...newSemester, startDate: e.target.value })} /></div></div><div className="col-6"><label className="xx-small fw-bold text-muted ps-1">END DATE</label><div className="modern-input-unified p-1"><input type="date" className="form-control border-0 bg-transparent small fw-bold" required value={newSemester.endDate} onChange={e => setNewSemester({ ...newSemester, endDate: e.target.value })} /></div></div></div>
                 </div>
-                <div className="modal-footer border-0 p-4 pt-0">
-                  <button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-sm fw-bold" disabled={isSubmitting}>{isSubmitting ? 'CREATING...' : 'CREATE CYCLE'}</button>
-                </div>
+                <div className="modal-footer border-0 p-4 pt-0"><button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowModal(false)}>Cancel</button><button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-sm fw-bold" disabled={isSubmitting}>{isSubmitting ? 'CREATING...' : 'CREATE CYCLE'}</button></div>
               </form>
             </div>
           </motion.div>

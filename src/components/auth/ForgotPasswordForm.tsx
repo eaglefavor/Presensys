@@ -1,4 +1,3 @@
-import React from 'react';
 import { Mail, ChevronRight, ArrowLeft } from 'lucide-react';
 
 interface ForgotPasswordFormProps {

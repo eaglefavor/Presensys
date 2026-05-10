@@ -1,4 +1,3 @@
-import React from 'react';
 import { Mail, Lock, User, ChevronRight, Info } from 'lucide-react';
 
 interface EmailAuthFormProps {
