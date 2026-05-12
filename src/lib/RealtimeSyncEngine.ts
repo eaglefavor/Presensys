@@ -8,6 +8,7 @@ import {
   type LocalAttendanceRecord,
   type LocalLecturer,
   type LocalCourseSchedule,
+  type LocalStudentCredential,
   type LocalOutboxEntry,
 } from '../db/db';
 import { supabase } from './supabase';
@@ -67,6 +68,7 @@ export class RealtimeSyncEngine {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private retryCount = 0;
+  private globalBundle: { tableName: TableName; payload: unknown[]; records: unknown[]; table: unknown; outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }> }[] = [];
   private readonly maxRetries = 3;
   private readonly HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private currentStatus: SyncStatus = 'idle';
@@ -459,6 +461,79 @@ export class RealtimeSyncEngine {
     }
 
     await this.flushBundle();
+  }
+
+  private async flushBundle() {
+    if (this.globalBundle.length === 0) return;
+
+    const bundleData = this.globalBundle.map((b: any) => ({
+      tableName: b.tableName,
+      payload: b.payload
+    }));
+
+    try {
+      const jsonStr = JSON.stringify(bundleData);
+      const uint8Arr = new TextEncoder().encode(jsonStr);
+
+      const cs = new CompressionStream('deflate-raw');
+      const writer = cs.writable.getWriter();
+      writer.write(uint8Arr);
+      writer.close();
+
+      const response = new Response(cs.readable);
+      const compressedData = await response.arrayBuffer();
+
+      const { data: edgeResponse, error } = await supabase.functions.invoke('sync-bundle', {
+        body: compressedData,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Encoding': 'deflate-raw'
+        }
+      });
+
+      if (error) throw error;
+
+      if (edgeResponse && edgeResponse.results) {
+        for (const [index, result] of edgeResponse.results.entries()) {
+          const bundleItem = this.globalBundle[index];
+          const { data: returnedData, error: returnedError } = result;
+
+          if (returnedError) {
+            console.error(`Sync: Failed to push to ${bundleItem.tableName}:`, returnedError);
+            for (const record of bundleItem.records) {
+              const ob = bundleItem.outboxAttempts.get((record as any).serverId);
+              if (ob) {
+                await db.outbox.update(ob.id, { attempts: ob.entry.attempts + 1 }).catch(() => {});
+              } else {
+                await db.outbox.add({ tableName: bundleItem.tableName, serverId: (record as any).serverId, attempts: 1, done: 0, operation: 'upsert', createdAt: new Date().toISOString() }).catch(() => {});
+              }
+            }
+          } else if (returnedData && returnedData.length > 0) {
+            const serverIds = returnedData.map((d: any) => d.id);
+            const successRecords = bundleItem.records.filter((r: unknown) => serverIds.includes((r as {serverId: string}).serverId));
+
+            const doneOutboxIds: number[] = [];
+            for (const record of successRecords) {
+              const ob = bundleItem.outboxAttempts.get((record as any).serverId);
+              if (ob) doneOutboxIds.push(ob.id);
+            }
+
+            await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
+
+            const successUpdates = successRecords.map((r: unknown, i: number) => ({
+              key: (r as {id: number}).id!,
+              changes: { synced: 1, updatedAt: returnedData[i].updated_at || (r as {updatedAt?: string}).updatedAt }
+            }));
+            await (bundleItem.table as { bulkUpdate: (updates: unknown[]) => Promise<void> }).bulkUpdate(successUpdates);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to flush sync bundle', err);
+      throw err;
+    } finally {
+      this.globalBundle = [];
+    }
   }
 
   private async pushTable<T extends {
