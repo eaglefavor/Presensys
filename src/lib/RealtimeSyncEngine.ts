@@ -157,10 +157,18 @@ export class RealtimeSyncEngine {
     this.statusListeners.forEach(l => l(status));
   }
 
-  private getDebounceDelay(): number {
+  private getNetworkType(): string {
     const conn = (navigator as any).connection;
-    const effectiveType = conn?.effectiveType || '4g';
-    return DEBOUNCE_MAP[effectiveType] ?? 2000;
+    return conn?.effectiveType || '4g';
+  }
+
+  private isSlowNetwork(): boolean {
+    const type = this.getNetworkType();
+    return type === '2g' || type === 'slow-2g';
+  }
+
+  private getDebounceDelay(): number {
+    return DEBOUNCE_MAP[this.getNetworkType()] ?? 2000;
   }
 
   private isValidUUID(uuid: unknown): boolean {
@@ -231,6 +239,13 @@ export class RealtimeSyncEngine {
     }
 
     try {
+      // GEAR SHIFT: On slow 2G networks, skip full pull unless explicitly requested to save radio power and bandwidth.
+      // Realtime events will still handle immediate targeted updates.
+      if (this.isSlowNetwork()) {
+        console.debug('Sync: Slow network detected. Bypassing full pull batch.');
+        return;
+      }
+
       const { data: edgeResponse, error } = await supabase.functions.invoke('sync-pull-bundle', {
         body: { cursors, userId: this.userId }
       });
@@ -327,80 +342,66 @@ export class RealtimeSyncEngine {
   private async pushChanges() {
     if (!this.userId) return;
 
-    // Push semesters
-    await this.pushTable<LocalSemester>('semesters', db.semesters, (item) => ({
-      id: item.serverId,
-      name: item.name,
-      start_date: item.startDate,
-      end_date: item.endDate,
-      is_active: item.isActive,
-      is_archived: item.isArchived,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt,
-    }));
+    const isSlow = this.isSlowNetwork();
 
-    // Students have a special dedup path
-    await this.pushStudents();
-
-    // Push courses (skip if semesterId is not a valid UUID)
-    await this.pushTable<LocalCourse>('courses', db.courses, (item) => {
-      if (!this.isValidUUID(item.semesterId)) return null;
-      return {
+    if (!isSlow) {
+      // GEAR SHIFT: On fast networks, push everything starting with metadata
+      await this.pushTable<LocalSemester>('semesters', db.semesters, (item) => ({
         id: item.serverId,
-        code: item.code,
-        title: item.title,
-        semester_id: item.semesterId,
-        // Keep writing legacy `day` so older deployments continue syncing.
-        day: item.dayOfWeek ?? null,
-        time: item.time ?? null,
-        lecturers: item.lecturers ?? null,
+        name: item.name,
+        start_date: item.startDate,
+        end_date: item.endDate,
+        is_active: item.isActive,
+        is_archived: item.isArchived,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
-      };
-    });
+      }));
 
-    // Push enrollments
-    await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => {
-      if (!this.isValidUUID(item.studentId) || !this.isValidUUID(item.courseId)) return null;
-      return {
+      await this.pushStudents();
+
+      await this.pushTable<LocalCourse>('courses', db.courses, (item) => {
+        if (!this.isValidUUID(item.semesterId)) return null;
+        return {
+          id: item.serverId,
+          code: item.code,
+          title: item.title,
+          semester_id: item.semesterId,
+          day: item.dayOfWeek ?? null,
+          time: item.time ?? null,
+          lecturers: item.lecturers ?? null,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      });
+
+      await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
         id: item.serverId,
-        student_id: item.studentId,
-        course_id: item.courseId,
+        name: item.name,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
-      };
-    });
+      }));
+    } else {
+      console.debug('Sync: Slow network detected. Prioritizing attendance records and queueing metadata.');
+    }
 
-    // Push lecturers
-    await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
-      id: item.serverId,
-      name: item.name,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt,
-    }));
-
-    // Push attendance sessions
+    // Always push critical transactional data (attendance) regardless of network speed
     await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => {
       if (!this.isValidUUID(item.courseId)) return null;
       return {
         id: item.serverId,
         course_id: item.courseId,
-        // lecturer_id is optional (nullable FK) — only send a valid UUID to avoid
-        // server-side FK violations when the referenced lecturer hasn't synced yet.
-        lecturer_id: this.isValidUUID(item.lecturerId) ? item.lecturerId : null,
         date: item.date,
         title: item.title,
+        lecturer_id: item.lecturerId ?? null,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
       };
     });
 
-    // Push attendance records
     await this.pushTable<LocalAttendanceRecord>('attendance_records', db.attendanceRecords, (item) => {
       if (!this.isValidUUID(item.sessionId) || !this.isValidUUID(item.studentId)) return null;
       return {
@@ -408,7 +409,6 @@ export class RealtimeSyncEngine {
         session_id: item.sessionId,
         student_id: item.studentId,
         status: item.status,
-        // Always push as ISO string — works with both BIGINT (legacy) and TIMESTAMPTZ columns
         marked_at: new Date(item.timestamp).toISOString(),
         user_id: this.userId,
         is_deleted: item.isDeleted,
@@ -416,45 +416,51 @@ export class RealtimeSyncEngine {
       };
     });
 
-    // Push course schedules
-await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules, (item) => {
-      if (!this.isValidUUID(item.courseId)) return null;
-      return {
-        id: item.serverId,
-        course_id: item.courseId,
-        day_of_week: item.dayOfWeek,
-        start_time: item.startTime,
-        end_time: item.endTime,
-        user_id: this.userId,
-        is_deleted: item.isDeleted,
-        updated_at: item.updatedAt,
-      };
-    });
+    if (!isSlow) {
+      await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => {
+        if (!this.isValidUUID(item.courseId) || !this.isValidUUID(item.studentId)) return null;
+        return {
+          id: item.serverId,
+          student_id: item.studentId,
+          course_id: item.courseId,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      });
 
-    await this.pushTable<any>('student_credentials', db.studentCredentials, (item) => {
-      return {
-        id: item.serverId,
-        student_id: item.studentId,
-        credential_id: item.credentialId,
-        public_key: item.publicKey,
-        counter: item.counter,
-        user_id: this.userId,
-        is_deleted: item.isDeleted,
-        updated_at: item.updatedAt,
-      };
-    });
+      await this.pushTable<LocalStudentCredential>('student_credentials', db.studentCredentials, (item) => {
+        if (!this.isValidUUID(item.studentId)) return null;
+        return {
+          id: item.serverId,
+          student_id: item.studentId,
+          credential_id: item.credentialId,
+          public_key: item.publicKey,
+          counter: item.counter,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      });
+
+      await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules, (item) => {
+        if (!this.isValidUUID(item.courseId)) return null;
+        return {
+          id: item.serverId,
+          course_id: item.courseId,
+          day_of_week: item.dayOfWeek,
+          start_time: item.startTime,
+          end_time: item.endTime,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      });
+    }
+
+    await this.flushBundle();
   }
 
-  /**
-   * Generic push for a single table.
-   *
-   * Key improvements over the original:
-   * 1. Tombstones for records that were never pushed to the server are purged
-   *    locally instead of creating ghost tombstones on the server.
-   * 2. Records that have exceeded MAX_OUTBOX_ATTEMPTS in the outbox are skipped
-   *    to prevent an infinite retry loop for permanently broken items.
-   * 3. Foreign-key validity is checked via mapFn returning null (unchanged).
-   */
   private async pushTable<T extends {
     id?: number;
     synced: number;
