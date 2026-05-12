@@ -679,7 +679,7 @@ export class RealtimeSyncEngine {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
 
-                  for (const serverItem of data as any[]) {
+      for (const serverItem of data as any[]) {
         const localItem = records.find(u => u.serverId === serverItem.id);
         if (!localItem) continue;
         updates.push({
@@ -732,7 +732,7 @@ export class RealtimeSyncEngine {
       const { data: serverRows } = await supabase
         .from('students').select('id')
         .in('id', tombstones.map(t => t.serverId));
-                  const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
 
       const toPurge = tombstones.filter(t => !existsOnServer.has(t.serverId));
       if (toPurge.length > 0) await db.students.bulkDelete(toPurge.map(t => t.id!));
@@ -814,7 +814,7 @@ export class RealtimeSyncEngine {
     } else if (data) {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
-                  for (const serverItem of data as any[]) {
+      for (const serverItem of data as any[]) {
         const localItem = liveRecords.find(u => u.serverId === serverItem.id);
         if (localItem) {
           updates.push({ key: localItem.id!, changes: { synced: 1, updatedAt: serverItem.updated_at } });
@@ -968,7 +968,7 @@ export class RealtimeSyncEngine {
       });
   }
 
-          private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
+  private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
@@ -1004,7 +1004,7 @@ export class RealtimeSyncEngine {
     }
   }
 
-        private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
+  private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
     const base = {
       serverId: r.id,
       userId: r.user_id,
