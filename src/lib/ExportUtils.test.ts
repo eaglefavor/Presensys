@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-unused-vars */
 import { test, describe, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
 import { shareData, exportToCSV, exportToPDF, downloadText } from './ExportUtils.ts';
@@ -116,13 +117,13 @@ describe('shareData', () => {
 });
 
 describe('exportToCSV', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalDocument: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalURLCreateObjectURL: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalURLRevokeObjectURL: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalBlob: any;
 
   let downloadedContent: string | null = null;
@@ -141,7 +142,7 @@ describe('exportToCSV', () => {
     originalBlob = globalThis.Blob;
 
     // Mock URL methods
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     globalThis.URL.createObjectURL = (_blob: any) => {
       return 'mock-url';
     };
@@ -165,16 +166,16 @@ describe('exportToCSV', () => {
         appendChild: () => {},
         removeChild: () => {},
       }
-    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    } as any;
 
     // Mock Blob to capture content
     globalThis.Blob = class MockBlob {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       constructor(content: any[], options: any) {
         downloadedContent = content[0];
         downloadedMimeType = options?.type;
       }
-    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    } as any;
   });
 
   afterEach(() => {
@@ -217,7 +218,7 @@ describe('exportToCSV', () => {
   });
 
   test('should handle empty data array gracefully', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const data: any[] = [];
     exportToCSV(data, 'empty');
 
@@ -228,13 +229,13 @@ describe('exportToCSV', () => {
 });
 
 describe('downloadText', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalDocument: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalURLCreateObjectURL: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalURLRevokeObjectURL: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let originalBlob: any;
 
   let downloadedContent: string | null = null;
@@ -253,7 +254,7 @@ describe('downloadText', () => {
     originalBlob = globalThis.Blob;
 
     // Mock URL methods
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     globalThis.URL.createObjectURL = (_blob: any) => {
       return 'mock-url';
     };
@@ -277,16 +278,16 @@ describe('downloadText', () => {
         appendChild: () => {},
         removeChild: () => {},
       }
-    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    } as any;
 
     // Mock Blob to capture content
     globalThis.Blob = class MockBlob {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       constructor(content: any[], options: any) {
         downloadedContent = content[0];
         downloadedMimeType = options?.type;
       }
-    } as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    } as any;
   });
 
   afterEach(() => {

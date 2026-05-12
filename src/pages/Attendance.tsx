@@ -109,7 +109,7 @@ export default function Attendance() {
     if (!lecturerId) return;
     if (!selectedCourseId || !user) return;
     const newSession = {
-      serverId: '',
+      serverId: crypto.randomUUID(),
       courseId: selectedCourseId,
       date: new Date().toISOString().split('T')[0],
       title: `Session ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`,
@@ -183,7 +183,7 @@ export default function Attendance() {
             }
           } else {
             toAdd.push({
-              serverId: '',
+              serverId: crypto.randomUUID(),
               sessionId: activeSessionId,
               studentId,
               status,
@@ -306,7 +306,7 @@ export default function Attendance() {
         }
 
         toAdd.push({
-          serverId: '',
+          serverId: crypto.randomUUID(),
           sessionId: activeSessionId,
           studentId: student.serverId,
           status: 'absent',

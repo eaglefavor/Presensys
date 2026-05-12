@@ -181,7 +181,7 @@ export default function Students() {
 
   const handleMapperComplete = (data: { name: string; regNumber: string }[]) => {
     const studentsData = data.map(d => ({
-      serverId: '',
+      serverId: crypto.randomUUID(),
       name: d.name,
       regNumber: d.regNumber,
       isDeleted: 0,
@@ -214,7 +214,7 @@ export default function Students() {
         const regNumber = match[0];
         const name = line.replace(regNumber, '').replace(/[,\t]/g, '').trim().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, '');
         if (name.length > 2) results.push({
-          serverId: '',
+          serverId: crypto.randomUUID(),
           regNumber, 
           name,
           isDeleted: 0,
@@ -234,7 +234,7 @@ export default function Students() {
     setIsSaving(true);
     try {
       const dataToSave = importMode === 'manual'
-        ? manualRows.filter(r => r.name.trim() && r.regNumber.trim()).map(r => ({ serverId: '', name: r.name, regNumber: r.regNumber, isDeleted: 0, synced: 0 } as Student)) 
+        ? manualRows.filter(r => r.name.trim() && r.regNumber.trim()).map(r => ({ serverId: crypto.randomUUID(), name: r.name, regNumber: r.regNumber, isDeleted: 0, synced: 0 } as Student))
         : parsedStudents;
       
       const validData: Student[] = [];

@@ -99,7 +99,7 @@ export default function FingerprintBlitzScreen({
         await db.attendanceRecords.update(existing.id!, { status: 'present', isDeleted: 0, synced: 0, timestamp: now });
       } else {
         await db.attendanceRecords.add({
-          serverId: '',
+          serverId: crypto.randomUUID(),
           sessionId: activeSessionId,
           studentId: student.serverId,
           status: 'present',
@@ -142,7 +142,12 @@ export default function FingerprintBlitzScreen({
       }
     } catch (err: unknown) {
       console.error("Scan failed", err);
-      setScanError((err as Error).message || "Verification failed. Try again.");
+      const e = err as Error;
+      if (e.name === "NotAllowedError") {
+        setScanError("Fingerprint not found on this device. If browser data was cleared, please delete and re-register the fingerprint for this student.");
+      } else {
+        setScanError(e.message || "Verification failed. Try again.");
+      }
     } finally {
       setIsScanning(false);
     }

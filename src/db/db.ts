@@ -249,6 +249,7 @@ export class PresensysDB extends Dexie {
     // (the hook context, which exposes `onsuccess`) is accessible via `this`,
     // while `self` retains the DB instance reference.
     // -------------------------------------------------------------------
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
 
     this.tables.forEach(table => {

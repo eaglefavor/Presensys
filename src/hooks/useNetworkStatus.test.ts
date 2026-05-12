@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-function-type */
 import { describe, it, mock, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { useNetworkStatus } from './useNetworkStatus';

@@ -55,7 +55,7 @@ export default function Semesters() {
       }
 
       await db.semesters.add({
-        serverId: '',
+        serverId: crypto.randomUUID(),
         ...newSemester,
         name: generatedName,
         isActive: false,
