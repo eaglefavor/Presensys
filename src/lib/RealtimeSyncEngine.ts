@@ -1004,7 +1004,7 @@ export class RealtimeSyncEngine {
     }
   }
 
-  private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
+        private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
     const base = {
       serverId: r.id,
       userId: r.user_id,
