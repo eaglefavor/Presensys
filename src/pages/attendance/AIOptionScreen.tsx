@@ -1,15 +1,17 @@
-import { Camera, MousePointerClick, Zap, ArrowLeft, FingerprintPattern } from 'lucide-react';
+import { Camera, MousePointerClick, Zap, ArrowLeft, FingerprintPattern, KeyRound } from 'lucide-react';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { isFingerprintEnabled } from '../../lib/fingerprintFeatureFlag';
+import { isPinBlitzEnabled } from '../../lib/pinFeatureFlag';
 
 interface Props {
   onCancel: () => void;
   onSelectManual: () => void;
   onSelectAI?: () => void;
   onSelectFingerprint?: () => void;
+  onSelectPin?: () => void;
 }
 
-export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, onSelectFingerprint }: Props) {
+export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, onSelectFingerprint, onSelectPin }: Props) {
   const { isOnline } = useNetworkStatus();
 
   return (
@@ -101,6 +103,31 @@ export default function AIOptionScreen({ onCancel, onSelectManual, onSelectAI, o
             </div>
           </button>
         </div>
+        )}
+
+        {isPinBlitzEnabled() && (
+          <div className="position-relative">
+            <button
+              className="btn btn-outline-info border-2 p-4 rounded-4 text-start d-flex flex-column gap-3 w-100 hover-shadow transition-all"
+              onClick={onSelectPin}
+            >
+              <div className="d-flex justify-content-between align-items-center w-100">
+                <div className="bg-info bg-opacity-10 text-info p-3 rounded-circle">
+                  <KeyRound size={32} />
+                </div>
+                <div className="bg-info text-white text-uppercase px-2 py-1 rounded-2 fw-bold" style={{ fontSize: '10px', letterSpacing: '1px' }}>
+                  <Zap size={10} className="me-1 mb-1" />
+                  SECURE
+                </div>
+              </div>
+              <div>
+                <h3 className="h5 fw-bold mb-1">PIN Blitz</h3>
+                <p className="text-muted small mb-0">
+                  Randomized PIN verification for enrolled students within a 15-minute attendance window.
+                </p>
+              </div>
+            </button>
+          </div>
         )}
       </div>
     </div>
