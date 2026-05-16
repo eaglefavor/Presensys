@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {
   db,
   type LocalSemester,
@@ -14,6 +13,7 @@ import {
 } from '../db/db';
 import { supabase } from './supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { Table } from 'dexie';
 
 type TableName =
   | 'student_credentials'
@@ -29,6 +29,37 @@ type TableName =
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type NavigatorConnection = {
+  effectiveType?: string;
+  addEventListener?: (event: string, listener: () => void) => void;
+  removeEventListener?: (event: string, listener: () => void) => void;
+};
+
+type ServerRow = { id: string; updated_at?: string | null; [key: string]: unknown };
+
+type LocalSyncRecord = {
+  id?: number;
+  serverId: string;
+  synced: number;
+  updatedAt?: string;
+  isDeleted?: number;
+  [key: string]: unknown;
+};
+
+type BundleItem = {
+  tableName: TableName;
+  payload: Record<string, unknown>[];
+  records: LocalSyncRecord[];
+  table: Table<LocalSyncRecord, number>;
+  outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }>;
+};
+
+type RealtimePayload = {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  new: Record<string, unknown>;
+  old: Record<string, unknown>;
+};
 
 // ─── localStorage keys ───────────────────────────────────────────────────────
 
@@ -69,7 +100,7 @@ export class RealtimeSyncEngine {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private retryCount = 0;
-  private globalBundle: { tableName: TableName; payload: unknown[]; records: unknown[]; table: unknown; outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }> }[] = [];
+  private globalBundle: BundleItem[] = [];
   private readonly maxRetries = 3;
   private readonly HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private currentStatus: SyncStatus = 'idle';
@@ -139,7 +170,9 @@ export class RealtimeSyncEngine {
     this.userId = userId;
     this.isInitialized = true;
 
-    console.log('Sync: Initialized for user', userId);
+    if (import.meta.env.DEV) {
+      console.log('Sync: Initialized for user', userId);
+    }
     await this.sync();
     this.setupRealtimeSubscription();
 
@@ -161,7 +194,7 @@ export class RealtimeSyncEngine {
   }
 
   private getNetworkType(): string {
-    const conn = (navigator as any).connection;
+    const conn = (navigator as Navigator & { connection?: NavigatorConnection }).connection;
     return conn?.effectiveType || '4g';
   }
 
@@ -256,35 +289,48 @@ export class RealtimeSyncEngine {
       if (error) throw error;
       if (!edgeResponse || !edgeResponse.results) return;
 
-      const processTable = async (
+      const processTable = async <T extends LocalSyncRecord>(
         tableName: TableName,
-        dexieTable: unknown,
-        mapToLocal: (serverRow: { id: string, updated_at?: string, [key: string]: unknown }) => Record<string, unknown>
+        dexieTable: Table<T, number>,
+        mapToLocal: (serverRow: ServerRow) => T
       ) => {
-        const tableData = edgeResponse.results[tableName];
+        const tableData = edgeResponse.results[tableName] as ServerRow[] | undefined;
         if (!tableData || tableData.length === 0) return;
 
         let maxUpdatedAt = '';
+        const serverIds = tableData.map(row => row.id);
+        const localItems = await dexieTable.where('serverId').anyOf(serverIds).toArray();
+        const localMap = new Map(localItems.map(item => [item.serverId, item]));
+        const updates: Array<{ key: number; changes: Partial<T> & { synced: number } }> = [];
+        const inserts: T[] = [];
 
-        await db.transaction('rw', dexieTable as any, async () => {
-          for (const serverRow of tableData as { id: string, updated_at?: string, [key: string]: unknown }[]) {
-            const localItem = await (dexieTable as any).where('serverId').equals(serverRow.id).first();
-            const mapped = mapToLocal(serverRow);
-
-            if (localItem) {
-              if (localItem.synced === 0) {
-                const serverTs: string = serverRow.updated_at ?? '';
-                const localTs: string = localItem.updatedAt ?? '';
-                if (serverTs <= localTs) continue;
-              }
-              await (dexieTable as any).update(localItem.id!, { ...mapped, synced: 1 });
-            } else {
-              await (dexieTable as any).add({ ...mapped, synced: 1 });
-            }
-            if (serverRow.updated_at && serverRow.updated_at > maxUpdatedAt) {
-              maxUpdatedAt = serverRow.updated_at;
-            }
+        for (const serverRow of tableData) {
+          if (serverRow.updated_at && serverRow.updated_at > maxUpdatedAt) {
+            maxUpdatedAt = serverRow.updated_at;
           }
+
+          const localItem = localMap.get(serverRow.id);
+          const mapped = mapToLocal(serverRow);
+          const serverTs = serverRow.updated_at ?? '';
+
+          if (localItem) {
+            if (localItem.synced === 0) {
+              const localTs = localItem.updatedAt ?? '';
+              if (serverTs && serverTs <= localTs) {
+                continue;
+              }
+            }
+            if (localItem.id !== undefined) {
+              updates.push({ key: localItem.id, changes: { ...mapped, synced: 1 } });
+            }
+          } else {
+            inserts.push({ ...mapped, synced: 1 });
+          }
+        }
+
+        await db.transaction('rw', dexieTable, async () => {
+          if (updates.length > 0) await dexieTable.bulkUpdate(updates);
+          if (inserts.length > 0) await dexieTable.bulkAdd(inserts);
         });
 
         if (maxUpdatedAt) {
@@ -467,7 +513,7 @@ export class RealtimeSyncEngine {
   private async flushBundle() {
     if (this.globalBundle.length === 0) return;
 
-    const bundleData = this.globalBundle.map((b: any) => ({
+    const bundleData = this.globalBundle.map(b => ({
       tableName: b.tableName,
       payload: b.payload
     }));
@@ -502,30 +548,30 @@ export class RealtimeSyncEngine {
           if (returnedError) {
             console.error(`Sync: Failed to push to ${bundleItem.tableName}:`, returnedError);
             for (const record of bundleItem.records) {
-              const ob = bundleItem.outboxAttempts.get((record as any).serverId);
+              const ob = bundleItem.outboxAttempts.get(record.serverId);
               if (ob) {
                 await db.outbox.update(ob.id, { attempts: ob.entry.attempts + 1 }).catch(() => {});
               } else {
-                await db.outbox.add({ tableName: bundleItem.tableName, serverId: (record as any).serverId, attempts: 1, done: 0, operation: 'upsert', createdAt: new Date().toISOString() }).catch(() => {});
+                await db.outbox.add({ tableName: bundleItem.tableName, serverId: record.serverId, attempts: 1, done: 0, operation: 'upsert', createdAt: new Date().toISOString() }).catch(() => {});
               }
             }
           } else if (returnedData && returnedData.length > 0) {
-            const serverIds = returnedData.map((d: any) => d.id);
-            const successRecords = bundleItem.records.filter((r: unknown) => serverIds.includes((r as {serverId: string}).serverId));
+            const serverIds = (returnedData as Array<{ id: string }>).map(d => d.id);
+            const successRecords = bundleItem.records.filter(r => serverIds.includes(r.serverId));
 
             const doneOutboxIds: number[] = [];
             for (const record of successRecords) {
-              const ob = bundleItem.outboxAttempts.get((record as any).serverId);
+              const ob = bundleItem.outboxAttempts.get((record as { serverId: string }).serverId);
               if (ob) doneOutboxIds.push(ob.id);
             }
 
             await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
 
-            const successUpdates = successRecords.map((r: unknown, i: number) => ({
-              key: (r as {id: number}).id!,
-              changes: { synced: 1, updatedAt: returnedData[i].updated_at || (r as {updatedAt?: string}).updatedAt }
+            const successUpdates = successRecords.map((r, i) => ({
+              key: r.id!,
+              changes: { synced: 1, updatedAt: (returnedData as Array<{ updated_at?: string }>)[i]?.updated_at || r.updatedAt }
             }));
-            await (bundleItem.table as { bulkUpdate: (updates: unknown[]) => Promise<void> }).bulkUpdate(successUpdates);
+            await bundleItem.table.bulkUpdate(successUpdates);
           }
         }
       }
@@ -544,7 +590,7 @@ export class RealtimeSyncEngine {
     updatedAt?: string;
   }>(
     tableName: TableName,
-    table: any,
+    table: Table<T, number>,
     mapFn: (item: T) => Record<string, unknown> | null,
     conflictColumns?: string
   ) {
@@ -580,7 +626,7 @@ export class RealtimeSyncEngine {
         .select('id')
         .in('id', tombstones.map(t => t.serverId));
 
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set(((serverRows ?? []) as Array<{ id: string }>).map(r => r.id));
 
       // Records that were created and deleted entirely offline → just purge locally
       const toPurgeLocally = tombstones.filter(t => !existsOnServer.has(t.serverId));
@@ -616,7 +662,7 @@ export class RealtimeSyncEngine {
     updatedAt?: string;
   }>(
     tableName: TableName,
-    table: any,
+    table: Table<T, number>,
     records: T[],
     mapFn: (item: T) => Record<string, unknown> | null,
     outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }>,
@@ -679,7 +725,8 @@ export class RealtimeSyncEngine {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
 
-      for (const serverItem of data as any[]) {
+      const serverRows = data as Array<{ id: string; updated_at: string }>;
+      for (const serverItem of serverRows) {
         const localItem = records.find(u => u.serverId === serverItem.id);
         if (!localItem) continue;
         updates.push({
@@ -732,7 +779,7 @@ export class RealtimeSyncEngine {
       const { data: serverRows } = await supabase
         .from('students').select('id')
         .in('id', tombstones.map(t => t.serverId));
-      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set(((serverRows ?? []) as Array<{ id: string }>).map(r => r.id));
 
       const toPurge = tombstones.filter(t => !existsOnServer.has(t.serverId));
       if (toPurge.length > 0) await db.students.bulkDelete(toPurge.map(t => t.id!));
@@ -814,7 +861,8 @@ export class RealtimeSyncEngine {
     } else if (data) {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
-      for (const serverItem of data as any[]) {
+      const serverRows = data as Array<{ id: string; updated_at: string }>;
+      for (const serverItem of serverRows) {
         const localItem = liveRecords.find(u => u.serverId === serverItem.id);
         if (localItem) {
           updates.push({ key: localItem.id!, changes: { synced: 1, updatedAt: serverItem.updated_at } });
@@ -894,10 +942,11 @@ export class RealtimeSyncEngine {
     };
 
 
+    const tables = db as unknown as Record<string, Table<LocalSyncRecord, number>>;
     for (const dexieName of Object.values(tableMapping)) {
-      const table = (db as any)[dexieName];
+      const table = tables[dexieName];
       const toPurge: number[] = await table
-        .filter((r: any) => r.isDeleted === 1 && r.synced === 1)
+        .filter(r => r.isDeleted === 1 && r.synced === 1)
         .primaryKeys();
       if (toPurge.length > 0) await table.bulkDelete(toPurge);
     }
@@ -968,28 +1017,30 @@ export class RealtimeSyncEngine {
       });
   }
 
-  private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
-    const { eventType, new: newRecord, old: oldRecord } = payload;
+  private async handleRealtimeEvent<T extends LocalSyncRecord>(tableName: TableName, table: Table<T, number>, payload: RealtimePayload) {
+    const { eventType } = payload;
+    const newRecord = payload.new as ServerRow;
+    const oldRecord = payload.old as ServerRow;
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
       const localItem = await table.where('serverId').equals(newRecord.id).first();
 
       if (localItem && localItem.synced === 0) {
         // Pending local write: apply LWW
-        const serverTs: string = newRecord.updated_at ?? '';
-        const localTs: string = localItem.updatedAt ?? '';
+        const serverTs = newRecord.updated_at ?? '';
+        const localTs = localItem.updatedAt ?? '';
         if (serverTs <= localTs) return; // local is newer, do nothing
       }
 
-      const mapped = this.mapServerToLocal(tableName, newRecord);
+      const mapped = this.mapServerToLocal(tableName, newRecord) as Partial<T>;
 
-      if (localItem) {
-        await table.update(localItem.id, { ...mapped, synced: 1 });
+      if (localItem && localItem.id !== undefined) {
+        await table.update(localItem.id, { ...mapped, synced: 1 } as Partial<T>);
       } else {
         // Heavy tables: only insert via periodic pull to avoid bloating local storage
         const isHeavy = tableName === 'attendance_records' || tableName === 'attendance_sessions';
         if (!isHeavy) {
-          await table.add({ ...mapped, synced: 1 });
+          await table.add({ ...mapped, synced: 1 } as T);
         }
       }
     } else if (eventType === 'DELETE') {
@@ -1000,54 +1051,87 @@ export class RealtimeSyncEngine {
       if (localItem.synced === 0) return; // unsynced local change takes precedence
 
       // Mark as soft-deleted + synced (will be purged by meticulousPurge on next sync)
-      await table.update(localItem.id, { isDeleted: 1, synced: 1 });
+      if (localItem.id !== undefined) {
+        await table.update(localItem.id, { isDeleted: 1, synced: 1 });
+      }
     }
   }
 
-        private mapServerToLocal(tableName: string, r: any): Record<string, unknown> {
+  private mapServerToLocal(tableName: TableName, r: ServerRow): Record<string, unknown> {
     const base = {
       serverId: r.id,
-      userId: r.user_id,
-      isDeleted: r.is_deleted,
-      updatedAt: r.updated_at,
+      userId: typeof r.user_id === 'string' ? r.user_id : undefined,
+      isDeleted: typeof r.is_deleted === 'number' ? r.is_deleted : 0,
+      updatedAt: typeof r.updated_at === 'string' ? r.updated_at : undefined,
     };
     switch (tableName) {
       case 'semesters':
-        return { ...base, name: r.name, startDate: r.start_date, endDate: r.end_date, isActive: r.is_active, isArchived: r.is_archived };
+        return {
+          ...base,
+          name: String(r.name ?? ''),
+          startDate: String(r.start_date ?? ''),
+          endDate: String(r.end_date ?? ''),
+          isActive: Boolean(r.is_active),
+          isArchived: Boolean(r.is_archived)
+        };
       case 'students':
-        return { ...base, regNumber: r.reg_number, name: r.name, email: r.email, phone: r.phone };
+        return {
+          ...base,
+          regNumber: String(r.reg_number ?? ''),
+          name: String(r.name ?? ''),
+          email: typeof r.email === 'string' ? r.email : undefined,
+          phone: typeof r.phone === 'string' ? r.phone : undefined
+        };
       case 'courses':
         return {
           ...base,
-          code: r.code,
-          title: r.title,
-          semesterId: r.semester_id,
+          code: String(r.code ?? ''),
+          title: String(r.title ?? ''),
+          semesterId: String(r.semester_id ?? ''),
           // Legacy schema used `day`; newer migrations may use `day_of_week`.
-          dayOfWeek: r.day_of_week ?? r.day,
-          time: r.time,
-          lecturers: r.lecturers,
+          dayOfWeek: (r.day_of_week ?? r.day) ? String(r.day_of_week ?? r.day) : undefined,
+          time: r.time ? String(r.time) : undefined,
+          lecturers: r.lecturers ? String(r.lecturers) : undefined,
         };
       case 'lecturers':
-        return { ...base, name: r.name };
+        return { ...base, name: String(r.name ?? '') };
       case 'course_schedules':
-        return { ...base, courseId: r.course_id, dayOfWeek: r.day_of_week, startTime: r.start_time, endTime: r.end_time };
-      case 'enrollments':
-        return { ...base, studentId: r.student_id, courseId: r.course_id };
-      case 'attendance_sessions':
-        return { ...base, courseId: r.course_id, date: r.date, title: r.title, lecturerId: r.lecturer_id };
-      case 'attendance_records':
         return {
-          ...base, sessionId: r.session_id, studentId: r.student_id, status: r.status,
-          // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
-          timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
+          ...base,
+          courseId: String(r.course_id ?? ''),
+          dayOfWeek: String(r.day_of_week ?? ''),
+          startTime: String(r.start_time ?? ''),
+          endTime: String(r.end_time ?? '')
         };
+      case 'enrollments':
+        return { ...base, studentId: String(r.student_id ?? ''), courseId: String(r.course_id ?? '') };
+      case 'attendance_sessions':
+        return {
+          ...base,
+          courseId: String(r.course_id ?? ''),
+          date: String(r.date ?? ''),
+          title: String(r.title ?? ''),
+          lecturerId: r.lecturer_id ? String(r.lecturer_id) : undefined
+        };
+      case 'attendance_records':
+        {
+          const markedAt = r.marked_at;
+        return {
+            ...base,
+            sessionId: String(r.session_id ?? ''),
+            studentId: String(r.student_id ?? ''),
+            status: String(r.status ?? ''),
+            // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
+            timestamp: typeof markedAt === 'number' ? markedAt : new Date(String(markedAt)).getTime(),
+        };
+        }
       case 'student_credentials':
         return {
           ...base,
-          studentId: r.student_id,
-          credentialId: r.credential_id,
-          publicKey: r.public_key,
-          counter: r.counter,
+          studentId: String(r.student_id ?? ''),
+          credentialId: String(r.credential_id ?? ''),
+          publicKey: String(r.public_key ?? ''),
+          counter: typeof r.counter === 'number' ? r.counter : 0,
         };
       default:
         return base;

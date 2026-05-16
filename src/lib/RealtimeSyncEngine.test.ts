@@ -1,12 +1,19 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test, describe, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import 'fake-indexeddb/auto';
+import { db, type LocalAttendanceSession, type LocalStudent } from '../db/db';
+import type { SyncStatus } from './RealtimeSyncEngine';
 
-// We must override global variables.
-Object.defineProperty(global, 'window', {
+type Listener = () => void;
+const windowListeners = new Map<string, Listener>();
+Object.defineProperty(globalThis, 'window', {
   value: {
-    addEventListener: mock.fn(),
-    removeEventListener: mock.fn(),
+    addEventListener: mock.fn((event: string, listener: Listener) => {
+      windowListeners.set(event, listener);
+    }),
+    removeEventListener: mock.fn((event: string) => {
+      windowListeners.delete(event);
+    }),
   },
   writable: true
 });
@@ -32,17 +39,42 @@ const originalConsoleError = console.error;
 const { RealtimeSyncEngine } = await import('./RealtimeSyncEngine.ts');
 
 describe('RealtimeSyncEngine - sync()', () => {
-  let engine: any;
+  type EnginePrivate = {
+    userId: string | null;
+    isSyncing: boolean;
+    retryCount: number;
+    retryTimer: ReturnType<typeof setTimeout> | null;
+    maxRetries: number;
+    sync: () => Promise<void>;
+    pullChanges: () => Promise<void>;
+    selfHealData: () => Promise<void>;
+    pushChanges: () => Promise<void>;
+    meticulousPurge: () => Promise<void>;
+    emitStatus: (status: SyncStatus) => void;
+    handleRealtimeEvent: (tableName: string, table: unknown, payload: unknown) => Promise<void>;
+  };
 
-  beforeEach(() => {
+  let engine: EnginePrivate;
+  let emitStatusMock: ReturnType<typeof mock.fn<(status: SyncStatus) => void>>;
+  let consoleLogMock: ReturnType<typeof mock.fn<typeof console.log>>;
+  let consoleErrorMock: ReturnType<typeof mock.fn<typeof console.error>>;
+
+  beforeEach(async () => {
     // Suppress console output during tests
-    console.log = mock.fn();
-    console.error = mock.fn();
+    consoleLogMock = mock.fn<typeof console.log>();
+    consoleErrorMock = mock.fn<typeof console.error>();
+    console.log = consoleLogMock;
+    console.error = consoleErrorMock;
 
     // Enable fake timers
     mock.timers.enable({ apis: ['setTimeout'] }); // Removed clearTimeout
 
-    engine = new RealtimeSyncEngine();
+    windowListeners.clear();
+
+    await db.delete();
+    await db.open();
+
+    engine = new RealtimeSyncEngine() as EnginePrivate;
 
     // Set up basic state
     engine.userId = 'user-123';
@@ -57,7 +89,8 @@ describe('RealtimeSyncEngine - sync()', () => {
     engine.meticulousPurge = mock.fn(async () => {});
 
     // Mock emitStatus
-    engine.emitStatus = mock.fn();
+    emitStatusMock = mock.fn<(status: SyncStatus) => void>();
+    engine.emitStatus = emitStatusMock;
   });
 
   afterEach(() => {
@@ -79,7 +112,7 @@ describe('RealtimeSyncEngine - sync()', () => {
     assert.strictEqual(engine.meticulousPurge.mock.callCount(), 1);
 
     // Check emitStatus calls
-    const emitStatusCalls = engine.emitStatus.mock.calls.map((c: any) => c.arguments[0]);
+    const emitStatusCalls = emitStatusMock.mock.calls.map(call => call.arguments[0] as SyncStatus);
     assert.deepStrictEqual(emitStatusCalls, ['syncing', 'synced']);
 
     // Check state updates
@@ -131,12 +164,12 @@ describe('RealtimeSyncEngine - sync()', () => {
     assert.strictEqual(engine.isSyncing, false);
 
     // Should emit 'syncing' status initially
-    const emitStatusCalls = engine.emitStatus.mock.calls.map((c: any) => c.arguments[0]);
+    const emitStatusCalls = emitStatusMock.mock.calls.map(call => call.arguments[0] as SyncStatus);
     assert.deepStrictEqual(emitStatusCalls, ['syncing']);
 
     // Should log the error and retry
-    assert.strictEqual((console.error as any).mock.callCount(), 1);
-    assert.strictEqual((console.log as any).mock.callCount(), 1);
+    assert.strictEqual(consoleErrorMock.mock.callCount(), 1);
+    assert.strictEqual(consoleLogMock.mock.callCount(), 1);
 
     // Check retry logic
     assert.strictEqual(engine.retryCount, 1);
@@ -160,31 +193,83 @@ describe('RealtimeSyncEngine - sync()', () => {
     assert.strictEqual(engine.isSyncing, false);
 
     // Should emit 'syncing' then 'error'
-    const emitStatusCalls = engine.emitStatus.mock.calls.map((c: any) => c.arguments[0]);
+    const emitStatusCalls = emitStatusMock.mock.calls.map(call => call.arguments[0] as SyncStatus);
     assert.deepStrictEqual(emitStatusCalls, ['syncing', 'error']);
 
     // Check error logs
-    assert.strictEqual((console.error as any).mock.callCount(), 2); // Error trace + max retries reached message
+    assert.strictEqual(consoleErrorMock.mock.callCount(), 2); // Error trace + max retries reached message
   });
 
   test('sync - network transition to offline sets status to offline', async () => {
     Object.defineProperty(global, 'navigator', { value: { onLine: false }, writable: true });
-
-    // In node context, window.addEventListener might not map directly to the engine's initialization
-    // because it's called inside the constructor or setupRealtimeSubscription.
-    // Let's call emitStatus directly as an isolated test case.
-    engine.emitStatus('offline');
-    assert.strictEqual(engine.emitStatus.mock.calls.some((c: any) => c.arguments[0] === 'offline'), true);
+    const offlineListener = windowListeners.get('offline');
+    offlineListener?.();
+    assert.strictEqual(emitStatusMock.mock.calls.some(call => call.arguments[0] === 'offline'), true);
   });
 
-  test('sync - outbox orphan synthesis logic', async () => {
-    // The exact push logic requires mocking Dexie properly which is hard in isolated node tests.
-    // We will verify the basic structure and method calls.
-    assert.strictEqual(true, true);
+  test('sync - online transition resets retry and triggers sync', async () => {
+    engine.retryCount = 2;
+    const syncMock = mock.fn(async () => {});
+    engine.sync = syncMock as unknown as EnginePrivate['sync'];
+    const onlineListener = windowListeners.get('online');
+    onlineListener?.();
+    assert.strictEqual(engine.retryCount, 0);
+    assert.strictEqual(syncMock.mock.callCount(), 1);
   });
 
-  test('sync - LWW pull deduplication', async () => {
-    assert.strictEqual(true, true);
+  test('realtime update respects LWW when local record is newer', async () => {
+    const localSession: LocalAttendanceSession = {
+      serverId: 'session-1',
+      courseId: 'course-1',
+      date: '2024-01-01',
+      title: 'Local Session',
+      lecturerId: undefined,
+      isDeleted: 0,
+      synced: 0,
+      updatedAt: '2025-01-01T00:00:00Z',
+    };
+    const id = await db.attendanceSessions.add(localSession);
+
+    const payload = {
+      eventType: 'UPDATE',
+      new: {
+        id: 'session-1',
+        course_id: 'course-1',
+        date: '2024-01-01',
+        title: 'Server Session',
+        is_deleted: 0,
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+      old: {},
+    };
+
+    await engine.handleRealtimeEvent('attendance_sessions', db.attendanceSessions, payload);
+
+    const updated = await db.attendanceSessions.get(id);
+    assert.strictEqual(updated?.title, 'Local Session');
+  });
+
+  test('realtime delete marks local tombstone', async () => {
+    const localStudent: LocalStudent = {
+      serverId: 'student-1',
+      regNumber: '2020123456',
+      name: 'Test Student',
+      isDeleted: 0,
+      synced: 1,
+    };
+    const id = await db.students.add(localStudent);
+
+    const payload = {
+      eventType: 'DELETE',
+      new: {},
+      old: { id: 'student-1' },
+    };
+
+    await engine.handleRealtimeEvent('students', db.students, payload);
+
+    const updated = await db.students.get(id);
+    assert.strictEqual(updated?.isDeleted, 1);
+    assert.strictEqual(updated?.synced, 1);
   });
 
 });

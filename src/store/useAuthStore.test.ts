@@ -1,13 +1,38 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { JSDOM } from 'jsdom';
 import 'fake-indexeddb/auto';
+import type { User } from '@supabase/supabase-js';
 
 // We must dynamically import the module after globals are mocked
 test('useAuthStore fetchProfile error handling', async (t) => {
-  let useAuthStore: any;
-  let supabase: any;
+  type UseAuthStore = {
+    setState: (state: {
+      user: User | null;
+      profileVerified: boolean;
+      loading: boolean;
+      profile: { id: string; full_name: string; role: string; status: string; invalid_tries: number } | null;
+    }) => void;
+    getState: () => {
+      fetchProfile: () => Promise<void>;
+      loading: boolean;
+      profileVerified: boolean;
+      profile: { id: string } | null;
+    };
+  };
+  type SupabaseClientLike = {
+    from: (table: string) => {
+      select: () => {
+        eq: (column: string, value: string) => {
+          limit: (count: number) => {
+            maybeSingle: () => Promise<{ data: unknown; error: { message: string; code: string } | null }>
+          }
+        }
+      }
+    }
+  };
+  let useAuthStore: UseAuthStore;
+  let supabase: SupabaseClientLike;
 
   t.beforeEach(async () => {
     // 1. Setup DOM globals required by RealtimeSyncEngine/Zustand
@@ -21,17 +46,17 @@ test('useAuthStore fetchProfile error handling', async (t) => {
 
     // 2. Import modules
     const supabaseMod = await import('../lib/supabase.ts');
-    supabase = supabaseMod.supabase;
+    supabase = supabaseMod.supabase as unknown as SupabaseClientLike;
 
     const mod = await import('./useAuthStore.ts');
     useAuthStore = mod.useAuthStore;
 
     // Reset state before test
     useAuthStore.setState({
-      user: { id: 'test-user-id' } as any,
+      user: { id: 'test-user-id' } as User,
       profileVerified: false,
       loading: true,
-      profile: { id: 'cached-id', role: 'rep' } as any // pre-existing cached profile
+      profile: { id: 'cached-id', full_name: 'Cached User', role: 'rep', status: 'pending', invalid_tries: 0 }
     });
   });
 
@@ -49,7 +74,7 @@ test('useAuthStore fetchProfile error handling', async (t) => {
           }))
         }))
       }))
-    }));
+    })) as SupabaseClientLike['from'];
 
     await useAuthStore.getState().fetchProfile();
 

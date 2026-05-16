@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
 import { db } from '../db/db';
+import type { Course, CourseSchedule, LocalLecturer } from '../db/db';
 import toast from 'react-hot-toast';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -11,6 +12,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import EnrollmentModal from '../components/course/EnrollmentModal';
 
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Everyday'];
+const EMPTY_LECTURERS: LocalLecturer[] = [];
 
 interface SlotDraft {
   key: string;
@@ -42,14 +44,20 @@ export default function Courses() {
     []
   );
 
-  const allLecturers = useLiveQuery(
+  const queriedLecturers = useLiveQuery(
     () => db.lecturers.filter(l => l.isDeleted !== 1).toArray(),
     []
-  ) || [];
+  );
+  const allLecturers = queriedLecturers ?? EMPTY_LECTURERS;
 
   const lecturerMap = useMemo(
     () => new Map(allLecturers.map(l => [l.serverId, l.name])),
     [allLecturers]
+  );
+
+  const courseMap = useMemo(
+    () => new Map((courses || []).map(course => [course.serverId, course])),
+    [courses]
   );
 
   const resolveLecturerNames = (field: string | undefined) => {
@@ -62,17 +70,8 @@ export default function Courses() {
   const [courseForm, setCourseForm] = useState({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
   const [slots, setSlots] = useState<SlotDraft[]>([]);
   const [slotDraft, setSlotDraft] = useState<{ dayOfWeek: string; startTime: string; endTime: string }>({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
-
-  const [showEnrollModal, setShowEnrollModal] = useState<{ show: boolean, courseId?: string, courseName?: string }>({ show: false });
-  const itemsPerPage = 5;
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const totalPages = Math.ceil((courses?.length || 0) / itemsPerPage);
-  const displayedCourses = courses?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  const checkConflict = (draft: { dayOfWeek: string; startTime: string; endTime: string }, excludeCourseServerId?: string): string | null => {
-    if (!draft.startTime || !draft.endTime || !allSchedules || !courses) return null;
+  const checkConflict = useCallback((draft: { dayOfWeek: string; startTime: string; endTime: string }, excludeCourseServerId?: string): string | null => {
+    if (!draft.startTime || !draft.endTime || !allSchedules) return null;
 
     const draftStart = toMinutes(draft.startTime);
     const draftEnd = toMinutes(draft.endTime);
@@ -80,7 +79,6 @@ export default function Courses() {
 
     for (const sched of allSchedules) {
       if (sched.courseId === excludeCourseServerId) continue;
-      // 'Everyday' matches all days; specific days match themselves and 'Everyday' slots
       const daysMatch =
         draft.dayOfWeek === 'Everyday' ||
         sched.dayOfWeek === 'Everyday' ||
@@ -90,22 +88,26 @@ export default function Courses() {
       const schedStart = toMinutes(sched.startTime);
       const schedEnd = toMinutes(sched.endTime);
       if (rangesOverlap(draftStart, draftEnd, schedStart, schedEnd)) {
-        const conflictingCourse = courses.find(c => c.serverId === sched.courseId);
+        const conflictingCourse = courseMap.get(sched.courseId);
         return conflictingCourse
           ? `Conflict with ${conflictingCourse.code} (${sched.dayOfWeek} ${sched.startTime}–${sched.endTime})`
           : 'Schedule conflict detected';
       }
     }
     return null;
-  };
+  }, [allSchedules, courseMap]);
 
-  useEffect(() => {
-    if (slotDraft.startTime && slotDraft.endTime) {
-      setConflictWarning(checkConflict(slotDraft, courseForm.serverId));
-    } else {
-      setConflictWarning(null);
-    }
-  }, [slotDraft, allSchedules, courseForm.serverId, courses]);
+  const conflictWarning = useMemo(() => {
+    if (!slotDraft.startTime || !slotDraft.endTime) return null;
+    return checkConflict(slotDraft, courseForm.serverId);
+  }, [slotDraft, courseForm.serverId, checkConflict]);
+
+  const [showEnrollModal, setShowEnrollModal] = useState<{ show: boolean, courseId?: string, courseName?: string }>({ show: false });
+  const itemsPerPage = 5;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil((courses?.length || 0) / itemsPerPage);
+  const displayedCourses = courses?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleAddSlot = () => {
     if (!slotDraft.startTime || !slotDraft.endTime) {
@@ -123,7 +125,6 @@ export default function Courses() {
       endTime: slotDraft.endTime,
     }]);
     setSlotDraft({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-    setConflictWarning(null);
   };
 
   const handleRemoveSlot = (key: string) => {
@@ -158,7 +159,7 @@ export default function Courses() {
           userId: user.id,
           synced: 0,
           isDeleted: 0,
-        } as unknown as import('../db/db').CourseSchedule);
+        } as CourseSchedule);
       }
     } else {
       const newCourseId = crypto.randomUUID();
@@ -171,7 +172,7 @@ export default function Courses() {
         userId: user.id,
         synced: 0,
         isDeleted: 0,
-      } as unknown as import('../db/db').Course);
+      } as Course);
 
       for (const slot of slots) {
         await db.courseSchedules.add({
@@ -183,7 +184,7 @@ export default function Courses() {
           userId: user.id,
           synced: 0,
           isDeleted: 0,
-        } as unknown as import('../db/db').CourseSchedule);
+        } as CourseSchedule);
       }
     }
 
@@ -193,7 +194,7 @@ export default function Courses() {
     setIsEditing(false);
   };
 
-  const handleEditClick = (course: import('../db/db').Course) => {
+  const handleEditClick = (course: Course) => {
     const existingSlots = allSchedules?.filter(s => s.courseId === course.serverId) ?? [];
     setCourseForm({ id: course.id || 0, serverId: course.serverId as ReturnType<typeof crypto.randomUUID>, code: course.code, title: course.title, lecturers: course.lecturers || '' });
     setSlots(existingSlots.map(s => ({
@@ -204,7 +205,6 @@ export default function Courses() {
       endTime: s.endTime,
     })));
     setSlotDraft({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-    setConflictWarning(null);
     setIsEditing(true);
     setShowAddModal(true);
   };
@@ -311,7 +311,6 @@ export default function Courses() {
               setCourseForm({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
               setSlots([]);
               setSlotDraft({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-              setConflictWarning(null);
               setShowAddModal(true);
             }}
           >
