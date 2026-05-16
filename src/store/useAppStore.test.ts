@@ -3,7 +3,13 @@ import assert from 'node:assert';
 import { db } from '../db/db.ts';
 
 test('useAppStore initialization tests', async (t) => {
-  type UseAppStore = typeof import('./useAppStore.ts').useAppStore;
+  type UseAppStore = {
+    setState: (state: { activeSemester: null }) => void;
+    getState: () => {
+      initialize: () => Promise<void>;
+      activeSemester: { name?: string } | null;
+    };
+  };
   let useAppStore: UseAppStore;
 
   t.beforeEach(async () => {

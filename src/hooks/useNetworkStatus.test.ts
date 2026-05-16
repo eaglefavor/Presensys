@@ -6,7 +6,7 @@ import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>');
 const globalWindow = globalThis as unknown as { window: Window; document: Document };
-globalWindow.window = dom.window;
+globalWindow.window = dom.window as unknown as Window;
 globalWindow.document = dom.window.document;
 Object.defineProperty(global, 'navigator', {
   value: { userAgent: 'node.js' },
@@ -40,8 +40,8 @@ describe('useNetworkStatus', () => {
       }
     });
 
-    globalWindow.window.addEventListener = addEventListenerMock;
-    globalWindow.window.removeEventListener = removeEventListenerMock;
+    globalWindow.window.addEventListener = addEventListenerMock as unknown as Window['addEventListener'];
+    globalWindow.window.removeEventListener = removeEventListenerMock as unknown as Window['removeEventListener'];
 
     Object.defineProperty(globalNavigator.navigator, 'onLine', { value: true, writable: true, configurable: true });
 

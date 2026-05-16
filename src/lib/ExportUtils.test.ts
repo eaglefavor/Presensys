@@ -2,10 +2,11 @@ import { test, describe, beforeEach, afterEach } from 'node:test';
 import type { TestContext } from 'node:test';
 import * as assert from 'node:assert';
 import { shareData, exportToCSV, exportToPDF, downloadText } from './ExportUtils.ts';
+import type { ExportRow } from './ExportUtils.ts';
 
-type NavigatorWithShare = Navigator & {
+type NavigatorWithShare = Omit<Navigator, 'share' | 'clipboard'> & {
   share?: (data: ShareData) => Promise<void>;
-  clipboard?: { writeText?: (text: string) => Promise<void> };
+  clipboard?: Partial<Pick<Clipboard, 'writeText'>>;
 };
 type MockFn = ReturnType<TestContext['mock']['fn']>;
 type JsPdfMock = {
@@ -143,9 +144,9 @@ describe('exportToCSV', () => {
 
   let originalBlob: typeof Blob | undefined;
 
-  let downloadedContent: string | null = null;
+  let downloadedContent: BlobPart | null = null;
   let downloadedFilename: string | null = null;
-  let downloadedMimeType: string | null = null;
+  let downloadedMimeType: string | undefined | null = null;
 
   beforeEach(() => {
     downloadedContent = null;
@@ -160,7 +161,8 @@ describe('exportToCSV', () => {
 
     // Mock URL methods
 
-    globalThis.URL.createObjectURL = (_blob: Blob) => {
+    globalThis.URL.createObjectURL = (blob: Blob) => {
+      void blob;
       return 'mock-url';
     };
     globalThis.URL.revokeObjectURL = () => {};
@@ -245,7 +247,7 @@ describe('exportToCSV', () => {
 
   test('should handle empty data array gracefully', () => {
 
-    const data: Array<Record<string, unknown>> = [];
+    const data: ExportRow[] = [];
     exportToCSV(data, 'empty');
 
     assert.strictEqual(downloadedFilename, 'empty.csv');
@@ -270,9 +272,9 @@ describe('downloadText', () => {
 
   let originalBlob: typeof Blob | undefined;
 
-  let downloadedContent: string | null = null;
+  let downloadedContent: BlobPart | null = null;
   let downloadedFilename: string | null = null;
-  let downloadedMimeType: string | null = null;
+  let downloadedMimeType: string | undefined | null = null;
 
   beforeEach(() => {
     downloadedContent = null;
@@ -287,7 +289,8 @@ describe('downloadText', () => {
 
     // Mock URL methods
 
-    globalThis.URL.createObjectURL = (_blob: Blob) => {
+    globalThis.URL.createObjectURL = (blob: Blob) => {
+      void blob;
       return 'mock-url';
     };
     globalThis.URL.revokeObjectURL = () => {};
@@ -356,7 +359,8 @@ describe('downloadText', () => {
 });
 
 describe('exportToPDF', () => {
-  beforeEach((t: TestContext) => {
+  beforeEach((context) => {
+    const t = context as TestContext;
     // Reset mocks before each test
     const jsPDFMock: JsPdfMock = {
       constructor: t.mock.fn(),

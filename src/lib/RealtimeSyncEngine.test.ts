@@ -39,7 +39,7 @@ const originalConsoleError = console.error;
 const { RealtimeSyncEngine } = await import('./RealtimeSyncEngine.ts');
 
 describe('RealtimeSyncEngine - sync()', () => {
-  type EnginePrivate = InstanceType<typeof RealtimeSyncEngine> & {
+  type EnginePrivate = {
     userId: string | null;
     isSyncing: boolean;
     retryCount: number;

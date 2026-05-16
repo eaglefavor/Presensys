@@ -1,7 +1,6 @@
-import Dexie, { type Table } from 'dexie';
+import Dexie, { type Table, type UpdateSpec } from 'dexie';
 import { v4 as uuidv4 } from 'uuid';
 
-type HookContext = { onsuccess?: () => void };
 type SyncableRecord = {
   serverId?: string;
   createdAt?: string;
@@ -10,7 +9,7 @@ type SyncableRecord = {
   synced?: number;
   [key: string]: unknown;
 };
-type SyncableMods = Record<string, unknown> & {
+type SyncableMods = UpdateSpec<SyncableRecord> & {
   synced?: number;
   isDeleted?: number;
 };
@@ -269,21 +268,23 @@ export class PresensysDB extends Dexie {
       if (table.name === 'outbox') return; // never hook the outbox itself
 
       // ---- creating --------------------------------------------------
-      table.hook('creating', function (this: HookContext, _primKey: unknown, obj: SyncableRecord) {
-        if (!obj.serverId) obj.serverId = uuidv4();
-        if (!obj.createdAt) obj.createdAt = new Date().toISOString();
-        if (!obj.updatedAt) obj.updatedAt = new Date().toISOString();
-        if (obj.isDeleted === undefined) obj.isDeleted = 0;
-        if (obj.synced === undefined) obj.synced = 0;
+      table.hook('creating', function (_primKey, obj) {
+        const record = obj as SyncableRecord;
+        const hookContext = this as { onsuccess?: () => void };
+        if (!record.serverId) record.serverId = uuidv4();
+        if (!record.createdAt) record.createdAt = new Date().toISOString();
+        if (!record.updatedAt) record.updatedAt = new Date().toISOString();
+        if (record.isDeleted === undefined) record.isDeleted = 0;
+        if (record.synced === undefined) record.synced = 0;
 
         // Capture fields before async gap
-        const capturedServerId = String(obj.serverId);
+        const capturedServerId = String(record.serverId);
         const capturedTableName = table.name;
 
         // Write outbox entry AFTER the transaction commits (onsuccess fires post-commit).
         // This is a separate micro-transaction; failures are silently ignored because
         // the synced=0 flag on the data row is the authoritative "needs push" marker.
-        this.onsuccess = () => {
+        hookContext.onsuccess = () => {
           self.outbox.add({
             tableName: capturedTableName,
             serverId: capturedServerId,
@@ -298,12 +299,15 @@ export class PresensysDB extends Dexie {
       });
 
       // ---- updating --------------------------------------------------
-      table.hook('updating', function (this: HookContext, mods: SyncableMods, _primKey: unknown, obj: SyncableRecord) {
+      table.hook('updating', function (mods, _primKey, obj) {
+        const updateSpec = mods as SyncableMods;
+        const record = obj as SyncableRecord;
+        const hookContext = this as { onsuccess?: () => void };
         // The sync engine marks records with { synced: 1 } to confirm a successful
         // push.  We must not re-trigger a sync cycle or stamp a new updatedAt for
         // these internal confirmations.
         const isSyncEngineConfirm =
-          mods !== null && 'synced' in mods && mods.synced === 1;
+          updateSpec !== null && 'synced' in updateSpec && updateSpec.synced === 1;
 
         if (!isSyncEngineConfirm) {
           self.notifyChange();
@@ -314,14 +318,14 @@ export class PresensysDB extends Dexie {
         }
 
         // Write an outbox entry after the data transaction commits
-        if (obj?.serverId) {
-          const capturedServerId = String(obj.serverId);
+        if (record?.serverId) {
+          const capturedServerId = String(record.serverId);
           const capturedTableName = table.name;
           // A soft-delete (isDeleted: 1) produces a 'delete' outbox operation
           const operation: 'upsert' | 'delete' =
-            'isDeleted' in mods && mods.isDeleted === 1 ? 'delete' : 'upsert';
+            'isDeleted' in updateSpec && updateSpec.isDeleted === 1 ? 'delete' : 'upsert';
 
-          this.onsuccess = () => {
+          hookContext.onsuccess = () => {
             self.outbox.add({
               tableName: capturedTableName,
               serverId: capturedServerId,

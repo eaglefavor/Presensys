@@ -5,7 +5,7 @@ import {
   ChevronUp, X, CheckCircle2, Clock, Printer, Users, LayoutGrid,
 } from 'lucide-react';
 import { db } from '../db/db';
-import type { LocalStudent } from '../db/db';
+import type { LocalStudent, LocalLecturer } from '../db/db';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
@@ -73,6 +73,7 @@ type SupabaseRollCallRow = { status: string; students?: { name: string; reg_numb
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const REG_NUMBER_PATTERN = /^(\d|[A-Z]{2,}\/)/i;
+const EMPTY_LECTURERS: LocalLecturer[] = [];
 
 // ─── sessionStorage helpers ───────────────────────────────────────────────────
 
@@ -220,7 +221,8 @@ const StatusIcon = ({ status }: { status: string }) =>
 export default function Archives() {
   const { user } = useAuthStore();
   const activeSemester = useAppStore(state => state.activeSemester);
-  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray()) || [];
+  const queriedLecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray());
+  const lecturers = queriedLecturers ?? EMPTY_LECTURERS;
 
   const [mode, setMode] = useState<ArchiveMode>('student');
   const [loading, setLoading] = useState(false);

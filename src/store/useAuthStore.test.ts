@@ -6,7 +6,20 @@ import type { User } from '@supabase/supabase-js';
 
 // We must dynamically import the module after globals are mocked
 test('useAuthStore fetchProfile error handling', async (t) => {
-  type UseAuthStore = typeof import('./useAuthStore.ts').useAuthStore;
+  type UseAuthStore = {
+    setState: (state: {
+      user: User | null;
+      profileVerified: boolean;
+      loading: boolean;
+      profile: { id: string; full_name: string; role: string; status: string; invalid_tries: number } | null;
+    }) => void;
+    getState: () => {
+      fetchProfile: () => Promise<void>;
+      loading: boolean;
+      profileVerified: boolean;
+      profile: { id: string } | null;
+    };
+  };
   type SupabaseClientLike = {
     from: (table: string) => {
       select: () => {
