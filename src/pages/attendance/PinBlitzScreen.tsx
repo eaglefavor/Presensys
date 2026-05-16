@@ -4,7 +4,7 @@ import { ArrowLeft, CheckCircle, KeyRound, StopCircle, UserX, AlertCircle } from
 import toast from 'react-hot-toast';
 import { db } from '../../db/db';
 import type { LocalStudent } from '../../db/db';
-import { ensureStudentPins, generatePinChallenge, verifyStudentPin } from '../../lib/pinBlitzService';
+import { ensureStudentPins, generatePinChallenge, verifyStudentPin, type StudentPinReveal } from '../../lib/pinBlitzService';
 
 const SESSION_DURATION_S = 15 * 60;
 // Challenge TTL is intentionally shorter on the server to reduce replay window.
@@ -48,6 +48,7 @@ export default function PinBlitzScreen({
   const [toastQueue, setToastQueue] = useState<MatchToast[]>([]);
   const toastCounter = useRef(0);
   const [isPreparingPins, setIsPreparingPins] = useState(true);
+  const [newPins, setNewPins] = useState<StudentPinReveal[]>([]);
 
   const [studentList, setStudentList] = useState<LocalStudent[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -73,8 +74,25 @@ export default function PinBlitzScreen({
 
         const unmarked = enrollments.filter(s => !existingIds.has(s.serverId));
         const reveals = await ensureStudentPins(unmarked.map(s => s.serverId));
+        setNewPins(reveals);
         if (reveals.length > 0) {
-          toast.success(`${reveals.length} new PIN(s) auto-generated. Share securely with affected students.`);
+          const exportText = reveals
+            .map((r, idx) => `${idx + 1}. ${r.name} (${r.regNumber}) - PIN: ${r.pin}`)
+            .join('\n');
+          let copied = false;
+          try {
+            if (navigator.clipboard?.writeText) {
+              await navigator.clipboard.writeText(exportText);
+              copied = true;
+            }
+          } catch {
+            copied = false;
+          }
+          toast.success(
+            copied
+              ? `${reveals.length} new PIN(s) generated and copied for secure sharing.`
+              : `${reveals.length} new PIN(s) generated. Clipboard copy failed; share from the session list manually.`,
+          );
         }
 
         setStudentList(shuffleStudents(unmarked));
@@ -258,6 +276,11 @@ export default function PinBlitzScreen({
                 </div>
               </div>
             </div>
+            {newPins.length > 0 && (
+              <div className="alert alert-warning mt-3 mb-0 small fw-bold text-start">
+                {newPins.length} student PIN(s) were just generated for this session. Share them securely before verification.
+              </div>
+            )}
           </div>
         </div>
 

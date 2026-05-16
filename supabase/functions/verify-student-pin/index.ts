@@ -237,7 +237,7 @@ serve(async (req: Request) => {
       });
     }
 
-    const newFailedAttempts = Number(pinRow.failed_attempts || 0) + 1;
+    const newFailedAttempts = Number(pinRow.failed_attempts) + 1;
     let retryAfterSeconds = 0;
     let locked = false;
     let remainingAttempts = Math.max(0, MAX_FAILED_ATTEMPTS - newFailedAttempts);

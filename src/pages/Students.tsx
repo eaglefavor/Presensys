@@ -154,8 +154,16 @@ export default function Students() {
     if (!ok) return;
     try {
       const pinData = await assignOrResetStudentPin(selectedStudent.serverId);
-      await navigator.clipboard?.writeText(pinData.pin).catch(() => {});
-      toast.success(`New PIN generated and copied: ${pinData.pin}`);
+      let copied = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(pinData.pin);
+          copied = true;
+        }
+      } catch {
+        copied = false;
+      }
+      toast.success(copied ? `New PIN generated and copied: ${pinData.pin}` : `New PIN generated: ${pinData.pin}`);
     } catch (err) {
       console.error('PIN reset failed', err);
       toast.error('Failed to reset PIN.');
