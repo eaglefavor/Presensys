@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle, FingerprintPattern } from 'lucide-react';
+import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle, FingerprintPattern, KeyRound } from 'lucide-react';
 import { db, type Student } from '../db/db';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import FingerprintEnrollModal from '../components/FingerprintEnrollModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
+import { assignOrResetStudentPin } from '../lib/pinBlitzService';
 import jsPDF from 'jspdf';
 import toast from 'react-hot-toast';
 import autoTable from 'jspdf-autotable';
@@ -145,6 +146,28 @@ export default function Students() {
     await db.students.update(selectedStudent.id!, { name: editForm.name, regNumber: editForm.regNumber, userId: user?.id });
     setIsEditing(false);
     setSelectedStudent(null);
+  };
+
+  const handleResetPin = async () => {
+    if (!selectedStudent) return;
+    const ok = window.confirm(`Reset PIN for ${selectedStudent.name}? The old PIN will stop working immediately.`);
+    if (!ok) return;
+    try {
+      const pinData = await assignOrResetStudentPin(selectedStudent.serverId);
+      let copied = false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(pinData.pin);
+          copied = true;
+        }
+      } catch {
+        copied = false;
+      }
+      toast.success(copied ? `New PIN generated and copied: ${pinData.pin}` : `New PIN generated: ${pinData.pin}`);
+    } catch (err) {
+      console.error('PIN reset failed', err);
+      toast.error('Failed to reset PIN.');
+    }
   };
 
   const handleScanClick = (index: number) => {
@@ -437,6 +460,13 @@ export default function Students() {
                           >
                             <FingerprintPattern size={18} style={{ color: '#cfb53b' }} />
                             { 'Register/Update WebAuthn' }
+                          </button>
+                          <button
+                            className="btn btn-outline-info w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
+                            onClick={() => void handleResetPin()}
+                          >
+                            <KeyRound size={18} />
+                            Reset Student PIN
                           </button>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
                           <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => setConfirmStudentDelete(selectedStudent)}>Delete Student</button>
