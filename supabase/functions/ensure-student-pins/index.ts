@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const MAX_BATCH_SIZE = 500;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -43,8 +44,8 @@ serve(async (req: Request) => {
     const forceReset = body?.forceReset === true;
     const studentIds = Array.isArray(body?.studentIds) ? body.studentIds.filter((id: unknown) => typeof id === 'string') : [];
 
-    if (!studentIds.length || studentIds.length > 500) {
-      return new Response(JSON.stringify({ error: 'studentIds must be a non-empty array up to 500 items' }), {
+    if (!studentIds.length || studentIds.length > MAX_BATCH_SIZE) {
+      return new Response(JSON.stringify({ error: `studentIds must be a non-empty array up to ${MAX_BATCH_SIZE} items` }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -131,4 +132,3 @@ serve(async (req: Request) => {
     });
   }
 });
-

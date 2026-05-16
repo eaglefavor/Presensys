@@ -249,7 +249,7 @@ serve(async (req: Request) => {
       remainingAttempts = 0;
       await supabase
         .from('student_pins')
-        .update({ failed_attempts: 0, lock_until: lockUntil, updated_at: now.toISOString() })
+        .update({ failed_attempts: newFailedAttempts, lock_until: lockUntil, updated_at: now.toISOString() })
         .eq('id', pinRow.id);
     } else {
       await supabase
@@ -283,4 +283,3 @@ serve(async (req: Request) => {
     });
   }
 });
-

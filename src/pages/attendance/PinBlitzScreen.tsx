@@ -7,6 +7,8 @@ import type { LocalStudent } from '../../db/db';
 import { ensureStudentPins, generatePinChallenge, verifyStudentPin } from '../../lib/pinBlitzService';
 
 const SESSION_DURATION_S = 15 * 60;
+// Challenge TTL is intentionally shorter on the server to reduce replay window.
+// We generate a new challenge per student prompt and again after failed attempts.
 const PIN_LENGTH = 6;
 
 interface MatchToast {
@@ -354,4 +356,3 @@ export default function PinBlitzScreen({
     </div>
   );
 }
-

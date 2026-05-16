@@ -72,4 +72,3 @@ export async function verifyStudentPin(input: {
     retryAfterSeconds: Number(data?.retryAfterSeconds ?? 0),
   };
 }
-

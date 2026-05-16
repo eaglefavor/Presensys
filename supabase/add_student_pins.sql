@@ -65,4 +65,3 @@ WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "pin_blitz_attempts_all" ON pin_blitz_attempts
 FOR ALL USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
-

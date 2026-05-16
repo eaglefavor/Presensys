@@ -18,4 +18,3 @@ export function isPinBlitzEnabled(): boolean {
 
   return true;
 }
-
