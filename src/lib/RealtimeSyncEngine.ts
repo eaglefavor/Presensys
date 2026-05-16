@@ -9,6 +9,7 @@ import {
   type LocalAttendanceRecord,
   type LocalLecturer,
   type LocalCourseSchedule,
+  type LocalStudentCredential,
   type LocalOutboxEntry,
 } from '../db/db';
 import { supabase } from './supabase';
@@ -44,7 +45,7 @@ const LS_LAST_SYNCED_KEY = 'sync_last_synced_at';
 const MAX_OUTBOX_ATTEMPTS = 5;
 
 /** Max rows per pull page — avoids Supabase's 1 000-row default cap. */
-const PULL_PAGE_SIZE = 500;
+// const PULL_PAGE_SIZE = 500;
 
 /** Network-aware debounce (ms) before a triggered sync fires. */
 const DEBOUNCE_MAP: Record<string, number> = {
@@ -68,6 +69,7 @@ export class RealtimeSyncEngine {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private retryCount = 0;
+  private globalBundle: { tableName: TableName; payload: unknown[]; records: unknown[]; table: unknown; outboxAttempts: Map<string, { entry: LocalOutboxEntry; id: number }> }[] = [];
   private readonly maxRetries = 3;
   private readonly HEARTBEAT_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
   private currentStatus: SyncStatus = 'idle';
@@ -158,10 +160,18 @@ export class RealtimeSyncEngine {
     this.statusListeners.forEach(l => l(status));
   }
 
-  private getDebounceDelay(): number {
+  private getNetworkType(): string {
     const conn = (navigator as any).connection;
-    const effectiveType = conn?.effectiveType || '4g';
-    return DEBOUNCE_MAP[effectiveType] ?? 2000;
+    return conn?.effectiveType || '4g';
+  }
+
+  private isSlowNetwork(): boolean {
+    const type = this.getNetworkType();
+    return type === '2g' || type === 'slow-2g';
+  }
+
+  private getDebounceDelay(): number {
+    return DEBOUNCE_MAP[this.getNetworkType()] ?? 2000;
   }
 
   private isValidUUID(uuid: unknown): boolean {
@@ -218,223 +228,183 @@ export class RealtimeSyncEngine {
   private async pullChanges() {
     if (!this.userId) return;
 
-    // Each table has its own cursor (ISO string from max(updated_at) of last pull).
-    // If a table has never been pulled, use epoch-zero to get everything.
     const EPOCH = new Date(0).toISOString();
+    // PULL_PAGE_SIZE is no longer needed since we use Edge Function
 
+    const cursors: Record<string, string> = {};
+    const tableNames: TableName[] = [
+      'semesters', 'students', 'courses', 'enrollments', 'attendance_sessions',
+      'lecturers', 'attendance_records', 'course_schedules', 'student_credentials'
+    ];
 
-            const pull = async (
-      tableName: TableName,
-      dexieTable: any,
-            mapToLocal: (serverRow: any) => Record<string, unknown>,
-    ): Promise<boolean> => {
-      const cursorKey = TABLE_CURSOR_KEY(tableName);
-      const cursor = localStorage.getItem(cursorKey) ?? EPOCH;
-      const isFreshSync = cursor === EPOCH;
+    for (const t of tableNames) {
+      cursors[t] = localStorage.getItem(TABLE_CURSOR_KEY(t)) ?? EPOCH;
+    }
 
-      let offset = 0;
-      let maxUpdatedAt = '';
+    try {
+      // GEAR SHIFT: On slow 2G networks, skip full pull unless explicitly requested to save radio power and bandwidth.
+      // Realtime events will still handle immediate targeted updates.
+      if (this.isSlowNetwork()) {
+        console.debug('Sync: Slow network detected. Bypassing full pull batch.');
+        return;
+      }
 
-      while (true) {
-        let query = supabase
-          .from(tableName)
-          .select('*')
-          .eq('user_id', this.userId)
-          .gt('updated_at', cursor)
-          .order('updated_at', { ascending: true })
-          .range(offset, offset + PULL_PAGE_SIZE - 1);
+      const { data: edgeResponse, error } = await supabase.functions.invoke('sync-pull-bundle', {
+        body: { cursors, userId: this.userId }
+      });
 
-        // On a fresh pull, skip tombstones to avoid importing delete-history
-        if (isFreshSync) {
-          query = query.eq('is_deleted', 0);
-        }
+      if (error) throw error;
+      if (!edgeResponse || !edgeResponse.results) return;
 
-        const { data, error } = await query;
+      const processTable = async (
+        tableName: TableName,
+        dexieTable: unknown,
+        mapToLocal: (serverRow: { id: string, updated_at?: string, [key: string]: unknown }) => Record<string, unknown>
+      ) => {
+        const tableData = edgeResponse.results[tableName];
+        if (!tableData || tableData.length === 0) return;
 
-        if (error) {
-          console.error(`Sync: Error pulling ${tableName}`, error);
-          return false;
-        }
+        let maxUpdatedAt = '';
 
-        if (!data || data.length === 0) break;
-
-        await db.transaction('rw', dexieTable, async () => {
-          for (const serverRow of data) {
-            const localItem = await dexieTable.where('serverId').equals(serverRow.id).first();
+        await db.transaction('rw', dexieTable as any, async () => {
+          for (const serverRow of tableData as { id: string, updated_at?: string, [key: string]: unknown }[]) {
+            const localItem = await (dexieTable as any).where('serverId').equals(serverRow.id).first();
             const mapped = mapToLocal(serverRow);
 
             if (localItem) {
               if (localItem.synced === 0) {
-                // Pending local write exists.  Apply Last-Write-Wins: compare timestamps.
                 const serverTs: string = serverRow.updated_at ?? '';
                 const localTs: string = localItem.updatedAt ?? '';
-                if (serverTs <= localTs) {
-                  // Local change is newer or same age → keep local, push will overwrite server
-                  continue;
-                }
-                // Server is strictly newer → server wins, accept server state
+                if (serverTs <= localTs) continue;
               }
-              await dexieTable.update(localItem.id, { ...mapped, synced: 1 });
+              await (dexieTable as any).update(localItem.id!, { ...mapped, synced: 1 });
             } else {
-              await dexieTable.add({ ...mapped, synced: 1 });
+              await (dexieTable as any).add({ ...mapped, synced: 1 });
+            }
+            if (serverRow.updated_at && serverRow.updated_at > maxUpdatedAt) {
+              maxUpdatedAt = serverRow.updated_at;
             }
           }
         });
 
-        // Advance per-table cursor to max(updated_at) from this batch.
-        const batchMax = (data as any[]).reduce((best: string, row: any) => {
-          const ts: string = row.updated_at ?? '';
-          return ts > best ? ts : best;
-        }, '');
-        if (batchMax > maxUpdatedAt) maxUpdatedAt = batchMax;
+        if (maxUpdatedAt) {
+          localStorage.setItem(TABLE_CURSOR_KEY(tableName), maxUpdatedAt);
+        }
+      };
 
-        if (data.length < PULL_PAGE_SIZE) break; // last page
-        offset += PULL_PAGE_SIZE;
-      }
-
-      if (maxUpdatedAt) {
-        localStorage.setItem(cursorKey, maxUpdatedAt);
-      } else if (isFreshSync) {
-        // Fresh sync with zero records → mark as done so we don't re-request everything.
-        localStorage.setItem(cursorKey, new Date().toISOString());
-      }
-
-      return true;
-    };
-
-    // Pull all tables independently — a failure in one does NOT block the others,
-    // and only that table's cursor stays behind.
-    await Promise.allSettled([
-      pull('semesters', db.semesters, (s) => ({
-        serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
-        isActive: s.is_active, isArchived: s.is_archived,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('students', db.students, (s) => ({
-        serverId: s.id, regNumber: s.reg_number, name: s.name,
-        email: s.email, phone: s.phone,
-
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('courses', db.courses, (c) => ({
-        serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
-        // Legacy schema used `day`; newer migrations may use `day_of_week`.
-        dayOfWeek: c.day_of_week ?? c.day,
-        time: c.time,
-        lecturers: c.lecturers,
-        userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
-      })),
-      pull('enrollments', db.enrollments, (e) => ({
-        serverId: e.id, studentId: e.student_id, courseId: e.course_id,
-        userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
-      })),
-      pull('attendance_sessions', db.attendanceSessions, (s) => ({
-        serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
-        userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-      })),
-      pull('lecturers', db.lecturers, (l) => ({
-        serverId: l.id, name: l.name,
-        userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
-      })),
-      pull('attendance_records', db.attendanceRecords, (r) => ({
-        serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
-        status: r.status,
-        // marked_at may be BIGINT (legacy) or TIMESTAMPTZ (after migration) — handle both
-        timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
-        userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
-      })),
-pull('course_schedules', db.courseSchedules, (cs) => ({
-        serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
-        startTime: cs.start_time, endTime: cs.end_time,
-        userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
-      })),
-      pull('student_credentials', db.studentCredentials, (sc) => ({
-        serverId: sc.id, studentId: sc.student_id, credentialId: sc.credential_id,
-        publicKey: sc.public_key, counter: sc.counter,
-        userId: sc.user_id, isDeleted: sc.is_deleted, updatedAt: sc.updated_at, createdAt: sc.created_at,
-      })),
-    ]);
+      await Promise.all([
+        processTable('semesters', db.semesters, (s) => ({
+          serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
+          isActive: s.is_active, isArchived: s.is_archived,
+          userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
+        })),
+        processTable('students', db.students, (st) => ({
+          serverId: st.id, regNumber: st.reg_number, name: st.name, email: st.email, phone: st.phone,
+          userId: st.user_id, isDeleted: st.is_deleted, updatedAt: st.updated_at, createdAt: st.created_at,
+        })),
+        processTable('courses', db.courses, (c) => ({
+          serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
+          dayOfWeek: c.day_of_week ?? c.day, time: c.time, lecturers: c.lecturers,
+          userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
+        })),
+        processTable('enrollments', db.enrollments, (e) => ({
+          serverId: e.id, studentId: e.student_id, courseId: e.course_id,
+          userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
+        })),
+        processTable('attendance_sessions', db.attendanceSessions, (s) => ({
+          serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
+          userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
+        })),
+        processTable('lecturers', db.lecturers, (l) => ({
+          serverId: l.id, name: l.name,
+          userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
+        })),
+        processTable('attendance_records', db.attendanceRecords, (r) => ({
+          serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
+          status: r.status,
+          timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
+          userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
+        })),
+        processTable('course_schedules', db.courseSchedules, (cs) => ({
+          serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
+          startTime: cs.start_time, endTime: cs.end_time,
+          userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
+        })),
+        processTable('student_credentials', db.studentCredentials, (sc) => ({
+          serverId: sc.id, studentId: sc.student_id, credentialId: sc.credential_id,
+          publicKey: sc.public_key, counter: sc.counter,
+          userId: sc.user_id, isDeleted: sc.is_deleted, updatedAt: sc.updated_at, createdAt: sc.created_at,
+        })),
+      ]);
+    } catch (err) {
+      console.error('Failed to pull sync bundle', err);
+      throw err;
+    }
   }
-
-  // ─── Push ────────────────────────────────────────────────────────────────────
 
   private async pushChanges() {
     if (!this.userId) return;
 
-    // Push semesters
-    await this.pushTable<LocalSemester>('semesters', db.semesters, (item) => ({
-      id: item.serverId,
-      name: item.name,
-      start_date: item.startDate,
-      end_date: item.endDate,
-      is_active: item.isActive,
-      is_archived: item.isArchived,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt,
-    }));
+    const isSlow = this.isSlowNetwork();
 
-    // Students have a special dedup path
-    await this.pushStudents();
-
-    // Push courses (skip if semesterId is not a valid UUID)
-    await this.pushTable<LocalCourse>('courses', db.courses, (item) => {
-      if (!this.isValidUUID(item.semesterId)) return null;
-      return {
+    if (!isSlow) {
+      // GEAR SHIFT: On fast networks, push everything starting with metadata
+      await this.pushTable<LocalSemester>('semesters', db.semesters, (item) => ({
         id: item.serverId,
-        code: item.code,
-        title: item.title,
-        semester_id: item.semesterId,
-        // Keep writing legacy `day` so older deployments continue syncing.
-        day: item.dayOfWeek ?? null,
-        time: item.time ?? null,
-        lecturers: item.lecturers ?? null,
+        name: item.name,
+        start_date: item.startDate,
+        end_date: item.endDate,
+        is_active: item.isActive,
+        is_archived: item.isArchived,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
-      };
-    });
+      }));
 
-    // Push enrollments
-    await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => {
-      if (!this.isValidUUID(item.studentId) || !this.isValidUUID(item.courseId)) return null;
-      return {
+      await this.pushStudents();
+
+      await this.pushTable<LocalCourse>('courses', db.courses, (item) => {
+        if (!this.isValidUUID(item.semesterId)) return null;
+        return {
+          id: item.serverId,
+          code: item.code,
+          title: item.title,
+          semester_id: item.semesterId,
+          day: item.dayOfWeek ?? null,
+          time: item.time ?? null,
+          lecturers: item.lecturers ?? null,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      });
+
+      await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
         id: item.serverId,
-        student_id: item.studentId,
-        course_id: item.courseId,
+        name: item.name,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
-      };
-    }, 'student_id,course_id');
+      }));
+    } else {
+      console.debug('Sync: Slow network detected. Prioritizing attendance records and queueing metadata.');
+    }
 
-    // Push lecturers
-    await this.pushTable<LocalLecturer>('lecturers', db.lecturers, (item) => ({
-      id: item.serverId,
-      name: item.name,
-      user_id: this.userId,
-      is_deleted: item.isDeleted,
-      updated_at: item.updatedAt,
-    }));
-
-    // Push attendance sessions
+    // Always push critical transactional data (attendance) regardless of network speed
     await this.pushTable<LocalAttendanceSession>('attendance_sessions', db.attendanceSessions, (item) => {
       if (!this.isValidUUID(item.courseId)) return null;
       return {
         id: item.serverId,
         course_id: item.courseId,
-        // lecturer_id is optional (nullable FK) — only send a valid UUID to avoid
-        // server-side FK violations when the referenced lecturer hasn't synced yet.
-        lecturer_id: this.isValidUUID(item.lecturerId) ? item.lecturerId : null,
         date: item.date,
         title: item.title,
+        lecturer_id: this.isValidUUID(item.lecturerId) ? item.lecturerId : null,
         user_id: this.userId,
         is_deleted: item.isDeleted,
         updated_at: item.updatedAt,
       };
     });
 
-    // Push attendance records
     await this.pushTable<LocalAttendanceRecord>('attendance_records', db.attendanceRecords, (item) => {
       if (!this.isValidUUID(item.sessionId) || !this.isValidUUID(item.studentId)) return null;
       return {
@@ -442,7 +412,6 @@ pull('course_schedules', db.courseSchedules, (cs) => ({
         session_id: item.sessionId,
         student_id: item.studentId,
         status: item.status,
-        // Always push as ISO string — works with both BIGINT (legacy) and TIMESTAMPTZ columns
         marked_at: new Date(item.timestamp).toISOString(),
         user_id: this.userId,
         is_deleted: item.isDeleted,
@@ -450,46 +419,123 @@ pull('course_schedules', db.courseSchedules, (cs) => ({
       };
     }, 'session_id,student_id');
 
-    // Push course schedules
-await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules, (item) => {
-      if (!this.isValidUUID(item.courseId)) return null;
-      return {
-        id: item.serverId,
-        course_id: item.courseId,
-        day_of_week: item.dayOfWeek,
-        start_time: item.startTime,
-        end_time: item.endTime,
-        user_id: this.userId,
-        is_deleted: item.isDeleted,
-        updated_at: item.updatedAt,
-      };
-    });
+    if (!isSlow) {
+      await this.pushTable<LocalEnrollment>('enrollments', db.enrollments, (item) => {
+        if (!this.isValidUUID(item.courseId) || !this.isValidUUID(item.studentId)) return null;
+        return {
+          id: item.serverId,
+          student_id: item.studentId,
+          course_id: item.courseId,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      }, 'student_id,course_id');
 
-    await this.pushTable<any>('student_credentials', db.studentCredentials, (item) => {
-      return {
-        id: item.serverId,
-        student_id: item.studentId,
-        credential_id: item.credentialId,
-        public_key: item.publicKey,
-        counter: item.counter,
-        user_id: this.userId,
-        is_deleted: item.isDeleted,
-        updated_at: item.updatedAt,
-      };
-    }, 'credential_id');
+      await this.pushTable<LocalStudentCredential>('student_credentials', db.studentCredentials, (item) => {
+        if (!this.isValidUUID(item.studentId)) return null;
+        return {
+          id: item.serverId,
+          student_id: item.studentId,
+          credential_id: item.credentialId,
+          public_key: item.publicKey,
+          counter: item.counter,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      }, 'credential_id');
+
+      await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules, (item) => {
+        if (!this.isValidUUID(item.courseId)) return null;
+        return {
+          id: item.serverId,
+          course_id: item.courseId,
+          day_of_week: item.dayOfWeek,
+          start_time: item.startTime,
+          end_time: item.endTime,
+          user_id: this.userId,
+          is_deleted: item.isDeleted,
+          updated_at: item.updatedAt,
+        };
+      });
+    }
+
+    await this.flushBundle();
   }
 
-  /**
-   * Generic push for a single table.
-   *
-   * Key improvements over the original:
-   * 1. Tombstones for records that were never pushed to the server are purged
-   *    locally instead of creating ghost tombstones on the server.
-   * 2. Records that have exceeded MAX_OUTBOX_ATTEMPTS in the outbox are skipped
-   *    to prevent an infinite retry loop for permanently broken items.
-   * 3. Foreign-key validity is checked via mapFn returning null (unchanged).
-   */
+  private async flushBundle() {
+    if (this.globalBundle.length === 0) return;
 
+    const bundleData = this.globalBundle.map((b: any) => ({
+      tableName: b.tableName,
+      payload: b.payload
+    }));
+
+    try {
+      const jsonStr = JSON.stringify(bundleData);
+      const uint8Arr = new TextEncoder().encode(jsonStr);
+
+      const cs = new CompressionStream('deflate-raw');
+      const writer = cs.writable.getWriter();
+      writer.write(uint8Arr);
+      writer.close();
+
+      const response = new Response(cs.readable);
+      const compressedData = await response.arrayBuffer();
+
+      const { data: edgeResponse, error } = await supabase.functions.invoke('sync-bundle', {
+        body: compressedData,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Encoding': 'deflate-raw'
+        }
+      });
+
+      if (error) throw error;
+
+      if (edgeResponse && edgeResponse.results) {
+        for (const [index, result] of edgeResponse.results.entries()) {
+          const bundleItem = this.globalBundle[index];
+          const { data: returnedData, error: returnedError } = result;
+
+          if (returnedError) {
+            console.error(`Sync: Failed to push to ${bundleItem.tableName}:`, returnedError);
+            for (const record of bundleItem.records) {
+              const ob = bundleItem.outboxAttempts.get((record as any).serverId);
+              if (ob) {
+                await db.outbox.update(ob.id, { attempts: ob.entry.attempts + 1 }).catch(() => {});
+              } else {
+                await db.outbox.add({ tableName: bundleItem.tableName, serverId: (record as any).serverId, attempts: 1, done: 0, operation: 'upsert', createdAt: new Date().toISOString() }).catch(() => {});
+              }
+            }
+          } else if (returnedData && returnedData.length > 0) {
+            const serverIds = returnedData.map((d: any) => d.id);
+            const successRecords = bundleItem.records.filter((r: unknown) => serverIds.includes((r as {serverId: string}).serverId));
+
+            const doneOutboxIds: number[] = [];
+            for (const record of successRecords) {
+              const ob = bundleItem.outboxAttempts.get((record as any).serverId);
+              if (ob) doneOutboxIds.push(ob.id);
+            }
+
+            await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
+
+            const successUpdates = successRecords.map((r: unknown, i: number) => ({
+              key: (r as {id: number}).id!,
+              changes: { synced: 1, updatedAt: returnedData[i].updated_at || (r as {updatedAt?: string}).updatedAt }
+            }));
+            await (bundleItem.table as { bulkUpdate: (updates: unknown[]) => Promise<void> }).bulkUpdate(successUpdates);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to flush sync bundle', err);
+      throw err;
+    } finally {
+      this.globalBundle = [];
+    }
+  }
   private async pushTable<T extends {
     id?: number;
     synced: number;
@@ -534,7 +580,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
         .select('id')
         .in('id', tombstones.map(t => t.serverId));
 
-                  const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
 
       // Records that were created and deleted entirely offline → just purge locally
       const toPurgeLocally = tombstones.filter(t => !existsOnServer.has(t.serverId));
@@ -633,7 +679,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
 
-                  for (const serverItem of data as any[]) {
+      for (const serverItem of data as any[]) {
         const localItem = records.find(u => u.serverId === serverItem.id);
         if (!localItem) continue;
         updates.push({
@@ -686,7 +732,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       const { data: serverRows } = await supabase
         .from('students').select('id')
         .in('id', tombstones.map(t => t.serverId));
-                  const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
+      const existsOnServer = new Set((serverRows ?? []).map((r: any) => r.id));
 
       const toPurge = tombstones.filter(t => !existsOnServer.has(t.serverId));
       if (toPurge.length > 0) await db.students.bulkDelete(toPurge.map(t => t.id!));
@@ -768,7 +814,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
     } else if (data) {
       const updates: { key: number; changes: { synced: number; updatedAt: string } }[] = [];
       const doneOutboxIds: number[] = [];
-                  for (const serverItem of data as any[]) {
+      for (const serverItem of data as any[]) {
         const localItem = liveRecords.find(u => u.serverId === serverItem.id);
         if (localItem) {
           updates.push({ key: localItem.id!, changes: { synced: 1, updatedAt: serverItem.updated_at } });
@@ -922,7 +968,7 @@ await this.pushTable<LocalCourseSchedule>('course_schedules', db.courseSchedules
       });
   }
 
-          private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
+  private async handleRealtimeEvent(tableName: string, table: any, payload: any) {
     const { eventType, new: newRecord, old: oldRecord } = payload;
 
     if (eventType === 'INSERT' || eventType === 'UPDATE') {
