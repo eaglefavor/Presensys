@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-function-type */
 import { describe, it, mock, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -6,8 +5,9 @@ import { renderHook } from '@testing-library/react';
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>');
-(global as any).window = dom.window;
-(global as any).document = dom.window.document;
+const globalWindow = globalThis as unknown as { window: Window; document: Document };
+globalWindow.window = dom.window;
+globalWindow.document = dom.window.document;
 Object.defineProperty(global, 'navigator', {
   value: { userAgent: 'node.js' },
   writable: true,
@@ -15,30 +15,37 @@ Object.defineProperty(global, 'navigator', {
 });
 
 describe('useNetworkStatus', () => {
-  let addEventListenerMock: any;
-  let removeEventListenerMock: any;
-  let listeners: Record<string, Function[]> = {};
+  type Listener = () => void;
+  type Connection = {
+    effectiveType: string;
+    addEventListener: (event: string, listener: Listener) => void;
+    removeEventListener: (event: string, listener: Listener) => void;
+  };
+  const globalNavigator = globalThis as unknown as { navigator: Navigator & { connection?: Connection } };
+  let addEventListenerMock: ReturnType<typeof mock.fn<Connection['addEventListener']>>;
+  let removeEventListenerMock: ReturnType<typeof mock.fn<Connection['removeEventListener']>>;
+  let listeners: Record<string, Listener[]> = {};
 
   const setupWindow = (effectiveType = '4g') => {
     listeners = {};
 
-    addEventListenerMock = mock.fn((event: string, callback: Function) => {
+    addEventListenerMock = mock.fn((event: string, callback: Listener) => {
       if (!listeners[event]) listeners[event] = [];
       listeners[event].push(callback);
     });
 
-    removeEventListenerMock = mock.fn((event: string, callback: Function) => {
+    removeEventListenerMock = mock.fn((event: string, callback: Listener) => {
       if (listeners[event]) {
         listeners[event] = listeners[event].filter(cb => cb !== callback);
       }
     });
 
-    (global as any).window.addEventListener = addEventListenerMock;
-    (global as any).window.removeEventListener = removeEventListenerMock;
+    globalWindow.window.addEventListener = addEventListenerMock;
+    globalWindow.window.removeEventListener = removeEventListenerMock;
 
-    Object.defineProperty((global as any).navigator, 'onLine', { value: true, writable: true, configurable: true });
+    Object.defineProperty(globalNavigator.navigator, 'onLine', { value: true, writable: true, configurable: true });
 
-    Object.defineProperty((global as any).navigator, 'connection', {
+    Object.defineProperty(globalNavigator.navigator, 'connection', {
       value: {
         effectiveType: effectiveType,
         addEventListener: addEventListenerMock,

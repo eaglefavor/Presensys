@@ -105,8 +105,8 @@ export default function Lecturers() {
                           onKeyDown={e => { if (e.key === 'Enter') handleInlineRename(); if (e.key === 'Escape') setRenamingId(null); }}
                           autoFocus
                         />
-                        <button className="btn btn-primary btn-sm rounded-3 px-3 fw-bold" onClick={handleInlineRename}><Check size={14} /></button>
-                        <button className="btn btn-light btn-sm rounded-3 px-3 fw-bold border" onClick={() => setRenamingId(null)}>✕</button>
+                        <button className="btn btn-primary btn-sm rounded-3 px-3 fw-bold" onClick={handleInlineRename} aria-label="Save lecturer name"><Check size={14} /></button>
+                        <button className="btn btn-light btn-sm rounded-3 px-3 fw-bold border" onClick={() => setRenamingId(null)} aria-label="Cancel rename">✕</button>
                       </div>
                     ) : (
                       <div className="card-body p-3 d-flex align-items-center gap-3">
@@ -117,20 +117,22 @@ export default function Lecturers() {
                           <h6 className="fw-black mb-0 text-dark text-truncate text-uppercase letter-spacing-n1">{lecturer.name}</h6>
                         </div>
                         <div className="d-flex gap-1">
-                          <button
-                            className="btn btn-light btn-sm rounded-circle p-1 border-0 text-muted"
-                            style={{ width: 30, height: 30 }}
-                            title="Edit"
-                            onClick={() => handleEditClick(lecturer.id!, lecturer.serverId, lecturer.name)}
-                          >
+                            <button
+                              className="btn btn-light btn-sm rounded-circle p-1 border-0 text-muted"
+                              style={{ width: 30, height: 30 }}
+                              title="Edit"
+                              aria-label="Edit lecturer"
+                              onClick={() => handleEditClick(lecturer.id!, lecturer.serverId, lecturer.name)}
+                            >
                             <Pencil size={13} />
                           </button>
-                          <button
-                            className="btn btn-light btn-sm rounded-circle p-1 border-0 text-danger"
-                            style={{ width: 30, height: 30 }}
-                            title="Delete"
-                            onClick={() => setConfirmDeleteId(lecturer.id!)}
-                          >
+                            <button
+                              className="btn btn-light btn-sm rounded-circle p-1 border-0 text-danger"
+                              style={{ width: 30, height: 30 }}
+                              title="Delete"
+                              aria-label="Delete lecturer"
+                              onClick={() => setConfirmDeleteId(lecturer.id!)}
+                            >
                             <Trash2 size={13} />
                           </button>
                         </div>

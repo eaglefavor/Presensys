@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
 import { db } from '../db/db';
@@ -52,6 +52,11 @@ export default function Courses() {
     [allLecturers]
   );
 
+  const courseMap = useMemo(
+    () => new Map((courses || []).map(course => [course.serverId, course])),
+    [courses]
+  );
+
   const resolveLecturerNames = (field: string | undefined) => {
     if (!field) return '';
     return field.split(',').map(id => lecturerMap.get(id.trim()) || id.trim()).filter(Boolean).join(', ');
@@ -62,7 +67,10 @@ export default function Courses() {
   const [courseForm, setCourseForm] = useState({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
   const [slots, setSlots] = useState<SlotDraft[]>([]);
   const [slotDraft, setSlotDraft] = useState<{ dayOfWeek: string; startTime: string; endTime: string }>({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-  const [conflictWarning, setConflictWarning] = useState<string | null>(null);
+  const conflictWarning = useMemo(() => {
+    if (!slotDraft.startTime || !slotDraft.endTime) return null;
+    return checkConflict(slotDraft, courseForm.serverId);
+  }, [slotDraft, allSchedules, courseForm.serverId, courses]);
 
   const [showEnrollModal, setShowEnrollModal] = useState<{ show: boolean, courseId?: string, courseName?: string }>({ show: false });
   const itemsPerPage = 5;
@@ -90,7 +98,7 @@ export default function Courses() {
       const schedStart = toMinutes(sched.startTime);
       const schedEnd = toMinutes(sched.endTime);
       if (rangesOverlap(draftStart, draftEnd, schedStart, schedEnd)) {
-        const conflictingCourse = courses.find(c => c.serverId === sched.courseId);
+        const conflictingCourse = courseMap.get(sched.courseId);
         return conflictingCourse
           ? `Conflict with ${conflictingCourse.code} (${sched.dayOfWeek} ${sched.startTime}–${sched.endTime})`
           : 'Schedule conflict detected';
@@ -98,14 +106,6 @@ export default function Courses() {
     }
     return null;
   };
-
-  useEffect(() => {
-    if (slotDraft.startTime && slotDraft.endTime) {
-      setConflictWarning(checkConflict(slotDraft, courseForm.serverId));
-    } else {
-      setConflictWarning(null);
-    }
-  }, [slotDraft, allSchedules, courseForm.serverId, courses]);
 
   const handleAddSlot = () => {
     if (!slotDraft.startTime || !slotDraft.endTime) {

@@ -59,6 +59,17 @@ interface SemesterCourseRow {
   presentCount: number; absentCount: number; excusedCount: number;
 }
 
+type SupabaseStudentRow = { id: string; name: string; reg_number: string };
+type SupabaseAttendanceRecordRow = {
+  status: string;
+  marked_at: string | number;
+  attendance_sessions?: { date: string; title: string; courses?: { code: string; title: string } };
+};
+type SupabaseSessionRow = { id: string; date: string; title: string };
+type SupabaseSessionRecordRow = { session_id: string; status: string };
+type SupabaseEnrollmentRow = { student_id: string; students: { id: string; name: string; reg_number: string } };
+type SupabaseRollCallRow = { status: string; students?: { name: string; reg_number: string } };
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const REG_NUMBER_PATTERN = /^(\d|[A-Z]{2,}\/)/i;
@@ -447,17 +458,16 @@ export default function Archives() {
       .eq('is_deleted', 0)
       .order('marked_at', { ascending: false });
     if (error) { toast.error('Failed to fetch history from cloud.'); return []; }
-    return (records || [])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter((r: any) => r.attendance_sessions && r.attendance_sessions.courses)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .map((r: any) => ({
+    const typedRecords = (records || []) as SupabaseAttendanceRecordRow[];
+    return typedRecords
+      .filter(r => r.attendance_sessions?.courses)
+      .map(r => ({
         status: r.status,
         timestamp: typeof r.marked_at === 'number'
           ? new Date(r.marked_at).toISOString()
           : String(r.marked_at),
-        session: { date: r.attendance_sessions.date, title: r.attendance_sessions.title },
-        course: { code: r.attendance_sessions.courses.code, title: r.attendance_sessions.courses.title },
+        session: { date: r.attendance_sessions!.date, title: r.attendance_sessions!.title },
+        course: { code: r.attendance_sessions!.courses!.code, title: r.attendance_sessions!.courses!.title },
       }));
   };
 
@@ -478,15 +488,15 @@ export default function Archives() {
     if (!student) {
       const { data } = await supabase.from('students').select('*')
         .eq('reg_number', searchQuery.trim()).maybeSingle();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (data) student = { serverId: (data as any).id, name: (data as any).name, regNumber: (data as any).reg_number, isDeleted: 0, synced: 1 };
+      const row = data as SupabaseStudentRow | null;
+      if (row) student = { serverId: row.id, name: row.name, regNumber: row.reg_number, isDeleted: 0, synced: 1 };
     }
     if (!student) {
       const { data } = await supabase.from('students').select('*')
         .ilike('name', `%${searchQuery.trim()}%`).limit(1);
-      if (data && data[0]) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const d = data[0] as any;
+      const rows = (data || []) as SupabaseStudentRow[];
+      if (rows[0]) {
+        const d = rows[0];
         student = { serverId: d.id, name: d.name, regNumber: d.reg_number, isDeleted: 0, synced: 1 };
       }
     }
@@ -532,8 +542,8 @@ export default function Archives() {
     if (!student) {
       const { data } = await supabase.from('students').select('*')
         .eq('reg_number', compareQuery.trim()).maybeSingle();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (data) student = { serverId: (data as any).id, name: (data as any).name, regNumber: (data as any).reg_number, isDeleted: 0, synced: 1 };
+      const row = data as SupabaseStudentRow | null;
+      if (row) student = { serverId: row.id, name: row.name, regNumber: row.reg_number, isDeleted: 0, synced: 1 };
     }
     if (!student) { toast.error('Second student not found.'); setLoading(false); return; }
     setCompareResult(student);
@@ -669,20 +679,21 @@ export default function Archives() {
       .gte('date', sDate).lte('date', eDate);
     if (lecturerId) sessionQuery = sessionQuery.eq('lecturer_id', lecturerId);
     const { data: sessions, error: sessErr } = await sessionQuery.order('date', { ascending: true });
-    if (sessErr || !sessions || sessions.length === 0) return [];
+    const sessionRows = (sessions || []) as SupabaseSessionRow[];
+    if (sessErr || sessionRows.length === 0) return [];
     const { data: records } = await supabase
       .from('attendance_records').select('student_id, status, session_id')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .in('session_id', (sessions as any[]).map(s => s.id)).eq('is_deleted', 0);
+      .in('session_id', sessionRows.map(s => s.id)).eq('is_deleted', 0);
     const { data: enrollments } = await supabase
       .from('enrollments').select('student_id, students (id, name, reg_number)')
       .eq('course_id', courseId).eq('is_deleted', 0);
-    if (!enrollments || enrollments.length === 0) return [];
-    const totalSessions = sessions.length;
+    const enrollmentRows = (enrollments || []) as SupabaseEnrollmentRow[];
+    if (enrollmentRows.length === 0) return [];
+    const totalSessions = sessionRows.length;
 
     // Performance optimization: Pre-calculate counts O(N+M)
     const studentStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
-    for (const r of (records || [])) {
+    for (const r of (records || []) as SupabaseSessionRecordRow[]) {
       if (!studentStatsMap.has(r.student_id)) {
         studentStatsMap.set(r.student_id, { present: 0, absent: 0, excused: 0 });
       }
@@ -692,8 +703,7 @@ export default function Archives() {
       else if (r.status === 'excused') stats.excused++;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (enrollments as any[]).map(enr => {
+    return enrollmentRows.map(enr => {
       const student = enr.students;
       const stats = studentStatsMap.get(student.id) || { present: 0, absent: 0, excused: 0 };
       return {
@@ -854,15 +864,15 @@ export default function Archives() {
         .eq('course_id', sessionsCourseId).eq('is_deleted', 0),
     ]);
     if (sessRes.error || !sessRes.data) { toast.error('Failed to load sessions.'); setLoading(false); return; }
-    if (sessRes.data.length === 0) { toast.error('No sessions found.'); setLoading(false); return; }
+    const sessionRows = (sessRes.data || []) as SupabaseSessionRow[];
+    if (sessionRows.length === 0) { toast.error('No sessions found.'); setLoading(false); return; }
     const totalEnrolled = enrollRes.data?.length ?? 0;
     const { data: records } = await supabase
       .from('attendance_records').select('session_id, status')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .in('session_id', (sessRes.data as any[]).map(s => s.id)).eq('is_deleted', 0);
+      .in('session_id', sessionRows.map(s => s.id)).eq('is_deleted', 0);
     // Performance optimization: Pre-calculate counts O(N+M)
     const sessionStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
-    for (const r of (records || [])) {
+    for (const r of (records || []) as SupabaseSessionRecordRow[]) {
       if (!sessionStatsMap.has(r.session_id)) {
         sessionStatsMap.set(r.session_id, { present: 0, absent: 0, excused: 0 });
       }
@@ -872,8 +882,7 @@ export default function Archives() {
       else if (r.status === 'excused') stats.excused++;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setSessionsList((sessRes.data as any[]).map(s => {
+    setSessionsList(sessionRows.map(s => {
       const stats = sessionStatsMap.get(s.id) || { present: 0, absent: 0, excused: 0 };
       return {
         id: s.id, date: s.date, title: s.title, totalEnrolled,
@@ -922,10 +931,10 @@ export default function Archives() {
       .eq('session_id', sessionId).eq('is_deleted', 0);
     if (records) {
       const ORDER: Record<string, number> = { present: 0, excused: 1, absent: 2 };
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const entries: RollCallEntry[] = (records as any[])
+      const rows = (records || []) as SupabaseRollCallRow[];
+      const entries: RollCallEntry[] = rows
         .filter(r => r.students)
-        .map(r => ({ name: r.students.name, regNumber: r.students.reg_number, status: r.status as RollCallEntry['status'] }))
+        .map(r => ({ name: r.students!.name, regNumber: r.students!.reg_number, status: r.status as RollCallEntry['status'] }))
         .sort((a, b) => ORDER[a.status] - ORDER[b.status]);
       setRollCallMap(prev => ({ ...prev, [sessionId]: entries }));
     }

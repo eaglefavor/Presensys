@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
 
@@ -11,7 +10,8 @@ describe('supabase client', () => {
     const expectedUrl = 'https://trhvihhaidboeodffgcj.supabase.co';
     const expectedKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRyaHZpaGhhaWRib2VvZGZmZ2NqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcyODExNzMsImV4cCI6MjA4Mjg1NzE3M30.2XnP9E5nkva5Cwz5sL2ipsfKqO6LR0WElNZqbSwPtII';
 
-    assert.strictEqual((supabase as any).url, expectedUrl);
-    assert.strictEqual((supabase as any).key, expectedKey);
+    const client = supabase as unknown as { url: string; key: string };
+    assert.strictEqual(client.url, expectedUrl);
+    assert.strictEqual(client.key, expectedKey);
   });
 });

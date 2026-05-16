@@ -1,7 +1,21 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-unused-vars */
 import { test, describe, beforeEach, afterEach } from 'node:test';
+import type { TestContext } from 'node:test';
 import * as assert from 'node:assert';
 import { shareData, exportToCSV, exportToPDF, downloadText } from './ExportUtils.ts';
+
+type NavigatorWithShare = Navigator & {
+  share?: (data: ShareData) => Promise<void>;
+  clipboard?: { writeText?: (text: string) => Promise<void> };
+};
+type MockFn = ReturnType<TestContext['mock']['fn']>;
+type JsPdfMock = {
+  constructor: MockFn;
+  setFontSize: MockFn;
+  setFont: MockFn;
+  text: MockFn;
+  setTextColor: MockFn;
+  save: MockFn;
+};
 
 describe('shareData', () => {
   let originalDescriptor: PropertyDescriptor | undefined;
@@ -31,8 +45,8 @@ describe('shareData', () => {
 
   test('returns true when navigator.share succeeds', async () => {
     let shared = false;
-    // @ts-ignore
-    globalThis.navigator.share = async (data: ShareData) => {
+    const navigatorRef = globalThis.navigator as NavigatorWithShare;
+    navigatorRef.share = async (data: ShareData) => {
       shared = true;
       assert.strictEqual(data?.title, 'Test Title');
       assert.strictEqual(data?.text, 'Test Text');
@@ -44,16 +58,15 @@ describe('shareData', () => {
   });
 
   test('returns false when navigator.share throws AbortError (user cancelled)', async () => {
-    // @ts-ignore
-    globalThis.navigator.share = async () => {
+    const navigatorRef = globalThis.navigator as NavigatorWithShare;
+    navigatorRef.share = async () => {
       const error = new Error('User cancelled');
       error.name = 'AbortError';
       throw error;
     };
 
     let clipboardCalled = false;
-    // @ts-ignore
-    globalThis.navigator.clipboard = {
+    navigatorRef.clipboard = {
       writeText: async () => {
         clipboardCalled = true;
       }
@@ -67,8 +80,8 @@ describe('shareData', () => {
   test('falls back to clipboard when navigator.share is undefined', async () => {
     // navigator.share is undefined from beforeEach
     let clipboardText = '';
-    // @ts-ignore
-    globalThis.navigator.clipboard = {
+    const navigatorRef = globalThis.navigator as NavigatorWithShare;
+    navigatorRef.clipboard = {
       writeText: async (text: string) => {
         clipboardText = text;
       }
@@ -80,14 +93,13 @@ describe('shareData', () => {
   });
 
   test('falls back to clipboard when navigator.share throws non-AbortError', async () => {
-    // @ts-ignore
-    globalThis.navigator.share = async () => {
+    const navigatorRef = globalThis.navigator as NavigatorWithShare;
+    navigatorRef.share = async () => {
       throw new Error('NotSupportedError');
     };
 
     let clipboardText = '';
-    // @ts-ignore
-    globalThis.navigator.clipboard = {
+    navigatorRef.clipboard = {
       writeText: async (text: string) => {
         clipboardText = text;
       }
@@ -99,13 +111,12 @@ describe('shareData', () => {
   });
 
   test('returns false when both navigator.share and clipboard.writeText fail', async () => {
-    // @ts-ignore
-    globalThis.navigator.share = async () => {
+    const navigatorRef = globalThis.navigator as NavigatorWithShare;
+    navigatorRef.share = async () => {
       throw new Error('NotSupportedError');
     };
 
-    // @ts-ignore
-    globalThis.navigator.clipboard = {
+    navigatorRef.clipboard = {
       writeText: async () => {
         throw new Error('Clipboard denied');
       }
@@ -118,13 +129,19 @@ describe('shareData', () => {
 
 describe('exportToCSV', () => {
 
-  let originalDocument: any;
+  type MockLink = { href: string; download: string; click: () => void };
+  type MockDocument = {
+    createElement: (tag: string) => MockLink | Record<string, unknown>;
+    body: { appendChild: () => void; removeChild: () => void };
+  };
 
-  let originalURLCreateObjectURL: any;
+  let originalDocument: Document | undefined;
 
-  let originalURLRevokeObjectURL: any;
+  let originalURLCreateObjectURL: ((obj: Blob) => string) | undefined;
 
-  let originalBlob: any;
+  let originalURLRevokeObjectURL: ((url: string) => void) | undefined;
+
+  let originalBlob: typeof Blob | undefined;
 
   let downloadedContent: string | null = null;
   let downloadedFilename: string | null = null;
@@ -137,19 +154,19 @@ describe('exportToCSV', () => {
 
     // Save originals
     originalDocument = globalThis.document;
-    originalURLCreateObjectURL = globalThis.URL.createObjectURL;
-    originalURLRevokeObjectURL = globalThis.URL.revokeObjectURL;
+    originalURLCreateObjectURL = globalThis.URL.createObjectURL?.bind(globalThis.URL);
+    originalURLRevokeObjectURL = globalThis.URL.revokeObjectURL?.bind(globalThis.URL);
     originalBlob = globalThis.Blob;
 
     // Mock URL methods
 
-    globalThis.URL.createObjectURL = (_blob: any) => {
+    globalThis.URL.createObjectURL = (_blob: Blob) => {
       return 'mock-url';
     };
     globalThis.URL.revokeObjectURL = () => {};
 
     // Mock document
-    const mockLink = {
+    const mockLink: MockLink = {
       href: '',
       download: '',
       click() {
@@ -157,7 +174,7 @@ describe('exportToCSV', () => {
       }
     };
 
-    globalThis.document = {
+    const mockDocument: MockDocument = {
       createElement: (tag: string) => {
         if (tag === 'a') return mockLink;
         return {};
@@ -166,23 +183,32 @@ describe('exportToCSV', () => {
         appendChild: () => {},
         removeChild: () => {},
       }
-    } as any;
+    };
+    globalThis.document = mockDocument as unknown as Document;
 
     // Mock Blob to capture content
-    globalThis.Blob = class MockBlob {
-
-      constructor(content: any[], options: any) {
+    class MockBlob {
+      constructor(content: BlobPart[], options?: BlobPropertyBag) {
         downloadedContent = content[0];
         downloadedMimeType = options?.type;
       }
-    } as any;
+    }
+    globalThis.Blob = MockBlob as unknown as typeof Blob;
   });
 
   afterEach(() => {
-    globalThis.document = originalDocument;
-    globalThis.URL.createObjectURL = originalURLCreateObjectURL;
-    globalThis.URL.revokeObjectURL = originalURLRevokeObjectURL;
-    globalThis.Blob = originalBlob;
+    if (originalDocument) {
+      globalThis.document = originalDocument;
+    }
+    if (originalURLCreateObjectURL) {
+      globalThis.URL.createObjectURL = originalURLCreateObjectURL;
+    }
+    if (originalURLRevokeObjectURL) {
+      globalThis.URL.revokeObjectURL = originalURLRevokeObjectURL;
+    }
+    if (originalBlob) {
+      globalThis.Blob = originalBlob;
+    }
   });
 
   test('should generate and download simple CSV without metadata', () => {
@@ -219,7 +245,7 @@ describe('exportToCSV', () => {
 
   test('should handle empty data array gracefully', () => {
 
-    const data: any[] = [];
+    const data: Array<Record<string, unknown>> = [];
     exportToCSV(data, 'empty');
 
     assert.strictEqual(downloadedFilename, 'empty.csv');
@@ -230,13 +256,19 @@ describe('exportToCSV', () => {
 
 describe('downloadText', () => {
 
-  let originalDocument: any;
+  type MockLink = { href: string; download: string; click: () => void };
+  type MockDocument = {
+    createElement: (tag: string) => MockLink | Record<string, unknown>;
+    body: { appendChild: () => void; removeChild: () => void };
+  };
 
-  let originalURLCreateObjectURL: any;
+  let originalDocument: Document | undefined;
 
-  let originalURLRevokeObjectURL: any;
+  let originalURLCreateObjectURL: ((obj: Blob) => string) | undefined;
 
-  let originalBlob: any;
+  let originalURLRevokeObjectURL: ((url: string) => void) | undefined;
+
+  let originalBlob: typeof Blob | undefined;
 
   let downloadedContent: string | null = null;
   let downloadedFilename: string | null = null;
@@ -249,19 +281,19 @@ describe('downloadText', () => {
 
     // Save originals
     originalDocument = globalThis.document;
-    originalURLCreateObjectURL = globalThis.URL.createObjectURL;
-    originalURLRevokeObjectURL = globalThis.URL.revokeObjectURL;
+    originalURLCreateObjectURL = globalThis.URL.createObjectURL?.bind(globalThis.URL);
+    originalURLRevokeObjectURL = globalThis.URL.revokeObjectURL?.bind(globalThis.URL);
     originalBlob = globalThis.Blob;
 
     // Mock URL methods
 
-    globalThis.URL.createObjectURL = (_blob: any) => {
+    globalThis.URL.createObjectURL = (_blob: Blob) => {
       return 'mock-url';
     };
     globalThis.URL.revokeObjectURL = () => {};
 
     // Mock document
-    const mockLink = {
+    const mockLink: MockLink = {
       href: '',
       download: '',
       click() {
@@ -269,7 +301,7 @@ describe('downloadText', () => {
       }
     };
 
-    globalThis.document = {
+    const mockDocument: MockDocument = {
       createElement: (tag: string) => {
         if (tag === 'a') return mockLink;
         return {};
@@ -278,23 +310,32 @@ describe('downloadText', () => {
         appendChild: () => {},
         removeChild: () => {},
       }
-    } as any;
+    };
+    globalThis.document = mockDocument as unknown as Document;
 
     // Mock Blob to capture content
-    globalThis.Blob = class MockBlob {
-
-      constructor(content: any[], options: any) {
+    class MockBlob {
+      constructor(content: BlobPart[], options?: BlobPropertyBag) {
         downloadedContent = content[0];
         downloadedMimeType = options?.type;
       }
-    } as any;
+    }
+    globalThis.Blob = MockBlob as unknown as typeof Blob;
   });
 
   afterEach(() => {
-    globalThis.document = originalDocument;
-    globalThis.URL.createObjectURL = originalURLCreateObjectURL;
-    globalThis.URL.revokeObjectURL = originalURLRevokeObjectURL;
-    globalThis.Blob = originalBlob;
+    if (originalDocument) {
+      globalThis.document = originalDocument;
+    }
+    if (originalURLCreateObjectURL) {
+      globalThis.URL.createObjectURL = originalURLCreateObjectURL;
+    }
+    if (originalURLRevokeObjectURL) {
+      globalThis.URL.revokeObjectURL = originalURLRevokeObjectURL;
+    }
+    if (originalBlob) {
+      globalThis.Blob = originalBlob;
+    }
   });
 
   test('should download text with .txt extension', () => {
@@ -315,10 +356,9 @@ describe('downloadText', () => {
 });
 
 describe('exportToPDF', () => {
-  beforeEach((t: any) => {
+  beforeEach((t: TestContext) => {
     // Reset mocks before each test
-    // @ts-ignore
-    globalThis.__jsPDFMock = {
+    const jsPDFMock: JsPdfMock = {
       constructor: t.mock.fn(),
       setFontSize: t.mock.fn(),
       setFont: t.mock.fn(),
@@ -326,22 +366,22 @@ describe('exportToPDF', () => {
       setTextColor: t.mock.fn(),
       save: t.mock.fn(),
     };
-    // @ts-ignore
-    globalThis.__autoTableMock = t.mock.fn();
+    const autoTableMock: MockFn = t.mock.fn();
+    const globalMocks = globalThis as unknown as { __jsPDFMock?: JsPdfMock; __autoTableMock?: MockFn };
+    globalMocks.__jsPDFMock = jsPDFMock;
+    globalMocks.__autoTableMock = autoTableMock;
   });
 
   afterEach(() => {
-    // @ts-ignore
-    delete globalThis.__jsPDFMock;
-    // @ts-ignore
-    delete globalThis.__autoTableMock;
+    const globalMocks = globalThis as unknown as { __jsPDFMock?: JsPdfMock; __autoTableMock?: MockFn };
+    delete globalMocks.__jsPDFMock;
+    delete globalMocks.__autoTableMock;
   });
 
   test('should generate PDF with correct title and filename (empty data)', () => {
     exportToPDF([], 'Attendance Report', 'attendance_empty');
 
-    // @ts-ignore
-    const jsPDFMock = globalThis.__jsPDFMock;
+    const jsPDFMock = (globalThis as unknown as { __jsPDFMock: JsPdfMock }).__jsPDFMock;
 
     assert.strictEqual(jsPDFMock.constructor.mock.calls.length, 1);
     assert.deepStrictEqual(jsPDFMock.constructor.mock.calls[0].arguments, [{ orientation: 'landscape' }]);
@@ -350,29 +390,28 @@ describe('exportToPDF', () => {
     assert.deepStrictEqual(jsPDFMock.save.mock.calls[0].arguments, ['attendance_empty.pdf']);
 
     // Title checks
-    const textCalls = jsPDFMock.text.mock.calls.map((c: any) => c.arguments);
-    assert.ok(textCalls.some((args: any[]) => args[0] === 'Attendance Report' && args[1] === 14 && args[2] === 15));
+    const textCalls = jsPDFMock.text.mock.calls.map(call => call.arguments as [string, number, number]);
+    assert.ok(textCalls.some(([text, x, y]) => text === 'Attendance Report' && x === 14 && y === 15));
 
     // Subtitle checks (should include 'Generated:' and 'Presensys - UNIZIK')
-    const subtitleCall = textCalls.find((args: any[]) => args[0].includes('Generated:') && args[0].includes('Presensys - UNIZIK'));
+    const subtitleCall = textCalls.find(([text]) => text.includes('Generated:') && text.includes('Presensys - UNIZIK'));
     assert.ok(subtitleCall, 'Should output subtitle with Generated date and branding');
-    assert.strictEqual(subtitleCall[1], 14);
-    assert.strictEqual(subtitleCall[2], 22);
+    assert.strictEqual(subtitleCall?.[1], 14);
+    assert.strictEqual(subtitleCall?.[2], 22);
 
     // No autoTable since empty data
-    // @ts-ignore
-    assert.strictEqual(globalThis.__autoTableMock.mock.calls.length, 0);
+    const autoTableMock = (globalThis as unknown as { __autoTableMock: MockFn }).__autoTableMock;
+    assert.strictEqual(autoTableMock.mock.calls.length, 0);
   });
 
   test('should generate PDF with data triggering autoTable', () => {
     const data = [{ Name: 'John Doe', RegNo: '2020123456' }, { Name: 'Jane Smith', RegNo: '2020654321' }];
     exportToPDF(data, 'Student List', 'students');
 
-    // @ts-ignore
-    const autoTableMock = globalThis.__autoTableMock;
+    const autoTableMock = (globalThis as unknown as { __autoTableMock: MockFn }).__autoTableMock;
     assert.strictEqual(autoTableMock.mock.calls.length, 1);
 
-    const [doc, options] = autoTableMock.mock.calls[0].arguments;
+    const [doc, options] = autoTableMock.mock.calls[0].arguments as [unknown, { head: string[][]; body: string[][]; startY: number }];
     assert.ok(doc, 'autoTable should receive doc instance');
 
     assert.deepStrictEqual(options.head, [['Name', 'RegNo']]);
@@ -387,9 +426,9 @@ describe('exportToPDF', () => {
     const meta = { faculty: 'Engineering', department: 'Computer Science', level: '400' };
     exportToPDF([], 'Meta Test', 'meta', meta);
 
-    // @ts-ignore
-    const textCalls = globalThis.__jsPDFMock.text.mock.calls.map((c: any) => c.arguments);
-    const subtitleCall = textCalls.find((args: any[]) => args[0].includes('Faculty: Engineering') && args[0].includes('Dept: Computer Science') && args[0].includes('Level: 400'));
+    const jsPDFMock = (globalThis as unknown as { __jsPDFMock: JsPdfMock }).__jsPDFMock;
+    const textCalls = jsPDFMock.text.mock.calls.map(call => call.arguments as [string, number, number]);
+    const subtitleCall = textCalls.find(([text]) => text.includes('Faculty: Engineering') && text.includes('Dept: Computer Science') && text.includes('Level: 400'));
 
     assert.ok(subtitleCall, 'Should include faculty, department, and level in subtitle');
   });

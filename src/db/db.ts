@@ -1,6 +1,19 @@
 import Dexie, { type Table } from 'dexie';
 import { v4 as uuidv4 } from 'uuid';
 
+type HookContext = { onsuccess?: () => void };
+type SyncableRecord = {
+  serverId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  isDeleted?: number;
+  synced?: number;
+  [key: string]: unknown;
+};
+type SyncableMods = Record<string, unknown> & {
+  synced?: number;
+  isDeleted?: number;
+};
 
 export interface LocalLecturer {
   id?: number;
@@ -256,8 +269,7 @@ export class PresensysDB extends Dexie {
       if (table.name === 'outbox') return; // never hook the outbox itself
 
       // ---- creating --------------------------------------------------
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      table.hook('creating', function (this: any, _primKey: unknown, obj: any) {
+      table.hook('creating', function (this: HookContext, _primKey: unknown, obj: SyncableRecord) {
         if (!obj.serverId) obj.serverId = uuidv4();
         if (!obj.createdAt) obj.createdAt = new Date().toISOString();
         if (!obj.updatedAt) obj.updatedAt = new Date().toISOString();
@@ -265,7 +277,7 @@ export class PresensysDB extends Dexie {
         if (obj.synced === undefined) obj.synced = 0;
 
         // Capture fields before async gap
-        const capturedServerId = obj.serverId as string;
+        const capturedServerId = String(obj.serverId);
         const capturedTableName = table.name;
 
         // Write outbox entry AFTER the transaction commits (onsuccess fires post-commit).
@@ -286,8 +298,7 @@ export class PresensysDB extends Dexie {
       });
 
       // ---- updating --------------------------------------------------
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      table.hook('updating', function (this: any, mods: any, _primKey: unknown, obj: any) {
+      table.hook('updating', function (this: HookContext, mods: SyncableMods, _primKey: unknown, obj: SyncableRecord) {
         // The sync engine marks records with { synced: 1 } to confirm a successful
         // push.  We must not re-trigger a sync cycle or stamp a new updatedAt for
         // these internal confirmations.
@@ -304,7 +315,7 @@ export class PresensysDB extends Dexie {
 
         // Write an outbox entry after the data transaction commits
         if (obj?.serverId) {
-          const capturedServerId = obj.serverId as string;
+          const capturedServerId = String(obj.serverId);
           const capturedTableName = table.name;
           // A soft-delete (isDeleted: 1) produces a 'delete' outbox operation
           const operation: 'upsert' | 'delete' =

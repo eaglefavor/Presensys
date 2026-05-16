@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { read, utils } from 'xlsx';
 
@@ -11,9 +10,8 @@ interface FileMapperProps {
 
 export default function FileMapper({ file, onComplete, onCancel }: FileMapperProps) {
   const [headers, setHeaders] = useState<string[]>([]);
-  const [rawData, setRawData] = useState<any[]>([]);
+  const [rawData, setRawData] = useState<unknown[][]>([]);
   const [mapping, setMapping] = useState({ name: '', regNumber: '' });
-  const [previewData, setPreviewData] = useState<any[]>([]);
 
   useEffect(() => {
     const reader = new FileReader();
@@ -22,10 +20,10 @@ export default function FileMapper({ file, onComplete, onCancel }: FileMapperPro
       const workbook = read(data, { type: 'array' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
-      const json = utils.sheet_to_json(sheet, { header: 1 });
+      const json = utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
       
       if (json.length > 0) {
-        const headerRow = json[0] as string[];
+        const headerRow = (json[0] ?? []).map(cell => String(cell ?? ''));
         setHeaders(headerRow);
         setRawData(json.slice(1)); // All rows except header
         
@@ -38,19 +36,16 @@ export default function FileMapper({ file, onComplete, onCancel }: FileMapperPro
     reader.readAsArrayBuffer(file);
   }, [file]);
 
-  useEffect(() => {
-    if (mapping.name && mapping.regNumber) {
-      const nameIdx = headers.indexOf(mapping.name);
-      const regIdx = headers.indexOf(mapping.regNumber);
-      
-      const preview = rawData.slice(0, 5).map(row => ({
-        name: row[nameIdx],
-        regNumber: row[regIdx]
-      }));
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPreviewData(preview);
-    }
-  }, [mapping, headers, rawData]);
+  const previewData = useMemo(() => {
+    if (!mapping.name || !mapping.regNumber) return [];
+    const nameIdx = headers.indexOf(mapping.name);
+    const regIdx = headers.indexOf(mapping.regNumber);
+    if (nameIdx < 0 || regIdx < 0) return [];
+    return rawData.slice(0, 5).map(row => ({
+      name: String(row[nameIdx] ?? '').trim(),
+      regNumber: String(row[regIdx] ?? '').trim(),
+    }));
+  }, [headers, mapping, rawData]);
 
   const handleFinish = () => {
     const nameIdx = headers.indexOf(mapping.name);

@@ -46,8 +46,14 @@ export default function Dashboard() {
       .filter(c => c.isDeleted !== 1 && c.semesterId === activeSemester.serverId)
       .toArray();
 
+    const slotsByCourse = new Map<string, typeof todaySlots>();
+    for (const slot of todaySlots) {
+      if (!slotsByCourse.has(slot.courseId)) slotsByCourse.set(slot.courseId, []);
+      slotsByCourse.get(slot.courseId)!.push(slot);
+    }
+
     return courses.map(c => {
-      const courseSlots = todaySlots.filter(s => s.courseId === c.serverId);
+      const courseSlots = slotsByCourse.get(c.serverId) || [];
       const isHappeningNow = courseSlots.some(s =>
         toMinutes(s.startTime) <= currentMinutes && currentMinutes < toMinutes(s.endTime)
       );
@@ -63,6 +69,7 @@ export default function Dashboard() {
 
 
   const handleDebugSync = async () => {
+    if (!import.meta.env.DEV) return;
     console.log('--- DEBUG: STARTING SYNC DUMP ---');
     const tables: DexieTableKey[] = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
     
@@ -123,9 +130,14 @@ export default function Dashboard() {
       }
     }
 
+    const sessionCountByCourse = new Map<string, number>();
+    for (const session of sessions) {
+      sessionCountByCourse.set(session.courseId, (sessionCountByCourse.get(session.courseId) || 0) + 1);
+    }
+
     // Combine stats with courses in a single pass - O(N)
     return courses.map(course => {
-      const courseSessionsCount = sessions.filter(s => s.courseId === course.serverId).length;
+      const courseSessionsCount = sessionCountByCourse.get(course.serverId) || 0;
       const stats = courseStats.get(course.serverId) || { present: 0, total: 0 };
 
       const percentage = stats.total > 0 ? (stats.present / stats.total) * 100 : 100;
