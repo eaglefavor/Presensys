@@ -59,7 +59,7 @@ export default function Courses() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [courseForm, setCourseForm] = useState({ id: 0, serverId: '', code: '', title: '', lecturers: '' });
+  const [courseForm, setCourseForm] = useState({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
   const [slots, setSlots] = useState<SlotDraft[]>([]);
   const [slotDraft, setSlotDraft] = useState<{ dayOfWeek: string; startTime: string; endTime: string }>({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
   const [conflictWarning, setConflictWarning] = useState<string | null>(null);
@@ -150,7 +150,7 @@ export default function Courses() {
       }
       for (const slot of slots.filter(s => !s.serverId)) {
         await db.courseSchedules.add({
-          serverId: '',
+          serverId: crypto.randomUUID(),
           courseId: courseForm.serverId,
           dayOfWeek: slot.dayOfWeek,
           startTime: slot.startTime,
@@ -175,7 +175,7 @@ export default function Courses() {
 
       for (const slot of slots) {
         await db.courseSchedules.add({
-          serverId: '',
+          serverId: crypto.randomUUID(),
           courseId: newCourseId,
           dayOfWeek: slot.dayOfWeek,
           startTime: slot.startTime,
@@ -188,14 +188,14 @@ export default function Courses() {
     }
 
     setShowAddModal(false);
-    setCourseForm({ id: 0, serverId: '', code: '', title: '', lecturers: '' });
+    setCourseForm({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
     setSlots([]);
     setIsEditing(false);
   };
 
   const handleEditClick = (course: import('../db/db').Course) => {
     const existingSlots = allSchedules?.filter(s => s.courseId === course.serverId) ?? [];
-    setCourseForm({ id: course.id || 0, serverId: course.serverId, code: course.code, title: course.title, lecturers: course.lecturers || '' });
+    setCourseForm({ id: course.id || 0, serverId: course.serverId as ReturnType<typeof crypto.randomUUID>, code: course.code, title: course.title, lecturers: course.lecturers || '' });
     setSlots(existingSlots.map(s => ({
       key: s.serverId,
       serverId: s.serverId,
@@ -308,7 +308,7 @@ export default function Courses() {
             style={{ width: '52px', height: '52px' }}
             onClick={() => {
               setIsEditing(false);
-              setCourseForm({ id: 0, serverId: '', code: '', title: '', lecturers: '' });
+              setCourseForm({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
               setSlots([]);
               setSlotDraft({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
               setConflictWarning(null);

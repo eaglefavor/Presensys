@@ -9,12 +9,12 @@ export default function ReloadPrompt() {
     onRegistered(r) {
       console.log('SW Registered');
       // Check for updates every 5 minutes if online
-      r && setInterval(() => {
+      if (r) { setInterval(() => {
         if (navigator.onLine) {
           console.log('Checking for SW update...');
           r.update().catch(e => console.log('SW update failed:', e));
         }
-      }, 5 * 60 * 1000);
+      }, 5 * 60 * 1000); }
     },
     onRegisterError(error) {
       console.log('SW Registration Error', error);

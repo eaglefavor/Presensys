@@ -65,6 +65,7 @@ const Layout: React.FC = () => {
     if (user && navigator.onLine) {
       realtimeSync.initialize(user.id);
     } else if (!navigator.onLine) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSyncStatus('offline');
     }
 
@@ -102,7 +103,7 @@ const Layout: React.FC = () => {
 
   // Determine whether to show the stale-data banner
   const isStale = !isOnline && lastSyncedAt != null &&
-    (Date.now() - new Date(lastSyncedAt).getTime()) > STALE_THRESHOLD_MS;
+    (new Date().getTime() - new Date(lastSyncedAt).getTime()) > STALE_THRESHOLD_MS;
 
   return (
     <div className="app-container">
