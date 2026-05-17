@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
+import { Plus, ArrowLeft, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
 import { db } from '../db/db';
 import toast from 'react-hot-toast';
 import { useAppStore } from '../store/useAppStore';
@@ -294,6 +294,116 @@ export default function Courses() {
     );
   }
 
+  if (showAddModal) {
+    return (
+      <div className="courses-page animate-in min-vh-100 bg-white pb-5">
+        <div className="bg-white border-bottom px-4 py-4 sticky-top shadow-sm z-3">
+          <div className="d-flex align-items-center gap-3">
+            <button
+              className="btn btn-light rounded-circle p-2 d-flex align-items-center justify-content-center"
+              onClick={() => setShowAddModal(false)}
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className="h4 fw-black mb-0 text-primary" style={{ color: 'var(--primary-blue)' }}>
+              {isEditing ? 'EDIT COURSE' : 'NEW COURSE'}
+            </h1>
+          </div>
+        </div>
+
+        <div className="container-mobile mt-4">
+          <form onSubmit={handleAddCourse}>
+                <div className="p-4">
+                  <div className="mb-3">
+                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE CODE</label>
+                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-black text-uppercase" placeholder="e.g. TFS 214" required value={courseForm.code} onChange={e => setCourseForm({ ...courseForm, code: e.target.value.toUpperCase() })} /></div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE TITLE</label>
+                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold text-uppercase" placeholder="e.g. FOOD SCIENCE" required value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value.toUpperCase() })} /></div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="xx-small fw-bold text-muted ps-1 mb-1">LECTURERS</label>
+                    {allLecturers.length === 0 ? (
+                      <p className="xx-small text-muted ps-1 mb-0">No lecturers available. Add them from the Lecturers page first.</p>
+                    ) : (
+                      <div className="d-flex flex-column gap-1 mt-1" style={{ maxHeight: '160px', overflowY: 'auto' }}>
+                        {allLecturers.map(l => {
+                          const selectedIds = courseForm.lecturers.split(',').map(s => s.trim()).filter(Boolean);
+                          const isSelected = selectedIds.includes(l.serverId);
+                          return (
+                            <div
+                              key={l.serverId}
+                              className={`rounded-3 px-3 py-2 cursor-pointer ${isSelected ? 'bg-primary bg-opacity-10 border border-primary text-primary' : 'bg-light text-dark border border-transparent'}`}
+                              onClick={() => {
+                                const newIds = isSelected ? selectedIds.filter(id => id !== l.serverId) : [...selectedIds, l.serverId];
+                                setCourseForm({ ...courseForm, lecturers: newIds.join(',') });
+                              }}
+                            >
+                              <span className="xx-small fw-bold">{l.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Schedule Slots */}
+                  <div>
+                    <label className="xx-small fw-bold text-muted ps-1 mb-2 d-block">SCHEDULE SLOTS</label>
+
+                    {slots.length > 0 && (
+                      <div className="d-flex flex-column gap-1 mb-2">
+                        {slots.map(slot => (
+                          <div key={slot.key} className="d-flex align-items-center gap-2 bg-primary bg-opacity-10 rounded-3 px-3 py-2">
+                            <Clock size={13} className="text-primary flex-shrink-0" />
+                            <span className="xx-small fw-bold text-primary flex-grow-1">{slot.dayOfWeek} · {slot.startTime} – {slot.endTime}</span>
+                            <button type="button" className="btn btn-link p-0 text-danger" onClick={() => handleRemoveSlot(slot.key)}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="border rounded-3 p-3" style={{ backgroundColor: 'var(--bg-gray, #f8f9fa)' }}>
+                      <p className="xx-small fw-black text-muted text-uppercase mb-2">Add a Time Slot</p>
+                      <div className="mb-2">
+                        <select className="form-select form-select-sm border fw-bold" value={slotDraft.dayOfWeek} onChange={e => setSlotDraft(d => ({ ...d, dayOfWeek: e.target.value }))}>
+                          {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div className="row g-2 mb-2">
+                        <div className="col-6">
+                          <label className="xx-small fw-bold text-muted mb-1">FROM</label>
+                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.startTime} onChange={e => setSlotDraft(d => ({ ...d, startTime: e.target.value }))} />
+                        </div>
+                        <div className="col-6">
+                          <label className="xx-small fw-bold text-muted mb-1">TO</label>
+                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.endTime} onChange={e => setSlotDraft(d => ({ ...d, endTime: e.target.value }))} />
+                        </div>
+                      </div>
+                      {conflictWarning && (
+                        <div className="d-flex align-items-center gap-2 text-warning xx-small fw-bold mb-2">
+                          <AlertTriangle size={12} /> {conflictWarning}
+                        </div>
+                      )}
+                      <button type="button" className="btn btn-outline-primary w-100 rounded-3 fw-bold xx-small py-2" onClick={handleAddSlot}>
+                        <Plus size={12} className="me-1" /> ADD SLOT
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="d-flex gap-3 px-4 pb-5 pt-3">
+                  <button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowAddModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-lg fw-bold">{isEditing ? 'SAVE CHANGES' : 'CREATE COURSE'}</button>
+                </div>
+              </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="courses-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       {/* Header */}
@@ -391,106 +501,7 @@ export default function Courses() {
         )}
       </div>
 
-      {/* Add/Edit Course Modal */}
-      {showAddModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1050 }}>
-          <motion.div className="modal-dialog modal-dialog-centered px-3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-            <div className="modal-content border-0 shadow-2xl rounded-4">
-              <div className="modal-header border-bottom-0 p-4 pb-0">
-                <h5 className="fw-black mb-0" style={{ color: 'var(--primary-blue)' }}>{isEditing ? 'EDIT COURSE' : 'NEW COURSE'}</h5>
-                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowAddModal(false)}></button>
-              </div>
-              <form onSubmit={handleAddCourse}>
-                <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE CODE</label>
-                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-black text-uppercase" placeholder="e.g. TFS 214" required value={courseForm.code} onChange={e => setCourseForm({ ...courseForm, code: e.target.value.toUpperCase() })} /></div>
-                  </div>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE TITLE</label>
-                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold text-uppercase" placeholder="e.g. FOOD SCIENCE" required value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value.toUpperCase() })} /></div>
-                  </div>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1 mb-1">LECTURERS</label>
-                    {allLecturers.length === 0 ? (
-                      <p className="xx-small text-muted ps-1 mb-0">No lecturers available. Add them from the Lecturers page first.</p>
-                    ) : (
-                      <div className="d-flex flex-column gap-1 mt-1" style={{ maxHeight: '160px', overflowY: 'auto' }}>
-                        {allLecturers.map(l => {
-                          const selectedIds = courseForm.lecturers.split(',').map(s => s.trim()).filter(Boolean);
-                          const isSelected = selectedIds.includes(l.serverId);
-                          return (
-                            <div
-                              key={l.serverId}
-                              className={`rounded-3 px-3 py-2 cursor-pointer ${isSelected ? 'bg-primary bg-opacity-10 border border-primary text-primary' : 'bg-light text-dark border border-transparent'}`}
-                              onClick={() => {
-                                const newIds = isSelected ? selectedIds.filter(id => id !== l.serverId) : [...selectedIds, l.serverId];
-                                setCourseForm({ ...courseForm, lecturers: newIds.join(',') });
-                              }}
-                            >
-                              <span className="xx-small fw-bold">{l.name}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Schedule Slots */}
-                  <div>
-                    <label className="xx-small fw-bold text-muted ps-1 mb-2 d-block">SCHEDULE SLOTS</label>
-
-                    {slots.length > 0 && (
-                      <div className="d-flex flex-column gap-1 mb-2">
-                        {slots.map(slot => (
-                          <div key={slot.key} className="d-flex align-items-center gap-2 bg-primary bg-opacity-10 rounded-3 px-3 py-2">
-                            <Clock size={13} className="text-primary flex-shrink-0" />
-                            <span className="xx-small fw-bold text-primary flex-grow-1">{slot.dayOfWeek} · {slot.startTime} – {slot.endTime}</span>
-                            <button type="button" className="btn btn-link p-0 text-danger" onClick={() => handleRemoveSlot(slot.key)}>
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="border rounded-3 p-3" style={{ backgroundColor: 'var(--bg-gray, #f8f9fa)' }}>
-                      <p className="xx-small fw-black text-muted text-uppercase mb-2">Add a Time Slot</p>
-                      <div className="mb-2">
-                        <select className="form-select form-select-sm border fw-bold" value={slotDraft.dayOfWeek} onChange={e => setSlotDraft(d => ({ ...d, dayOfWeek: e.target.value }))}>
-                          {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
-                      <div className="row g-2 mb-2">
-                        <div className="col-6">
-                          <label className="xx-small fw-bold text-muted mb-1">FROM</label>
-                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.startTime} onChange={e => setSlotDraft(d => ({ ...d, startTime: e.target.value }))} />
-                        </div>
-                        <div className="col-6">
-                          <label className="xx-small fw-bold text-muted mb-1">TO</label>
-                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.endTime} onChange={e => setSlotDraft(d => ({ ...d, endTime: e.target.value }))} />
-                        </div>
-                      </div>
-                      {conflictWarning && (
-                        <div className="d-flex align-items-center gap-2 text-warning xx-small fw-bold mb-2">
-                          <AlertTriangle size={12} /> {conflictWarning}
-                        </div>
-                      )}
-                      <button type="button" className="btn btn-outline-primary w-100 rounded-3 fw-bold xx-small py-2" onClick={handleAddSlot}>
-                        <Plus size={12} className="me-1" /> ADD SLOT
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer border-0 p-4 pt-0">
-                  <button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowAddModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-lg fw-bold">{isEditing ? 'SAVE CHANGES' : 'CREATE COURSE'}</button>
-                </div>
-              </form>
-            </div>
-          </motion.div>
-        </div>
-      )}
 
       <EnrollmentModal
         show={showEnrollModal.show}
