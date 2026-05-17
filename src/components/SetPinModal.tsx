@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
 import { setStudentPin } from '../lib/pinBlitzService';
-import type { LocalStudent } from '../lib/db';
+import type { LocalStudent } from '../db/db';
 import toast from 'react-hot-toast';
 
 interface SetPinModalProps {
