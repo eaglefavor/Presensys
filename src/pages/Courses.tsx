@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
+import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle, ArrowLeft } from \'lucide-react\';
 import { db } from '../db/db';
 import toast from 'react-hot-toast';
 import { useAppStore } from '../store/useAppStore';
@@ -294,6 +294,65 @@ export default function Courses() {
     );
   }
 
+  if (showAddModal) {
+    return (
+      <div className="courses-page animate-in min-vh-100 bg-white pb-5">
+        <div className="bg-white border-bottom px-4 py-4 sticky-top shadow-sm z-3">
+          <div className="d-flex align-items-center gap-3">
+            <button
+              className="btn btn-light rounded-circle p-2 d-flex align-items-center justify-content-center"
+              onClick={() => setShowAddModal(false)}
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <h1 className="h4 fw-black mb-0 text-primary" style={{ color: 'var(--primary-blue)' }}>
+              {isEditing ? 'EDIT COURSE' : 'NEW COURSE'}
+            </h1>
+          </div>
+        </div>
+
+        <div className="container-mobile mt-4">
+          <form onSubmit={handleAddCourse}>
+
+                <div className="p-4">
+                  <div className="mb-3">
+                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE CODE</label>
+                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-black text-uppercase" placeholder="e.g. TFS 214" required value={courseForm.code} onChange={e => setCourseForm({ ...courseForm, code: e.target.value.toUpperCase() })} /></div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE TITLE</label>
+                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold text-uppercase" placeholder="e.g. FOOD SCIENCE" required value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value.toUpperCase() })} /></div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="xx-small fw-bold text-muted ps-1 mb-1">LECTURERS</label>
+                    {allLecturers.length === 0 ? (
+                      <p className="xx-small text-muted ps-1 mb-0">No lecturers available. Add them from the Lecturers page first.</p>
+                    ) : (
+                      <div className="d-flex flex-column gap-1 mt-1" style={{ maxHeight: '160px', overflowY: 'auto' }}>
+                        {allLecturers.map(l => {
+                          const selectedIds = courseForm.lecturers.split(',').map(s => s.trim()).filter(Boolean);
+                          const isSelected = selectedIds.includes(l.serverId);
+                          return (
+                            <div
+                              key={l.serverId}
+                              className={`rounded-3 px-3 py-2 cursor-pointer ${isSelected ? 'bg-primary bg-opacity-10 border border-primary text-primary' : 'bg-light text-dark border border-transparent'}`}
+                              onClick={() => {
+                                const newIds = isSelected ? selectedIds.filter(id => id !== l.serverId) : [...selectedIds, l.serverId];
+                                setCourseForm({ ...courseForm, lecturers: newIds.join(',') });
+                              }}
+                            >
+                              <span className="xx-small fw-bold">{l.name}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="courses-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       {/* Header */}
@@ -391,49 +450,7 @@ export default function Courses() {
         )}
       </div>
 
-      {/* Add/Edit Course Modal */}
-      {showAddModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1050 }}>
-          <motion.div className="modal-dialog modal-dialog-centered px-3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
-            <div className="modal-content border-0 shadow-2xl rounded-4">
-              <div className="modal-header border-bottom-0 p-4 pb-0">
-                <h5 className="fw-black mb-0" style={{ color: 'var(--primary-blue)' }}>{isEditing ? 'EDIT COURSE' : 'NEW COURSE'}</h5>
-                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowAddModal(false)}></button>
-              </div>
-              <form onSubmit={handleAddCourse}>
-                <div className="modal-body p-4" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE CODE</label>
-                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-black text-uppercase" placeholder="e.g. TFS 214" required value={courseForm.code} onChange={e => setCourseForm({ ...courseForm, code: e.target.value.toUpperCase() })} /></div>
-                  </div>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE TITLE</label>
-                    <div className="modern-input-unified p-1"><input type="text" className="form-control border-0 bg-transparent fw-bold text-uppercase" placeholder="e.g. FOOD SCIENCE" required value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value.toUpperCase() })} /></div>
-                  </div>
-                  <div className="mb-3">
-                    <label className="xx-small fw-bold text-muted ps-1 mb-1">LECTURERS</label>
-                    {allLecturers.length === 0 ? (
-                      <p className="xx-small text-muted ps-1 mb-0">No lecturers available. Add them from the Lecturers page first.</p>
-                    ) : (
-                      <div className="d-flex flex-column gap-1 mt-1" style={{ maxHeight: '160px', overflowY: 'auto' }}>
-                        {allLecturers.map(l => {
-                          const selectedIds = courseForm.lecturers.split(',').map(s => s.trim()).filter(Boolean);
-                          const isSelected = selectedIds.includes(l.serverId);
-                          return (
-                            <div
-                              key={l.serverId}
-                              className={`rounded-3 px-3 py-2 cursor-pointer ${isSelected ? 'bg-primary bg-opacity-10 border border-primary text-primary' : 'bg-light text-dark border border-transparent'}`}
-                              onClick={() => {
-                                const newIds = isSelected ? selectedIds.filter(id => id !== l.serverId) : [...selectedIds, l.serverId];
-                                setCourseForm({ ...courseForm, lecturers: newIds.join(',') });
-                              }}
-                            >
-                              <span className="xx-small fw-bold">{l.name}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+
                   </div>
 
                   {/* Schedule Slots */}
