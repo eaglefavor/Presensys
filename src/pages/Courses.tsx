@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle, ArrowLeft } from \'lucide-react\';
+import { Plus, ArrowLeft, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
 import { db } from '../db/db';
 import toast from 'react-hot-toast';
 import { useAppStore } from '../store/useAppStore';
@@ -313,7 +313,6 @@ export default function Courses() {
 
         <div className="container-mobile mt-4">
           <form onSubmit={handleAddCourse}>
-
                 <div className="p-4">
                   <div className="mb-3">
                     <label className="xx-small fw-bold text-muted ps-1 mb-1">COURSE CODE</label>
@@ -346,8 +345,60 @@ export default function Courses() {
                           );
                         })}
                       </div>
-                    )
-          </form>
+                    )}
+                  </div>
+
+                  {/* Schedule Slots */}
+                  <div>
+                    <label className="xx-small fw-bold text-muted ps-1 mb-2 d-block">SCHEDULE SLOTS</label>
+
+                    {slots.length > 0 && (
+                      <div className="d-flex flex-column gap-1 mb-2">
+                        {slots.map(slot => (
+                          <div key={slot.key} className="d-flex align-items-center gap-2 bg-primary bg-opacity-10 rounded-3 px-3 py-2">
+                            <Clock size={13} className="text-primary flex-shrink-0" />
+                            <span className="xx-small fw-bold text-primary flex-grow-1">{slot.dayOfWeek} · {slot.startTime} – {slot.endTime}</span>
+                            <button type="button" className="btn btn-link p-0 text-danger" onClick={() => handleRemoveSlot(slot.key)}>
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="border rounded-3 p-3" style={{ backgroundColor: 'var(--bg-gray, #f8f9fa)' }}>
+                      <p className="xx-small fw-black text-muted text-uppercase mb-2">Add a Time Slot</p>
+                      <div className="mb-2">
+                        <select className="form-select form-select-sm border fw-bold" value={slotDraft.dayOfWeek} onChange={e => setSlotDraft(d => ({ ...d, dayOfWeek: e.target.value }))}>
+                          {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div className="row g-2 mb-2">
+                        <div className="col-6">
+                          <label className="xx-small fw-bold text-muted mb-1">FROM</label>
+                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.startTime} onChange={e => setSlotDraft(d => ({ ...d, startTime: e.target.value }))} />
+                        </div>
+                        <div className="col-6">
+                          <label className="xx-small fw-bold text-muted mb-1">TO</label>
+                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.endTime} onChange={e => setSlotDraft(d => ({ ...d, endTime: e.target.value }))} />
+                        </div>
+                      </div>
+                      {conflictWarning && (
+                        <div className="d-flex align-items-center gap-2 text-warning xx-small fw-bold mb-2">
+                          <AlertTriangle size={12} /> {conflictWarning}
+                        </div>
+                      )}
+                      <button type="button" className="btn btn-outline-primary w-100 rounded-3 fw-bold xx-small py-2" onClick={handleAddSlot}>
+                        <Plus size={12} className="me-1" /> ADD SLOT
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="d-flex gap-3 px-4 pb-5 pt-3">
+                  <button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowAddModal(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-lg fw-bold">{isEditing ? 'SAVE CHANGES' : 'CREATE COURSE'}</button>
+                </div>
+              </form>
         </div>
       </div>
     );
@@ -451,63 +502,6 @@ export default function Courses() {
       </div>
 
 
-                  </div>
-
-                  {/* Schedule Slots */}
-                  <div>
-                    <label className="xx-small fw-bold text-muted ps-1 mb-2 d-block">SCHEDULE SLOTS</label>
-
-                    {slots.length > 0 && (
-                      <div className="d-flex flex-column gap-1 mb-2">
-                        {slots.map(slot => (
-                          <div key={slot.key} className="d-flex align-items-center gap-2 bg-primary bg-opacity-10 rounded-3 px-3 py-2">
-                            <Clock size={13} className="text-primary flex-shrink-0" />
-                            <span className="xx-small fw-bold text-primary flex-grow-1">{slot.dayOfWeek} · {slot.startTime} – {slot.endTime}</span>
-                            <button type="button" className="btn btn-link p-0 text-danger" onClick={() => handleRemoveSlot(slot.key)}>
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="border rounded-3 p-3" style={{ backgroundColor: 'var(--bg-gray, #f8f9fa)' }}>
-                      <p className="xx-small fw-black text-muted text-uppercase mb-2">Add a Time Slot</p>
-                      <div className="mb-2">
-                        <select className="form-select form-select-sm border fw-bold" value={slotDraft.dayOfWeek} onChange={e => setSlotDraft(d => ({ ...d, dayOfWeek: e.target.value }))}>
-                          {DAYS_OF_WEEK.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
-                      <div className="row g-2 mb-2">
-                        <div className="col-6">
-                          <label className="xx-small fw-bold text-muted mb-1">FROM</label>
-                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.startTime} onChange={e => setSlotDraft(d => ({ ...d, startTime: e.target.value }))} />
-                        </div>
-                        <div className="col-6">
-                          <label className="xx-small fw-bold text-muted mb-1">TO</label>
-                          <input type="time" className="form-control form-control-sm border fw-bold" value={slotDraft.endTime} onChange={e => setSlotDraft(d => ({ ...d, endTime: e.target.value }))} />
-                        </div>
-                      </div>
-                      {conflictWarning && (
-                        <div className="d-flex align-items-center gap-2 text-warning xx-small fw-bold mb-2">
-                          <AlertTriangle size={12} /> {conflictWarning}
-                        </div>
-                      )}
-                      <button type="button" className="btn btn-outline-primary w-100 rounded-3 fw-bold xx-small py-2" onClick={handleAddSlot}>
-                        <Plus size={12} className="me-1" /> ADD SLOT
-                      </button>
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer border-0 p-4 pt-0">
-                  <button type="button" className="btn btn-link text-muted text-decoration-none fw-bold small" onClick={() => setShowAddModal(false)}>Cancel</button>
-                  <button type="submit" className="btn btn-primary flex-grow-1 py-3 rounded-3 shadow-lg fw-bold">{isEditing ? 'SAVE CHANGES' : 'CREATE COURSE'}</button>
-                </div>
-              </form>
-            </div>
-          </motion.div>
-        </div>
-      )}
 
       <EnrollmentModal
         show={showEnrollModal.show}
