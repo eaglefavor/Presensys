@@ -42,9 +42,9 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
       });
     } else {
 
-      setLocalEnrollments(new Set());
+      // setLocalEnrollments(new Set());
 
-      setOriginalEnrollments(new Set());
+      // setOriginalEnrollments(new Set());
     }
   }, [show, courseId]);
 
@@ -93,7 +93,7 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
   // Reset modal page when filters or search change
   useEffect(() => {
 
-      setModalPage(1);
+      // setModalPage(1);
 
   }, [debouncedSearch, enrollFilter]);
 
