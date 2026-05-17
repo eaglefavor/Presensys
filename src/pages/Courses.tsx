@@ -62,7 +62,7 @@ export default function Courses() {
   const [courseForm, setCourseForm] = useState({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
   const [slots, setSlots] = useState<SlotDraft[]>([]);
   const [slotDraft, setSlotDraft] = useState<{ dayOfWeek: string; startTime: string; endTime: string }>({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-  // conflictWarning is derived
+  const conflictWarning = (slotDraft.startTime && slotDraft.endTime) ? checkConflict(slotDraft, courseForm.serverId) : null;
 
   const [showEnrollModal, setShowEnrollModal] = useState<{ show: boolean, courseId?: string, courseName?: string }>({ show: false });
   const itemsPerPage = 5;
