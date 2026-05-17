@@ -285,17 +285,31 @@ export default function Students() {
       }
       
       await db.transaction('rw', db.students, async () => {
+        const regNumbers = validData.map(s => s.regNumber);
+        const existingRecords = regNumbers.length > 0
+          ? await db.students.where('regNumber').anyOf(regNumbers).toArray()
+          : [];
+        const existingMap = new Map(existingRecords.map(r => [r.regNumber, r]));
+
+        const toAdd: Student[] = [];
+        const toRevive: { key: number; changes: Partial<Student> }[] = [];
+        const toUpdate: { key: number; changes: Partial<Student> }[] = [];
+
         for (const s of validData) {
-          const existing = await db.students.where('regNumber').equals(s.regNumber).first();
+          const existing = existingMap.get(s.regNumber);
           if (!existing) {
-            await db.students.add({ ...s, userId: user.id, synced: 0 });
+            toAdd.push({ ...s, serverId: s.serverId || crypto.randomUUID(), userId: user.id, synced: 0 });
           } else if (existing.isDeleted === 1) {
             // Resurrect soft-deleted student: preserve their serverId (canonical UUID)
-            await db.students.update(existing.id!, { name: s.name, isDeleted: 0, userId: user.id });
+            toRevive.push({ key: existing.id!, changes: { name: s.name, isDeleted: 0, userId: user.id, synced: 0 } });
           } else {
-            await db.students.update(existing.id!, { name: s.name, userId: user.id });
+            toUpdate.push({ key: existing.id!, changes: { name: s.name, userId: user.id, synced: 0 } });
           }
         }
+
+        if (toAdd.length > 0) await db.students.bulkAdd(toAdd);
+        if (toRevive.length > 0) await db.students.bulkUpdate(toRevive);
+        if (toUpdate.length > 0) await db.students.bulkUpdate(toUpdate);
       });
       setShowImportModal(false);
       resetImportState();
@@ -310,10 +324,6 @@ export default function Students() {
   const filteredStudents = students?.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.regNumber.includes(searchTerm));
   const totalPages = Math.ceil((filteredStudents?.length || 0) / itemsPerPage);
   const displayedStudents = filteredStudents?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  // Reset to page 1 whenever the search term changes — done in an effect
-  // to avoid calling setState during render, which React disallows.
-  // pagination reset derived natively
 
   const getInitials = (name: string) => name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   const stringToColor = (str: string) => {
@@ -343,7 +353,16 @@ export default function Students() {
         </div>
         <div className="modern-input-unified p-1 d-flex align-items-center bg-light shadow-inner">
           <Search size={18} className="text-muted ms-2" />
-          <input type="text" className="form-control border-0 bg-transparent py-2 fw-medium" placeholder="Search database..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+          <input
+            type="text"
+            className="form-control border-0 bg-transparent py-2 fw-medium"
+            placeholder="Search database..."
+            value={searchTerm}
+            onChange={e => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+          />
         </div>
       </div>
 
@@ -512,13 +531,19 @@ export default function Students() {
           <div className="container-fluid h-100 p-0 d-flex flex-column">
             <div className="p-4 border-bottom d-flex align-items-center justify-content-between bg-white sticky-top">
               <div className="d-flex align-items-center gap-3">
-                {importMode !== 'select' && <button className="btn btn-light rounded-circle p-2" onClick={resetImportState}><ArrowLeft size={20} /></button>}
+                {importMode !== 'select' && (
+                  <button className="btn btn-light rounded-circle p-2" onClick={resetImportState} aria-label="Back to import options">
+                    <ArrowLeft size={20} />
+                  </button>
+                )}
                 <div>
                   <h5 className="fw-black mb-0 text-primary">IMPORT CENTER</h5>
                   <p className="xx-small fw-bold text-muted mb-0">Add multiple students</p>
                 </div>
               </div>
-              <button type="button" className="btn-light rounded-circle p-2" onClick={() => setShowImportModal(false)}><X size={24} /></button>
+              <button type="button" className="btn-light rounded-circle p-2" onClick={() => setShowImportModal(false)} aria-label="Close import modal">
+                <X size={24} />
+              </button>
             </div>
 
             <div className="flex-grow-1 overflow-auto bg-light">

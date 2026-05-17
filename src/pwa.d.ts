@@ -1,5 +1,5 @@
 declare module 'virtual:pwa-register/react' {
-  import { Dispatch, SetStateAction } from 'react';
+  import type { Dispatch, SetStateAction } from 'react';
 
   export interface RegisterSWOptions {
     immediate?: boolean;

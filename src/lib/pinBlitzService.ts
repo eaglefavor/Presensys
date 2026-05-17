@@ -72,7 +72,6 @@ export async function verifyStudentPin(input: {
     retryAfterSeconds: Number(data?.retryAfterSeconds ?? 0),
   };
 }
-
 export async function setStudentPin(studentId: string, pin: string): Promise<void> {
   const { error } = await supabase.functions.invoke('set-student-pin', {
     body: { studentId, pin },
