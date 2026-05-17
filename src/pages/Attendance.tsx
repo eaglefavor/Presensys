@@ -14,8 +14,9 @@ import CourseSelection from './attendance/CourseSelection';
 import SessionsList from './attendance/SessionsList';
 import ManualMarking from './attendance/ManualMarking';
 import FingerprintBlitzScreen from './attendance/FingerprintBlitzScreen';
+import PinBlitzScreen from './attendance/PinBlitzScreen';
 
-type AttendanceMethod = 'manual' | 'ai-camera' | 'fingerprint';
+type AttendanceMethod = 'manual' | 'ai-camera' | 'fingerprint' | 'pin';
 const SESSION_PROMPT_BACKDROP_Z_INDEX = 3000;
 const SESSION_PROMPT_MODAL_Z_INDEX = 3001;
 
@@ -100,7 +101,7 @@ export default function Attendance() {
   const [confirmBulkMarkStatus, setConfirmBulkMarkStatus] = useState<'present' | 'absent' | null>(null);
   const [confirmResetRecords, setConfirmResetRecords] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Record<string, 'present' | 'absent' | 'excused' | 'reset'>>({});
-  const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | 'fingerprint' | null>(null);
+  const [attendanceMode, setAttendanceMode] = useState<'choosing' | 'manual' | 'ai-camera' | 'ai-reconciling' | 'fingerprint' | 'pin' | null>(null);
   const [aiImages, setAiImages] = useState<string[]>([]);
   const [pendingMethodChoice, setPendingMethodChoice] = useState<AttendanceMethod | null>(null);
   const [initializingMethod, setInitializingMethod] = useState<AttendanceMethod | null>(null);
@@ -464,6 +465,7 @@ export default function Attendance() {
           onSelectManual={() => handleMethodChoice('manual')}
           onSelectAI={() => handleMethodChoice('ai-camera')}
           onSelectFingerprint={() => handleMethodChoice('fingerprint')}
+          onSelectPin={() => handleMethodChoice('pin')}
         />
 
         {pendingMethodChoice && (
@@ -554,6 +556,18 @@ export default function Attendance() {
   if (attendanceMode === 'fingerprint' && activeSessionId && user) {
     return (
       <FingerprintBlitzScreen
+        activeSessionId={activeSessionId}
+        enrollments={enrollments || []}
+        userId={user.id}
+        onStop={() => setAttendanceMode('manual')}
+        onCancel={() => setAttendanceMode('choosing')}
+      />
+    );
+  }
+
+  if (attendanceMode === 'pin' && activeSessionId && user) {
+    return (
+      <PinBlitzScreen
         activeSessionId={activeSessionId}
         enrollments={enrollments || []}
         userId={user.id}

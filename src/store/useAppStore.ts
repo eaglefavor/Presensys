@@ -25,7 +25,9 @@ export const useAppStore = create<AppState>((set) => ({
           .first();
 
         if (currentSemester) {
-          console.log('Auto-Activating Semester:', currentSemester.name);
+          if (import.meta.env.DEV) {
+            console.log('Auto-Activating Semester:', currentSemester.name);
+          }
           await db.transaction('rw', db.semesters, async () => {
             // Only touch the previously-active semester — not every row in the table.
             // Modifying all rows would mark them all as unsynced and push redundant

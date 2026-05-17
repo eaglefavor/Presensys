@@ -249,7 +249,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     realtimeSync.cleanup();
 
     // Clear all sync-related localStorage keys to prevent cross-account data bleed
-    const SYNC_TABLES = ['semesters', 'students', 'courses', 'enrollments', 'attendance_sessions', 'attendance_records', 'lecturers', 'course_schedules', 'student_credentials'];
+    const SYNC_TABLES = [
+      'semesters',
+      'students',
+      'courses',
+      'enrollments',
+      'attendance_sessions',
+      'attendance_records',
+      'lecturers',
+      'course_schedules',
+      'student_credentials',
+    ];
     SYNC_TABLES.forEach(t => localStorage.removeItem(`sync_cursor_${t}`));
     localStorage.removeItem('last_sync_timestamp');
     localStorage.removeItem('sync_status');
@@ -257,7 +267,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     // CRITICAL: Wipe local data to prevent cross-account leakage and force re-sync on next login.
     // Include outbox so stale pending writes are never replayed by the next user.
-    await db.transaction('rw', [db.semesters, db.students, db.courses, db.enrollments, db.attendanceSessions, db.attendanceRecords, db.lecturers, db.courseSchedules, db.studentCredentials, db.outbox], async () => {
+    await db.transaction('rw', [
+      db.semesters,
+      db.students,
+      db.courses,
+      db.enrollments,
+      db.attendanceSessions,
+      db.attendanceRecords,
+      db.lecturers,
+      db.courseSchedules,
+      db.studentCredentials,
+      db.outbox,
+    ], async () => {
       await db.semesters.clear();
       await db.students.clear();
       await db.courses.clear();
