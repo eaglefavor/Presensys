@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Book, Users, Trash2, BookOpen, Edit2, Download, Clock, AlertTriangle } from 'lucide-react';
 import { db } from '../db/db';
@@ -62,29 +62,19 @@ export default function Courses() {
   const [courseForm, setCourseForm] = useState({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
   const [slots, setSlots] = useState<SlotDraft[]>([]);
   const [slotDraft, setSlotDraft] = useState<{ dayOfWeek: string; startTime: string; endTime: string }>({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-  const conflictWarning = (slotDraft.startTime && slotDraft.endTime) ? checkConflict(slotDraft, courseForm.serverId) : null;
+  const conflictWarning = useMemo(() => {
+    if (!slotDraft.startTime || !slotDraft.endTime || !allSchedules || !courses) return null;
 
-  const [showEnrollModal, setShowEnrollModal] = useState<{ show: boolean, courseId?: string, courseName?: string }>({ show: false });
-  const itemsPerPage = 5;
-  const [currentPage, setCurrentPage] = useState(1);
-
-  const totalPages = Math.ceil((courses?.length || 0) / itemsPerPage);
-  const displayedCourses = courses?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  const checkConflict = (draft: { dayOfWeek: string; startTime: string; endTime: string }, excludeCourseServerId?: string): string | null => {
-    if (!draft.startTime || !draft.endTime || !allSchedules || !courses) return null;
-
-    const draftStart = toMinutes(draft.startTime);
-    const draftEnd = toMinutes(draft.endTime);
+    const draftStart = toMinutes(slotDraft.startTime);
+    const draftEnd = toMinutes(slotDraft.endTime);
     if (draftStart >= draftEnd) return null;
 
     for (const sched of allSchedules) {
-      if (sched.courseId === excludeCourseServerId) continue;
-      // 'Everyday' matches all days; specific days match themselves and 'Everyday' slots
+      if (sched.courseId === courseForm.serverId) continue;
       const daysMatch =
-        draft.dayOfWeek === 'Everyday' ||
+        slotDraft.dayOfWeek === 'Everyday' ||
         sched.dayOfWeek === 'Everyday' ||
-        sched.dayOfWeek === draft.dayOfWeek;
+        sched.dayOfWeek === slotDraft.dayOfWeek;
       if (!daysMatch) continue;
 
       const schedStart = toMinutes(sched.startTime);
@@ -97,15 +87,14 @@ export default function Courses() {
       }
     }
     return null;
-  };
+  }, [slotDraft, courseForm.serverId, allSchedules, courses]);
 
-  useEffect(() => {
-    if (slotDraft.startTime && slotDraft.endTime) {
-      setConflictWarning(checkConflict(slotDraft, courseForm.serverId));
-    } else {
-      setConflictWarning(null);
-    }
-  }, [slotDraft, allSchedules, courseForm.serverId, courses]);
+  const [showEnrollModal, setShowEnrollModal] = useState<{ show: boolean, courseId?: string, courseName?: string }>({ show: false });
+  const itemsPerPage = 5;
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.ceil((courses?.length || 0) / itemsPerPage);
+  const displayedCourses = courses?.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleAddSlot = () => {
     if (!slotDraft.startTime || !slotDraft.endTime) {
@@ -123,7 +112,6 @@ export default function Courses() {
       endTime: slotDraft.endTime,
     }]);
     setSlotDraft({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-    setConflictWarning(null);
   };
 
   const handleRemoveSlot = (key: string) => {
@@ -204,7 +192,6 @@ export default function Courses() {
       endTime: s.endTime,
     })));
     setSlotDraft({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-    setConflictWarning(null);
     setIsEditing(true);
     setShowAddModal(true);
   };
@@ -311,7 +298,6 @@ export default function Courses() {
               setCourseForm({ id: 0, serverId: crypto.randomUUID(), code: '', title: '', lecturers: '' });
               setSlots([]);
               setSlotDraft({ dayOfWeek: 'Monday', startTime: '', endTime: '' });
-              setConflictWarning(null);
               setShowAddModal(true);
             }}
           >
