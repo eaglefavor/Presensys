@@ -1,0 +1,41 @@
+
+> presensys@0.0.0 build
+> tsc -b && vite build
+
+vite v7.3.0 building client environment for production...
+transforming...
+✓ 2447 modules transformed.
+node_modules/eruda/eruda.js (2:424693): Use of eval in "node_modules/eruda/eruda.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+rendering chunks...
+computing gzip size...
+dist/registerSW.js                           0.13 kB
+dist/manifest.webmanifest                    0.45 kB
+dist/index.html                              0.68 kB │ gzip:   0.40 kB
+dist/assets/index-CxXA6Y42.css             232.51 kB │ gzip:  31.07 kB
+dist/assets/purify.es-Bzr520pe.js           22.45 kB │ gzip:   8.63 kB
+dist/assets/index.es-CVhQI_c-.js           158.55 kB │ gzip:  52.90 kB
+dist/assets/html2canvas.esm-DXEQVQnt.js    201.04 kB │ gzip:  47.43 kB
+dist/assets/index-BRFFTzsP.js            2,523.46 kB │ gzip: 759.68 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 2m 10s
+error during build:
+Error: 
+  Configure "workbox.maximumFileSizeToCacheInBytes" to change the limit: the default value is 2 MiB.
+  Check https://vite-pwa-org.netlify.app/guide/faq.html#missing-assets-from-sw-precache-manifest for more information.
+  Assets exceeding the limit:
+  - assets/index-BRFFTzsP.js is 2.52 MB, and won't be precached.
+
+    at logWorkboxResult (file:///home/userland/presensys/node_modules/vite-plugin-pwa/dist/chunk-G4TAN34B.js:44:13)
+    at generateServiceWorker (file:///home/userland/presensys/node_modules/vite-plugin-pwa/dist/index.js:209:3)
+    at async _generateSW (file:///home/userland/presensys/node_modules/vite-plugin-pwa/dist/index.js:234:5)
+    at async Object.handler (file:///home/userland/presensys/node_modules/vite-plugin-pwa/dist/index.js:427:13)
+    at async PluginDriver.hookParallel (file:///home/userland/presensys/node_modules/rollup/dist/es/shared/node-entry.js:22426:17)
+    at async Object.close (file:///home/userland/presensys/node_modules/rollup/dist/es/shared/node-entry.js:23445:13)
+    at async buildEnvironment (file:///home/userland/presensys/node_modules/vite/dist/node/chunks/config.js:33554:15)
+    at async Object.build (file:///home/userland/presensys/node_modules/vite/dist/node/chunks/config.js:33899:19)
+    at async Object.buildApp (file:///home/userland/presensys/node_modules/vite/dist/node/chunks/config.js:33896:153)
+    at async CAC.<anonymous> (file:///home/userland/presensys/node_modules/vite/dist/node/cli.js:629:3)
