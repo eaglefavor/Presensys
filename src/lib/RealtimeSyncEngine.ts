@@ -1035,7 +1035,7 @@ export class RealtimeSyncEngine {
       const mapped = this.mapServerToLocal(tableName, newRecord) as Partial<T>;
 
       if (localItem && localItem.id !== undefined) {
-        await (table as any).update(localItem.id, { ...mapped, synced: 1 } as Partial<T>);
+        await table.update(localItem.id, { ...mapped, synced: 1 } as any);
       } else {
         // Heavy tables: only insert via periodic pull to avoid bloating local storage
         const isHeavy = tableName === 'attendance_records' || tableName === 'attendance_sessions';
@@ -1052,7 +1052,7 @@ export class RealtimeSyncEngine {
 
       // Mark as soft-deleted + synced (will be purged by meticulousPurge on next sync)
       if (localItem.id !== undefined) {
-        await (table as any).update(localItem.id, { isDeleted: 1, synced: 1 });
+        await table.update(localItem.id, { isDeleted: 1, synced: 1 } as any);
       }
     }
   }
