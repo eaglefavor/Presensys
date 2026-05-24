@@ -587,7 +587,7 @@ export default function Students() {
                       animate={{ scale: 1 }}
                       className="mx-auto mb-5"
                     >
-                      <div className="avatar-circle-xl mx-auto shadow-lg fw-black text-gold" style={{ backgroundColor: 'var(--primary-blue)', borderColor: 'var(--color-gold)', borderStyle: 'solid', borderWidth: '4px' }}>{getInitials(selectedStudent.name)}</div>
+                      <div className="avatar-circle-xl mx-auto shadow-lg fw-black text-gold" style={{ backgroundColor: 'var(--primary-blue)', border: '4px solid var(--color-gold)' }}>{getInitials(selectedStudent.name)}</div>
                     </motion.div>
                     
                     {/* Student Info */}
@@ -849,7 +849,7 @@ export default function Students() {
 
       <style>{`
         :root { --color-gold: #cfb53b; }
-        .bg-gradient-primary { backgroundImage: linear-gradient(135deg, rgba(0, 105, 148, 0.02) 0%, rgba(0, 105, 148, 0.01) 100%); }
+        .bg-gradient-primary { background-image: linear-gradient(135deg, rgba(0, 105, 148, 0.02) 0%, rgba(0, 105, 148, 0.01) 100%); }
         .text-gold { color: var(--color-gold); }
         .avatar-circle { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
         .avatar-circle-md { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
