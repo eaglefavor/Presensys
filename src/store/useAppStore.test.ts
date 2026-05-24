@@ -1,10 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { db } from '../db/db.ts';
 
 test('useAppStore initialization tests', async (t) => {
-  let useAppStore: any;
+  type UseAppStore = {
+    setState: (state: { activeSemester: null }) => void;
+    getState: () => {
+      initialize: () => Promise<void>;
+      activeSemester: { name?: string } | null;
+    };
+  };
+  let useAppStore: UseAppStore;
 
   t.beforeEach(async () => {
     // We must isolate the module import to test different scenarios
@@ -18,7 +24,7 @@ test('useAppStore initialization tests', async (t) => {
     const originalFilter = db.semesters.filter;
     db.semesters.filter = t.mock.fn(() => ({
       first: async () => ({ id: 1, name: 'Manually Active Sem', isActive: true })
-    })) as any;
+    })) as unknown as typeof db.semesters.filter;
 
     await useAppStore.getState().initialize();
 
@@ -42,18 +48,19 @@ test('useAppStore initialization tests', async (t) => {
           return undefined; // prevActive query inside transaction
         }
       };
-    }) as any;
+    }) as unknown as typeof db.semesters.filter;
 
-    db.transaction = t.mock.fn(async (_mode: any, _tables: any, callback: any) => {
+    db.transaction = t.mock.fn(async (...args: Parameters<typeof db.transaction>) => {
       transactionCalled = true;
+      const callback = args[2] as unknown as () => Promise<void>;
       return callback();
-    }) as any;
+    }) as unknown as typeof db.transaction;
 
-    db.semesters.update = t.mock.fn(async () => 1) as any;
+    db.semesters.update = t.mock.fn(async () => 1) as unknown as typeof db.semesters.update;
 
     // Suppress console.log during test
     const originalLog = console.log;
-    console.log = t.mock.fn();
+    console.log = t.mock.fn<typeof console.log>();
 
     await useAppStore.getState().initialize();
 
@@ -70,7 +77,7 @@ test('useAppStore initialization tests', async (t) => {
 
     db.semesters.filter = t.mock.fn(() => ({
       first: async () => undefined
-    })) as any;
+    })) as unknown as typeof db.semesters.filter;
 
     await useAppStore.getState().initialize();
 
