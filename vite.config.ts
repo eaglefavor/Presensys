@@ -14,6 +14,12 @@ export default defineConfig({
         short_name: 'Presensys',
         description: 'Offline-first University Attendance System',
         theme_color: '#0d6efd',
+        background_color: '#ffffff',
+        display: 'standalone',
+        orientation: 'portrait-primary',
+        scope: '/',
+        start_url: '/',
+        categories: ['productivity'],
         icons: [
           {
             src: 'pwa-192x192.png',
