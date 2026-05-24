@@ -6,6 +6,7 @@ import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
 import ConfirmDialog from '../components/ConfirmDialog';
 import FingerprintEnrollModal from '../components/FingerprintEnrollModal';
+import SetPinModal from '../components/SetPinModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
 import { assignOrResetStudentPin } from '../lib/pinBlitzService';
@@ -40,6 +41,7 @@ export default function Students() {
 
   // Fingerprint enrollment
   const [showFingerprintModal, setShowFingerprintModal] = useState(false);
+  const [showSetPinModal, setShowSetPinModal] = useState(false);
 
   // Live attendance stats for the selected student detail panel
   const selectedStudentStats = useLiveQuery(async () => {
@@ -478,13 +480,22 @@ export default function Students() {
                             <FingerprintPattern size={18} style={{ color: '#cfb53b' }} />
                             { 'Register/Update WebAuthn' }
                           </button>
-                          <button
-                            className="btn btn-outline-info w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
-                            onClick={() => void handleResetPin()}
-                          >
-                            <KeyRound size={18} />
-                            Reset Student PIN
-                          </button>
+                          <div className="d-flex gap-2 w-100">
+                            <button
+                              className="btn btn-outline-info flex-grow-1 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
+                              onClick={() => void handleResetPin()}
+                            >
+                              <KeyRound size={18} />
+                              Reset PIN
+                            </button>
+                            <button
+                              className="btn btn-info text-white flex-grow-1 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
+                              onClick={() => setShowSetPinModal(true)}
+                            >
+                              <Edit2 size={18} />
+                              Set PIN
+                            </button>
+                          </div>
                           <button className="btn btn-light w-100 py-3 rounded-3 fw-bold border" onClick={() => setSelectedStudent(null)}>Close View</button>
                           <button className="btn btn-link text-danger fw-bold xx-small text-decoration-none py-2" onClick={() => setConfirmStudentDelete(selectedStudent)}>Delete Student</button>
                         </div>
@@ -611,6 +622,13 @@ export default function Students() {
         <FingerprintEnrollModal userId={user?.id || ''}
           student={selectedStudent}
           onClose={() => setShowFingerprintModal(false)}
+        />
+      )}
+
+      {showSetPinModal && selectedStudent && (
+        <SetPinModal
+          student={selectedStudent}
+          onClose={() => setShowSetPinModal(false)}
         />
       )}
 

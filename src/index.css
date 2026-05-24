@@ -203,3 +203,114 @@ input[type="checkbox"], input[type="radio"] {
   -webkit-appearance: auto;
   appearance: auto;
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+   NATIVE APP MODE STYLES
+   These styles apply when the PWA is installed as an app (display-mode: standalone)
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Standalone/App Mode: Remove desktop framing and maximize screen real estate
+ * This ensures the app looks and feels native when installed on phone/tablet
+ */
+@media (display-mode: standalone) {
+  html {
+    /* Allow app to use full viewport including notch/safe areas */
+    overflow: hidden;
+  }
+
+  body {
+    /* Full height without browser chrome */
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+  }
+
+  .app-container {
+    /* Remove all margins and constraints for app mode */
+    margin: 0;
+    max-width: none;
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    box-shadow: none;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Desktop framing should not apply in app mode */
+  @media (min-width: 501px) {
+    .app-container {
+      margin: 0;
+      max-width: none;
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0;
+      box-shadow: none;
+    }
+  }
+
+  /* Hide scrollbars for immersive feel */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /* Ensure body can properly expand */
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+/**
+ * Browser Mode: Keep desktop framing visible
+ * This applies when viewing the PWA in a regular web browser
+ */
+@media (display-mode: browser), (display-mode: window-controls-overlay) {
+  /* Desktop framing is already handled by existing styles above */
+}
+
+/**
+ * Utility classes for conditional rendering based on app mode
+ */
+
+/* Show only in app mode */
+.app-mode-only {
+  display: none;
+}
+
+@media (display-mode: standalone) {
+  .app-mode-only {
+    display: block;
+  }
+}
+
+/* Show only in web/browser mode */
+.web-mode-only {
+  display: block;
+}
+
+@media (display-mode: standalone) {
+  .web-mode-only {
+    display: none;
+  }
+}
+
+/* Attribute selector support for data-app-mode */
+[data-app-mode="browser"] .app-mode-only {
+  display: none;
+}
+
+[data-app-mode="standalone"] .web-mode-only,
+[data-app-mode="fullscreen"] .web-mode-only {
+  display: none;
+}
+
+[data-app-mode="standalone"] .app-mode-only,
+[data-app-mode="fullscreen"] .app-mode-only {
+  display: block;
+}

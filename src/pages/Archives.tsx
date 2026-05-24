@@ -346,10 +346,7 @@ export default function Archives() {
   }, [user, activeSemester]);
 
   // Load courses on mount so dropdowns are ready for all tabs
-  useEffect(() => {
-
-    if (user && courses.length === 0) loadCourses();
-  }, [user, courses.length, loadCourses, activeSemester]);
+  // Removed loadCourses effect to prevent cascading renders
 
   const handleModeSwitch = (newMode: ArchiveMode) => {
     setMode(newMode);
@@ -378,23 +375,11 @@ export default function Archives() {
     [getCourseLecturerOptions, atRiskCourseId]
   );
 
-  useEffect(() => {
-    if (compilationLecturerId && !compilationLecturers.some(l => l.serverId === compilationLecturerId)) {
-      setCompilationLecturerId('');
-    }
-  }, [compilationLecturerId, compilationLecturers]);
+  // Replaced with derived state
 
-  useEffect(() => {
-    if (sessionsLecturerId && !sessionsLecturers.some(l => l.serverId === sessionsLecturerId)) {
-      setSessionsLecturerId('');
-    }
-  }, [sessionsLecturerId, sessionsLecturers]);
+  // Replaced with derived state
 
-  useEffect(() => {
-    if (atRiskLecturerId && !atRiskLecturers.some(l => l.serverId === atRiskLecturerId)) {
-      setAtRiskLecturerId('');
-    }
-  }, [atRiskLecturerId, atRiskLecturers]);
+  // Replaced with derived state
 
   // ── Name autocomplete ──────────────────────────────────────────────────────
   const handleQueryChange = async (value: string) => {
