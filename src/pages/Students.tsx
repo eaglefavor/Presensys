@@ -440,7 +440,7 @@ export default function Students() {
 
         {/* Student Cards Grid - Spacious Layout */}
         <div className="row g-4 mb-5">
-          {students == null ? (
+          {students === undefined || students === null ? (
             <div className="col-12">
               <div className="text-center py-8">
                 <motion.div
@@ -602,21 +602,21 @@ export default function Students() {
                         <div className="bg-light p-5 rounded-4 border">
                          <GraduationCap size={28} className="mb-2 mx-auto text-primary" />
                          <div className="xx-small fw-bold text-muted mb-1">STATUS</div>
-                         <div className="fw-black" style={{ color: 'var(--primary-blue)', fontSize: '18px' }}>ACTIVE</div>
+                         <div className="stat-value">ACTIVE</div>
                         </div>
                       </div>
                       <div className="col-6">
                         <div className="bg-light p-5 rounded-4 border">
                          <Calendar size={28} className="mb-2 mx-auto text-primary" />
                          <div className="xx-small fw-bold text-muted mb-1">JOINED</div>
-                         <div className="fw-black" style={{ color: 'var(--primary-blue)', fontSize: '18px' }}>{selectedStudent.createdAt ? new Date(selectedStudent.createdAt).getFullYear() : '—'}</div>
+                         <div className="stat-value">{selectedStudent.createdAt ? new Date(selectedStudent.createdAt).getFullYear() : '—'}</div>
                         </div>
                       </div>
                       <div className="col-12">
                         <div className="bg-light p-5 rounded-4 border">
                          <History size={28} className="mb-2 mx-auto text-primary" />
                          <div className="xx-small fw-bold text-muted mb-1">ATTENDANCE</div>
-                         <div className="fw-black" style={{ color: 'var(--primary-blue)', fontSize: '24px' }}>{selectedStudentStats ? `${selectedStudentStats.percentage}%` : '…'}</div>
+                         <div className="stat-value stat-value-lg">{selectedStudentStats ? `${selectedStudentStats.percentage}%` : '…'}</div>
                         </div>
                       </div>
                     </div>
@@ -627,7 +627,7 @@ export default function Students() {
                       
                       {/* Biometric & Security Section */}
                       <div className="bg-light-subtle p-5 rounded-4 border">
-                        <h6 className="fw-black mb-4" style={{ color: 'var(--primary-blue)', fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔒 Security & Biometrics</h6>
+                        <h6 className="fw-black mb-4 d-flex align-items-center gap-2" style={{ color: 'var(--primary-blue)', fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}><FingerprintPattern size={18} /> Security & Biometrics</h6>
                         <div className="d-flex flex-column gap-3">
                          <button
                            className="btn btn-outline-primary w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
@@ -642,7 +642,7 @@ export default function Students() {
 
                       {/* PIN Management Section */}
                       <div className="bg-light-subtle p-5 rounded-4 border">
-                        <h6 className="fw-black mb-4" style={{ color: 'var(--primary-blue)', fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🔐 PIN Management</h6>
+                        <h6 className="fw-black mb-4 d-flex align-items-center gap-2" style={{ color: 'var(--primary-blue)', fontSize: '15px', textTransform: 'uppercase', letterSpacing: '0.5px' }}><KeyRound size={18} /> PIN Management</h6>
                         <div className="d-flex flex-column gap-3">
                          <button
                            className="btn btn-outline-info w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
@@ -865,6 +865,16 @@ export default function Students() {
         .dropdown-menu-actions { 
           min-width: 200px; 
           z-index: 1100;
+        }
+        
+        /* Statistic Values */
+        .stat-value {
+          font-weight: 900;
+          color: var(--primary-blue);
+          font-size: 18px;
+        }
+        .stat-value-lg {
+          font-size: 24px;
         }
         
         /* Modern Design Enhancements */
