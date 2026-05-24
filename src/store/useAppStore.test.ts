@@ -24,7 +24,7 @@ test('useAppStore initialization tests', async (t) => {
     const originalFilter = db.semesters.filter;
     db.semesters.filter = t.mock.fn(() => ({
       first: async () => ({ id: 1, name: 'Manually Active Sem', isActive: true })
-    })) as typeof db.semesters.filter;
+    })) as unknown as typeof db.semesters.filter;
 
     await useAppStore.getState().initialize();
 
@@ -48,15 +48,15 @@ test('useAppStore initialization tests', async (t) => {
           return undefined; // prevActive query inside transaction
         }
       };
-    }) as typeof db.semesters.filter;
+    }) as unknown as typeof db.semesters.filter;
 
     db.transaction = t.mock.fn(async (...args: Parameters<typeof db.transaction>) => {
       transactionCalled = true;
-      const callback = args[2] as () => Promise<void>;
+      const callback = args[2] as unknown as () => Promise<void>;
       return callback();
-    }) as typeof db.transaction;
+    }) as unknown as typeof db.transaction;
 
-    db.semesters.update = t.mock.fn(async () => 1) as typeof db.semesters.update;
+    db.semesters.update = t.mock.fn(async () => 1) as unknown as typeof db.semesters.update;
 
     // Suppress console.log during test
     const originalLog = console.log;
@@ -77,7 +77,7 @@ test('useAppStore initialization tests', async (t) => {
 
     db.semesters.filter = t.mock.fn(() => ({
       first: async () => undefined
-    })) as typeof db.semesters.filter;
+    })) as unknown as typeof db.semesters.filter;
 
     await useAppStore.getState().initialize();
 

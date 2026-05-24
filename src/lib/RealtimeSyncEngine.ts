@@ -291,7 +291,7 @@ export class RealtimeSyncEngine {
 
       const processTable = async <T extends LocalSyncRecord>(
         tableName: TableName,
-        dexieTable: Table<T, number>,
+        dexieTable: Table<any, number>,
         mapToLocal: (serverRow: ServerRow) => T
       ) => {
         const tableData = edgeResponse.results[tableName] as ServerRow[] | undefined;
@@ -329,7 +329,7 @@ export class RealtimeSyncEngine {
         }
 
         await db.transaction('rw', dexieTable, async () => {
-          if (updates.length > 0) await dexieTable.bulkUpdate(updates);
+          if (updates.length > 0) await (dexieTable as any).bulkUpdate(updates);
           if (inserts.length > 0) await dexieTable.bulkAdd(inserts);
         });
 
@@ -343,44 +343,44 @@ export class RealtimeSyncEngine {
           serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
           isActive: s.is_active, isArchived: s.is_archived,
           userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-        })),
+        }) as any),
         processTable('students', db.students, (st) => ({
           serverId: st.id, regNumber: st.reg_number, name: st.name, email: st.email, phone: st.phone,
           userId: st.user_id, isDeleted: st.is_deleted, updatedAt: st.updated_at, createdAt: st.created_at,
-        })),
+        }) as any),
         processTable('courses', db.courses, (c) => ({
           serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
           dayOfWeek: c.day_of_week ?? c.day, time: c.time, lecturers: c.lecturers,
           userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
-        })),
+        }) as any),
         processTable('enrollments', db.enrollments, (e) => ({
           serverId: e.id, studentId: e.student_id, courseId: e.course_id,
           userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
-        })),
+        }) as any),
         processTable('attendance_sessions', db.attendanceSessions, (s) => ({
           serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
           userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-        })),
+        }) as any),
         processTable('lecturers', db.lecturers, (l) => ({
           serverId: l.id, name: l.name,
           userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
-        })),
+        }) as any),
         processTable('attendance_records', db.attendanceRecords, (r) => ({
           serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
           status: r.status,
           timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
           userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
-        })),
+        }) as any),
         processTable('course_schedules', db.courseSchedules, (cs) => ({
           serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
           startTime: cs.start_time, endTime: cs.end_time,
           userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
-        })),
+        }) as any),
         processTable('student_credentials', db.studentCredentials, (sc) => ({
           serverId: sc.id, studentId: sc.student_id, credentialId: sc.credential_id,
           publicKey: sc.public_key, counter: sc.counter,
           userId: sc.user_id, isDeleted: sc.is_deleted, updatedAt: sc.updated_at, createdAt: sc.created_at,
-        })),
+        }) as any),
       ]);
     } catch (err) {
       console.error('Failed to pull sync bundle', err);
@@ -705,7 +705,7 @@ export class RealtimeSyncEngine {
                 serverId: serverItem.id,
                 synced: 1,
                 updatedAt: serverItem.updated_at
-              });
+              } as any);
               const ob = outboxAttempts.get(originalLocalId);
               if (ob) await db.outbox.update(ob.id, { done: 1 }).catch(() => {});
             }
@@ -737,7 +737,7 @@ export class RealtimeSyncEngine {
         if (ob) doneOutboxIds.push(ob.id);
       }
 
-      if (updates.length > 0) await table.bulkUpdate(updates);
+      if (updates.length > 0) await (table as any).bulkUpdate(updates);
       // Mark outbox entries as done
       await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
     }
@@ -1017,7 +1017,7 @@ export class RealtimeSyncEngine {
       });
   }
 
-  private async handleRealtimeEvent<T extends LocalSyncRecord>(tableName: TableName, table: Table<T, number>, payload: RealtimePayload) {
+  private async handleRealtimeEvent<T extends LocalSyncRecord>(tableName: TableName, table: Table<any, number>, payload: RealtimePayload) {
     const { eventType } = payload;
     const newRecord = payload.new as ServerRow;
     const oldRecord = payload.old as ServerRow;
@@ -1035,7 +1035,7 @@ export class RealtimeSyncEngine {
       const mapped = this.mapServerToLocal(tableName, newRecord) as Partial<T>;
 
       if (localItem && localItem.id !== undefined) {
-        await table.update(localItem.id, { ...mapped, synced: 1 } as Partial<T>);
+        await (table as any).update(localItem.id, { ...mapped, synced: 1 } as Partial<T>);
       } else {
         // Heavy tables: only insert via periodic pull to avoid bloating local storage
         const isHeavy = tableName === 'attendance_records' || tableName === 'attendance_sessions';
@@ -1052,7 +1052,7 @@ export class RealtimeSyncEngine {
 
       // Mark as soft-deleted + synced (will be purged by meticulousPurge on next sync)
       if (localItem.id !== undefined) {
-        await table.update(localItem.id, { isDeleted: 1, synced: 1 });
+        await (table as any).update(localItem.id, { isDeleted: 1, synced: 1 });
       }
     }
   }

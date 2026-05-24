@@ -74,7 +74,7 @@ describe('RealtimeSyncEngine - sync()', () => {
     await db.delete();
     await db.open();
 
-    engine = new RealtimeSyncEngine() as EnginePrivate;
+    engine = new RealtimeSyncEngine() as unknown as EnginePrivate;
 
     // Set up basic state
     engine.userId = 'user-123';
@@ -83,14 +83,14 @@ describe('RealtimeSyncEngine - sync()', () => {
     engine.retryCount = 0;
 
     // Mock the inner methods called by sync()
-    engine.pullChanges = mock.fn(async () => {});
-    engine.selfHealData = mock.fn(async () => {});
-    engine.pushChanges = mock.fn(async () => {});
-    engine.meticulousPurge = mock.fn(async () => {});
+    (engine.pullChanges as any) = mock.fn(async () => {});
+    (engine.selfHealData as any) = mock.fn(async () => {});
+    (engine.pushChanges as any) = mock.fn(async () => {});
+    (engine.meticulousPurge as any) = mock.fn(async () => {});
 
     // Mock emitStatus
     emitStatusMock = mock.fn<(status: SyncStatus) => void>();
-    engine.emitStatus = emitStatusMock;
+    (engine.emitStatus as any) = emitStatusMock;
   });
 
   afterEach(() => {
@@ -106,10 +106,10 @@ describe('RealtimeSyncEngine - sync()', () => {
   test('sync - successful execution calls all four steps', async () => {
     await engine.sync();
 
-    assert.strictEqual(engine.pullChanges.mock.callCount(), 1);
-    assert.strictEqual(engine.selfHealData.mock.callCount(), 1);
-    assert.strictEqual(engine.pushChanges.mock.callCount(), 1);
-    assert.strictEqual(engine.meticulousPurge.mock.callCount(), 1);
+    assert.strictEqual((engine.pullChanges as any).mock.callCount(), 1);
+    assert.strictEqual((engine.selfHealData as any).mock.callCount(), 1);
+    assert.strictEqual((engine.pushChanges as any).mock.callCount(), 1);
+    assert.strictEqual((engine.meticulousPurge as any).mock.callCount(), 1);
 
     // Check emitStatus calls
     const emitStatusCalls = emitStatusMock.mock.calls.map(call => call.arguments[0] as SyncStatus);
@@ -125,8 +125,8 @@ describe('RealtimeSyncEngine - sync()', () => {
     await engine.sync();
 
     assert.strictEqual(engine.isSyncing, false);
-    assert.strictEqual(engine.emitStatus.mock.callCount(), 0);
-    assert.strictEqual(engine.pullChanges.mock.callCount(), 0);
+    assert.strictEqual((engine.emitStatus as any).mock.callCount(), 0);
+    assert.strictEqual((engine.pullChanges as any).mock.callCount(), 0);
   });
 
   test('sync - aborts early if offline', async () => {
@@ -134,8 +134,8 @@ describe('RealtimeSyncEngine - sync()', () => {
     await engine.sync();
 
     assert.strictEqual(engine.isSyncing, false);
-    assert.strictEqual(engine.emitStatus.mock.callCount(), 0);
-    assert.strictEqual(engine.pullChanges.mock.callCount(), 0);
+    assert.strictEqual((engine.emitStatus as any).mock.callCount(), 0);
+    assert.strictEqual((engine.pullChanges as any).mock.callCount(), 0);
   });
 
   test('sync - aborts early if already syncing', async () => {
@@ -143,8 +143,8 @@ describe('RealtimeSyncEngine - sync()', () => {
     await engine.sync();
 
     assert.strictEqual(engine.isSyncing, true); // Stays true
-    assert.strictEqual(engine.emitStatus.mock.callCount(), 0);
-    assert.strictEqual(engine.pullChanges.mock.callCount(), 0);
+    assert.strictEqual((engine.emitStatus as any).mock.callCount(), 0);
+    assert.strictEqual((engine.pullChanges as any).mock.callCount(), 0);
   });
 
   test('sync - handles error and triggers retry', async () => {

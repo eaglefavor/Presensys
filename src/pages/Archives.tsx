@@ -460,7 +460,7 @@ export default function Archives() {
       .eq('is_deleted', 0)
       .order('marked_at', { ascending: false });
     if (error) { toast.error('Failed to fetch history from cloud.'); return []; }
-    const typedRecords = (records || []) as SupabaseAttendanceRecordRow[];
+     const typedRecords = (records || []) as unknown as SupabaseAttendanceRecordRow[];
     return typedRecords
       .filter(r => r.attendance_sessions?.courses)
       .map(r => ({
@@ -689,17 +689,17 @@ export default function Archives() {
     const { data: enrollments } = await supabase
       .from('enrollments').select('student_id, students (id, name, reg_number)')
       .eq('course_id', courseId).eq('is_deleted', 0);
-    const enrollmentRows = (enrollments || []) as SupabaseEnrollmentRow[];
+    const enrollmentRows = (enrollments || []) as unknown as SupabaseEnrollmentRow[];
     if (enrollmentRows.length === 0) return [];
     const totalSessions = sessionRows.length;
 
     // Performance optimization: Pre-calculate counts O(N+M)
     const studentStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
-    for (const r of (records || []) as SupabaseSessionRecordRow[]) {
-      if (!studentStatsMap.has(r.student_id)) {
-        studentStatsMap.set(r.student_id, { present: 0, absent: 0, excused: 0 });
+    for (const r of (records || []) as unknown as SupabaseSessionRecordRow[]) {
+      if (!studentStatsMap.has((r as any).student_id)) {
+        studentStatsMap.set((r as any).student_id, { present: 0, absent: 0, excused: 0 });
       }
-      const stats = studentStatsMap.get(r.student_id)!;
+      const stats = studentStatsMap.get((r as any).student_id)!;
       if (r.status === 'present') stats.present++;
       else if (r.status === 'absent') stats.absent++;
       else if (r.status === 'excused') stats.excused++;
@@ -933,7 +933,7 @@ export default function Archives() {
       .eq('session_id', sessionId).eq('is_deleted', 0);
     if (records) {
       const ORDER: Record<string, number> = { present: 0, excused: 1, absent: 2 };
-      const rows = (records || []) as SupabaseRollCallRow[];
+      const rows = (records || []) as unknown as SupabaseRollCallRow[];
       const entries: RollCallEntry[] = rows
         .filter(r => r.students)
         .map(r => ({ name: r.students!.name, regNumber: r.students!.reg_number, status: r.status as RollCallEntry['status'] }))

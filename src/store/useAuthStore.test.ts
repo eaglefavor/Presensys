@@ -49,7 +49,7 @@ test('useAuthStore fetchProfile error handling', async (t) => {
     supabase = supabaseMod.supabase as unknown as SupabaseClientLike;
 
     const mod = await import('./useAuthStore.ts');
-    useAuthStore = mod.useAuthStore;
+    useAuthStore = mod.useAuthStore as unknown as UseAuthStore;
 
     // Reset state before test
     useAuthStore.setState({
