@@ -56,7 +56,7 @@ export function applyAppModeAttribute(): void {
 export function onDisplayModeChange(callback: (mode: AppMode) => void): () => void {
   const mediaQueryList = window.matchMedia('(display-mode: standalone)');
 
-  const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
+  const handleChange = () => {
     const newMode = detectAppMode();
     callback(newMode);
     applyAppModeAttribute();

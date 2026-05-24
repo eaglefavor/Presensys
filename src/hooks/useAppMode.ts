@@ -1,5 +1,4 @@
 import { useAppModeStore } from '../store/useAppModeStore';
-import type { AppMode } from '../lib/appModeDetector';
 
 /**
  * Hook to access current app mode state
