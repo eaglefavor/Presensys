@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { BookOpen, AlertCircle, TrendingUp, ChevronRight, Plus, CheckCircle2, Bug, Clock, Zap } from 'lucide-react';
-import { db, type LocalSemester, type LocalStudent, type LocalCourse, type LocalEnrollment, type LocalAttendanceSession, type LocalAttendanceRecord } from '../db/db';
+import type { Table } from 'dexie';
+import { db, type LocalSemester, type LocalStudent, type LocalCourse, type LocalEnrollment, type LocalAttendanceSession, type LocalAttendanceRecord, type LocalLecturer } from '../db/db';
 import { useAppStore } from '../store/useAppStore';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -9,6 +10,7 @@ import { realtimeSync } from '../lib/RealtimeSyncEngine';
 
 type DexieTableKey = 'semesters' | 'students' | 'courses' | 'enrollments' | 'attendanceSessions' | 'attendanceRecords';
 type DexieTableRecord = LocalSemester | LocalStudent | LocalCourse | LocalEnrollment | LocalAttendanceSession | LocalAttendanceRecord;
+const EMPTY_LECTURERS: LocalLecturer[] = [];
 
 function toMinutes(t: string): number {
   const [h, m] = t.split(':').map(Number);
@@ -46,8 +48,14 @@ export default function Dashboard() {
       .filter(c => c.isDeleted !== 1 && c.semesterId === activeSemester.serverId)
       .toArray();
 
+    const slotsByCourse = new Map<string, typeof todaySlots>();
+    for (const slot of todaySlots) {
+      if (!slotsByCourse.has(slot.courseId)) slotsByCourse.set(slot.courseId, []);
+      slotsByCourse.get(slot.courseId)!.push(slot);
+    }
+
     return courses.map(c => {
-      const courseSlots = todaySlots.filter(s => s.courseId === c.serverId);
+      const courseSlots = slotsByCourse.get(c.serverId) || [];
       const isHappeningNow = courseSlots.some(s =>
         toMinutes(s.startTime) <= currentMinutes && currentMinutes < toMinutes(s.endTime)
       );
@@ -63,11 +71,12 @@ export default function Dashboard() {
 
 
   const handleDebugSync = async () => {
+    if (!import.meta.env.DEV) return;
     console.log('--- DEBUG: STARTING SYNC DUMP ---');
     const tables: DexieTableKey[] = ['semesters', 'students', 'courses', 'enrollments', 'attendanceSessions', 'attendanceRecords'];
     
     for (const tableName of tables) {
-      const table = db[tableName] as import('dexie').Table<DexieTableRecord & { synced: number }>;
+      const table = db[tableName] as Table<DexieTableRecord & { synced: number }, number>;
       const unsynced = await table.filter(i => i.synced === 0).toArray();
       if (unsynced.length > 0) {
         console.log(`Unsynced in ${tableName}:`, unsynced);
@@ -123,9 +132,14 @@ export default function Dashboard() {
       }
     }
 
+    const sessionCountByCourse = new Map<string, number>();
+    for (const session of sessions) {
+      sessionCountByCourse.set(session.courseId, (sessionCountByCourse.get(session.courseId) || 0) + 1);
+    }
+
     // Combine stats with courses in a single pass - O(N)
     return courses.map(course => {
-      const courseSessionsCount = sessions.filter(s => s.courseId === course.serverId).length;
+      const courseSessionsCount = sessionCountByCourse.get(course.serverId) || 0;
       const stats = courseStats.get(course.serverId) || { present: 0, total: 0 };
 
       const percentage = stats.total > 0 ? (stats.present / stats.total) * 100 : 100;
@@ -140,7 +154,8 @@ export default function Dashboard() {
     return Math.round(sum / attendanceStats.length);
   }, [attendanceStats]);
 
-  const allLecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []) || [];
+  const queriedLecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []);
+  const allLecturers = queriedLecturers ?? EMPTY_LECTURERS;
   const lecturerMap = useMemo(() => new Map(allLecturers.map(l => [l.serverId, l.name])), [allLecturers]);
   const resolveLecturerNames = (field: string | undefined) => {
     if (!field) return '';

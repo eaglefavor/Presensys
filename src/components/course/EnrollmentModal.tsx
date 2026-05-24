@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowLeft, X, Search, CheckCircle2, Filter, Circle, UserMinus, UserPlus, Save, AlertCircle } from 'lucide-react';
 import { db } from '../../db/db';
+import type { Enrollment } from '../../db/db';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../store/useAuthStore';
 import ConfirmDialog from '../ConfirmDialog';
@@ -164,14 +165,14 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
           // Create brand new
           if (brandNewStudentIds.length > 0) {
             await db.enrollments.bulkAdd(
-              brandNewStudentIds.map(studentId => ({
-                serverId: crypto.randomUUID(),
-                studentId,
-                courseId,
-                userId: user.id,
-                synced: 0,
-                isDeleted: 0
-              } as unknown as import("../../db/db").Enrollment))
+                brandNewStudentIds.map(studentId => ({
+                  serverId: crypto.randomUUID(),
+                  studentId,
+                  courseId,
+                  userId: user.id,
+                  synced: 0,
+                  isDeleted: 0
+                } as Enrollment))
             );
           }
         }

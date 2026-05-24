@@ -1,9 +1,10 @@
 import { Plus, Calendar, ArrowLeft, Clock, Pencil, Check, Trash2, ChevronRight, UserRound } from 'lucide-react';
-import type { LocalAttendanceSession, LocalCourse } from '../../db/db';
+import type { LocalAttendanceSession, LocalCourse, LocalLecturer } from '../../db/db';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useState, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
+const EMPTY_LECTURERS: LocalLecturer[] = [];
 
 interface SessionsListProps {
   sessions: LocalAttendanceSession[] | undefined;
@@ -41,7 +42,8 @@ export default function SessionsList({
   const [selectedLecturerId, setSelectedLecturerId] = useState('');
   const [lecturerSearch, setLecturerSearch] = useState('');
   const [filterLecturerId, setFilterLecturerId] = useState('');
-  const lecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []) || [];
+  const queriedLecturers = useLiveQuery(() => db.lecturers.filter(l => l.isDeleted !== 1).toArray(), []);
+  const lecturers = queriedLecturers ?? EMPTY_LECTURERS;
 
   const lecturerMap = useMemo(() => new Map(lecturers.map(l => [l.serverId, l.name])), [lecturers]);
 
@@ -222,4 +224,3 @@ export default function SessionsList({
     </div>
   );
 }
-

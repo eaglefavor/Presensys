@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
 import { setStudentPin } from '../lib/pinBlitzService';
-import type { Student } from '../db/db';
+import type { LocalStudent } from '../db/db';
 import toast from 'react-hot-toast';
 
 interface SetPinModalProps {
-  student: Student;
+  student: LocalStudent;
   onClose: () => void;
 }
 
@@ -41,10 +41,9 @@ export default function SetPinModal({ student, onClose }: SetPinModalProps) {
   };
 
   return (
-    <>
-    <div className="modal-backdrop fade show d-block" style={{ backgroundColor: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", zIndex: 2050 }} onClick={onClose} />
-      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="modal fade show d-block" style={{ zIndex: 2051, pointerEvents: "none" }}>
-        <div className="modal-dialog modal-dialog-centered" style={{ pointerEvents: "auto" }}>
+    <div className="modal-backdrop fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 2005 }}>
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="modal fade show d-block" style={{ zIndex: 2006 }}>
+        <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
             <div className="modal-header border-0 bg-light p-4 pb-3">
               <h5 className="modal-title fw-bold d-flex align-items-center gap-2 text-dark">
@@ -110,6 +109,6 @@ export default function SetPinModal({ student, onClose }: SetPinModalProps) {
           </div>
         </div>
       </motion.div>
-    </>
+    </div>
   );
 }
