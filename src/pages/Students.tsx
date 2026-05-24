@@ -353,7 +353,7 @@ export default function Students() {
   return (
     <div className="students-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       {/* Modern Header Section */}
-      <div className="bg-white border-bottom px-4 px-lg-5 py-6 py-lg-7 mb-5" style={{ backgroundImage: 'linear-gradient(135deg, rgba(0, 105, 148, 0.02) 0%, rgba(0, 105, 148, 0.01) 100%)' }}>
+      <div className="bg-white border-bottom px-4 px-lg-5 py-6 py-lg-7 mb-5 bg-gradient-primary">
         <div className="d-flex justify-content-between align-items-start gap-4 mb-5">
           <div className="flex-grow-1">
             <h1 className="h2 fw-black mb-2" style={{ color: 'var(--primary-blue)', letterSpacing: '-0.5px' }}>Student Records</h1>
@@ -503,7 +503,7 @@ export default function Students() {
                       {/* Card Content */}
                       <div className="d-flex flex-column h-100">
                         <div className="d-flex align-items-start justify-content-between gap-3 mb-5">
-                          <div className="d-flex align-items-center gap-3 flex-grow-1" style={{ marginTop: '8px' }}>
+                          <div className="d-flex align-items-center gap-3 flex-grow-1 mt-2">
                             <div className="avatar-circle-md flex-shrink-0 text-white fw-black shadow-sm" style={{ backgroundColor: stringToColor(s.name) }}>
                               {getInitials(s.name)}
                             </div>
@@ -538,7 +538,7 @@ export default function Students() {
             >
               ← Previous
             </button>
-            <span className="small fw-black text-muted" style={{ whiteSpace: 'nowrap' }}>Page <span style={{ color: 'var(--primary-blue)', fontSize: '18px', fontWeight: 'bold' }}>{currentPage}</span> of <span style={{ color: 'var(--primary-blue)', fontSize: '18px', fontWeight: 'bold' }}>{totalPages}</span></span>
+            <span className="small fw-black text-muted" style={{ whiteSpace: 'nowrap' }}>Page <span className="pagination-number">{currentPage}</span> of <span className="pagination-number">{totalPages}</span></span>
             <button 
               className="btn btn-outline-primary rounded-pill px-4 py-2 fw-bold" 
               disabled={currentPage === totalPages} 
@@ -587,7 +587,7 @@ export default function Students() {
                       animate={{ scale: 1 }}
                       className="mx-auto mb-5"
                     >
-                      <div className="avatar-circle-xl mx-auto shadow-lg fw-black" style={{ backgroundColor: 'var(--primary-blue)', color: '#cfb53b', border: '4px solid #cfb53b' }}>{getInitials(selectedStudent.name)}</div>
+                      <div className="avatar-circle-xl mx-auto shadow-lg fw-black text-gold" style={{ backgroundColor: 'var(--primary-blue)', borderColor: 'var(--color-gold)', borderStyle: 'solid', borderWidth: '4px' }}>{getInitials(selectedStudent.name)}</div>
                     </motion.div>
                     
                     {/* Student Info */}
@@ -848,7 +848,9 @@ export default function Students() {
       />
 
       <style>{`
-        .text-gold { color: #cfb53b; }
+        :root { --color-gold: #cfb53b; }
+        .bg-gradient-primary { backgroundImage: linear-gradient(135deg, rgba(0, 105, 148, 0.02) 0%, rgba(0, 105, 148, 0.01) 100%); }
+        .text-gold { color: var(--color-gold); }
         .avatar-circle { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
         .avatar-circle-md { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
         .avatar-circle-lg { width: 80px; height: 80px; border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 32px; }
@@ -875,6 +877,13 @@ export default function Students() {
         }
         .stat-value-lg {
           font-size: 24px;
+        }
+        
+        /* Pagination Styling */
+        .pagination-number {
+          color: var(--primary-blue);
+          font-size: 18px;
+          font-weight: bold;
         }
         
         /* Modern Design Enhancements */
