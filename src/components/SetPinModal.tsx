@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { KeyRound, CheckCircle2, AlertCircle } from 'lucide-react';
 import { setStudentPin } from '../lib/pinBlitzService';
+import { OVERLAY_COLORS } from '../lib/themeColors';
 import type { LocalStudent } from '../db/db';
 import toast from 'react-hot-toast';
 
@@ -41,7 +42,7 @@ export default function SetPinModal({ student, onClose }: SetPinModalProps) {
   };
 
   return (
-    <div className="modal-backdrop fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 2005 }}>
+    <div className="modal-backdrop fade show d-block" style={{ backgroundColor: OVERLAY_COLORS.backdrop, backdropFilter: 'blur(4px)', zIndex: 2005 }}>
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="modal fade show d-block" style={{ zIndex: 2006 }}>
         <div className="modal-dialog modal-dialog-centered">
           <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">

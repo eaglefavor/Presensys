@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import { ThemeColors } from '../lib/themeColors';
 import {
   ChevronLeft,
   CloudSync,
@@ -153,9 +154,9 @@ const Layout: React.FC = () => {
 
       {/* Stale-data banner: shown when offline and last sync is older than STALE_THRESHOLD_MS */}
       {isStale && (
-        <div className="d-flex align-items-center justify-content-center gap-2 px-3 py-2" style={{ backgroundColor: 'rgba(255, 193, 7, 0.15)', borderBottom: '1px solid rgba(255, 193, 7, 0.3)' }}>
-          <WifiOff size={13} className="flex-shrink-0" style={{ color: '#ffd666' }} />
-          <span className="xx-small fw-bold" style={{ color: '#ffd666' }}>
+        <div className="d-flex align-items-center justify-content-center gap-2 px-3 py-2" style={{ backgroundColor: ThemeColors.warning.background, borderBottom: `1px solid ${ThemeColors.warning.border}` }}>
+          <WifiOff size={13} className="flex-shrink-0" style={{ color: ThemeColors.warning.accent }} />
+          <span className="xx-small fw-bold" style={{ color: ThemeColors.warning.accent }}>
             Viewing cached data — connect to sync
             {lastSyncedAt && <span className="opacity-75"> (last synced {formatTimeAgo(lastSyncedAt)})</span>}
           </span>
@@ -208,7 +209,7 @@ const Layout: React.FC = () => {
             {profile?.role === 'admin' && (
               <Link to="/admin" className="btn w-100 mb-2 py-2 rounded-3 fw-bold small d-flex align-items-center justify-content-center gap-2" onClick={() => setIsMenuOpen(false)} style={{ color: 'var(--primary-blue)', backgroundColor: 'transparent', border: `2px solid var(--primary-blue)` }}><ShieldCheck size={18} /> Admin Console</Link>
             )}
-            <button className="btn w-100 text-decoration-none fw-bold small d-flex align-items-center justify-content-center gap-2" style={{ color: '#dc3545' }} onClick={() => { signOut(); setIsMenuOpen(false); }}><LogOut size={18} /> Sign Out</button>
+            <button className="btn w-100 text-decoration-none fw-bold small d-flex align-items-center justify-content-center gap-2" style={{ color: ThemeColors.status.danger }} onClick={() => { signOut(); setIsMenuOpen(false); }}><LogOut size={18} /> Sign Out</button>
           </div>
         </div>
       </aside>

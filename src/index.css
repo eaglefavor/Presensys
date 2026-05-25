@@ -5,6 +5,51 @@
   --border-color: #e4e6eb;
   --text-dark: #1c1e21;
   --text-muted: #65676b;
+
+  /* Semantic status colors */
+  --success-bg: #d4edda;
+  --success-border: #c3e6cb;
+  --success-text: #155724;
+  --warning-bg: #fff3cd;
+  --warning-border: #ffeeba;
+  --warning-text: #856404;
+  --danger-bg: #f8d7da;
+  --danger-border: #f5c6cb;
+  --danger-text: #721c24;
+  --info-bg: #d1ecf1;
+  --info-border: #bee5eb;
+  --info-text: #0c5460;
+
+  /* Overlay colors */
+  --overlay-dark: rgba(0, 0, 0, 0.4);
+  --overlay-darker: rgba(0, 0, 0, 0.45);
+  --overlay-darkest: rgba(0, 0, 0, 0.5);
+
+  /* Status colors with semantic meaning */
+  --status-success: #198754;
+  --status-danger: #dc3545;
+  --status-warning: #ffc107;
+  --status-info: #0dcaf0;
+
+  /* Accent colors */
+  --accent-gold: #cfb53b;
+  --accent-secondary: #6f42c1;
+
+  /* UI Element colors */
+  --color-light-gray: #f1f3f5;
+  --color-lighter-gray: #dee2e6;
+  --color-lighter-border: #e9ecef;
+  --color-muted-light: #6c757d;
+  --color-white-overlay: #ffffff;
+
+  /* Warning/Offline indicator */
+  --warning-color: #ffc107;
+  --warning-light: rgba(255, 193, 7, 0.15);
+  --warning-light-border: rgba(255, 193, 7, 0.3);
+  --warning-accent: #ffd666;
+
+  /* Selection/Highlight colors */
+  --selected-bg: rgba(0, 105, 148, 0.03);
 }
 
 /* Dark mode variables */
@@ -15,6 +60,51 @@
   --border-color: #404040; /* Darker borders */
   --text-dark: #e4e6eb; /* Light text */
   --text-muted: #b0b3b8; /* Lighter muted text */
+
+  /* Semantic status colors for dark mode */
+  --success-bg: rgba(25, 135, 84, 0.15);
+  --success-border: rgba(25, 135, 84, 0.3);
+  --success-text: #51cf66;
+  --warning-bg: rgba(255, 193, 7, 0.15);
+  --warning-border: rgba(255, 193, 7, 0.3);
+  --warning-text: #ffd666;
+  --danger-bg: rgba(220, 53, 69, 0.15);
+  --danger-border: rgba(220, 53, 69, 0.3);
+  --danger-text: #ff6b6b;
+  --info-bg: rgba(0, 147, 204, 0.15);
+  --info-border: rgba(0, 147, 204, 0.3);
+  --info-text: #5fc3ff;
+
+  /* Overlay colors for dark mode */
+  --overlay-dark: rgba(0, 0, 0, 0.6);
+  --overlay-darker: rgba(0, 0, 0, 0.7);
+  --overlay-darkest: rgba(0, 0, 0, 0.8);
+
+  /* Status colors for dark mode */
+  --status-success: #51cf66;
+  --status-danger: #ff6b6b;
+  --status-warning: #ffd666;
+  --status-info: #5fc3ff;
+
+  /* Accent colors for dark mode */
+  --accent-gold: #d4aa00;
+  --accent-secondary: #9775fa;
+
+  /* UI Element colors for dark mode */
+  --color-light-gray: #3a3a3a;
+  --color-lighter-gray: #454545;
+  --color-lighter-border: #505050;
+  --color-muted-light: #8a8e93;
+  --color-white-overlay: #2d2d2d;
+
+  /* Warning/Offline indicator for dark mode */
+  --warning-color: #ffc107;
+  --warning-light: rgba(255, 193, 7, 0.15);
+  --warning-light-border: rgba(255, 193, 7, 0.3);
+  --warning-accent: #ffd666;
+
+  /* Selection/Highlight colors for dark mode */
+  --selected-bg: rgba(0, 147, 204, 0.08);
 }
 
 body {

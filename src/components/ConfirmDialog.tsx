@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { OVERLAY_COLORS } from '../lib/themeColors';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -52,7 +53,7 @@ export default function ConfirmDialog({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="modal-backdrop fade show d-block"
-            style={{ backgroundColor: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)', zIndex: 3000 }}
+            style={{ backgroundColor: OVERLAY_COLORS.modal, backdropFilter: 'blur(4px)', zIndex: 3000 }}
             onClick={onCancel}
           />
           <motion.div
