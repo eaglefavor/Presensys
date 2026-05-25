@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { ProfileInfoCard } from './settings/components/ProfileInfoCard';
 import { AcademicInfoSection } from './settings/components/AcademicInfoSection';
 import { PasswordSection } from './settings/components/PasswordSection';
+import { DarkModeSection } from './settings/components/DarkModeSection';
 
 export default function Settings() {
   const { user, profile } = useAuthStore();
@@ -89,7 +90,7 @@ export default function Settings() {
   return (
     <div className="settings-page animate-in min-vh-100 pb-5" style={{ backgroundColor: 'var(--bg-gray)' }}>
       {/* Header */}
-      <div className="bg-white border-bottom px-4 py-4 mb-4 shadow-sm sticky-top" style={{ zIndex: 100 }}>
+      <div className="border-bottom px-4 py-4 mb-4 shadow-sm sticky-top" style={{ zIndex: 100, backgroundColor: 'var(--soft-white)', borderColor: 'var(--border-color)' }}>
         <h1 className="h4 fw-black mb-1 text-primary text-uppercase letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>SETTINGS</h1>
         <p className="xx-small fw-bold text-uppercase tracking-widest text-muted mb-0">Account Management</p>
       </div>
@@ -123,6 +124,8 @@ export default function Settings() {
           loading={loading}
           handlePasswordUpdate={handlePasswordUpdate}
         />
+
+        <DarkModeSection />
 
       </div>
     </div>

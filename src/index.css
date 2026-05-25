@@ -7,6 +7,16 @@
   --text-muted: #65676b;
 }
 
+/* Dark mode variables */
+:root.dark-mode {
+  --primary-blue: #0093cc; /* Lighter blue for dark mode */
+  --soft-white: #1a1a1a; /* Dark background */
+  --bg-gray: #2d2d2d; /* Dark gray background */
+  --border-color: #404040; /* Darker borders */
+  --text-dark: #e4e6eb; /* Light text */
+  --text-muted: #b0b3b8; /* Lighter muted text */
+}
+
 body {
   -webkit-tap-highlight-color: transparent;
   user-select: none;
@@ -62,6 +72,10 @@ input, textarea {
 
 .card:active {
   background-color: #f5f6f7;
+}
+
+:root.dark-mode .card:active {
+  background-color: #3a3a3a;
 }
 
 /* Navigation Drawer Elements */
@@ -147,6 +161,11 @@ input, textarea {
   background: #f1f3f5;
   border-radius: 100px;
 }
+
+:root.dark-mode .mode-switcher-wrapper {
+  background: #3a3a3a;
+}
+
 .mode-btn {
   flex: 1;
   border: none;
@@ -161,10 +180,21 @@ input, textarea {
   align-items: center;
   justify-content: center;
 }
+
+:root.dark-mode .mode-btn {
+  color: #8a8e93;
+}
+
 .mode-btn.active {
   background: #fff;
   color: #0d6efd;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+:root.dark-mode .mode-btn.active {
+  background: #454545;
+  color: #0093cc;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Skeleton loading shimmer */
@@ -176,6 +206,11 @@ input, textarea {
   border-radius: 6px;
   display: block;
 }
+
+:root.dark-mode .skeleton-line {
+  background: linear-gradient(90deg, #3a3a3a 25%, #454545 50%, #3a3a3a 75%);
+}
+
 @keyframes skeleton-shimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
@@ -313,4 +348,198 @@ input[type="checkbox"], input[type="radio"] {
 [data-app-mode="standalone"] .app-mode-only,
 [data-app-mode="fullscreen"] .app-mode-only {
   display: block;
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+   DARK MODE SUPPORT
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* Bootstrap Button styles for dark mode */
+:root.dark-mode .btn-secondary {
+  background-color: #454545;
+  border-color: #5a5a5a;
+  color: #e4e6eb;
+}
+
+:root.dark-mode .btn-secondary:hover {
+  background-color: #5a5a5a;
+  border-color: #6a6a6a;
+  color: #ffffff;
+}
+
+:root.dark-mode .btn-secondary:active {
+  background-color: #404040;
+  border-color: #505050;
+  color: #b0b3b8;
+}
+
+/* Bootstrap Form elements for dark mode */
+:root.dark-mode .form-control,
+:root.dark-mode .form-select {
+  background-color: #3a3a3a;
+  border-color: #505050;
+  color: #e4e6eb;
+}
+
+:root.dark-mode .form-control:focus,
+:root.dark-mode .form-select:focus {
+  background-color: #454545;
+  border-color: #0093cc;
+  color: #e4e6eb;
+  box-shadow: 0 0 0 0.25rem rgba(0, 147, 204, 0.25);
+}
+
+:root.dark-mode .form-control::placeholder {
+  color: #8a8e93;
+}
+
+:root.dark-mode .input-group-text {
+  background-color: #3a3a3a;
+  border-color: #505050;
+  color: #e4e6eb;
+}
+
+/* Bootstrap Table styles for dark mode */
+:root.dark-mode .table {
+  color: #e4e6eb;
+  border-color: #505050;
+}
+
+:root.dark-mode .table > :not(caption) > * > * {
+  background-color: #2d2d2d;
+  border-bottom-color: #404040;
+}
+
+:root.dark-mode .table-striped > tbody > tr:nth-of-type(odd) > * {
+  background-color: #3a3a3a;
+}
+
+:root.dark-mode .table-hover > tbody > tr:hover > * {
+  background-color: #454545;
+}
+
+/* Bootstrap Alert styles for dark mode */
+:root.dark-mode .alert {
+  background-color: #3a3a3a;
+  border-color: #505050;
+  color: #e4e6eb;
+}
+
+:root.dark-mode .alert-info {
+  background-color: rgba(0, 147, 204, 0.15);
+  border-color: rgba(0, 147, 204, 0.3);
+  color: #5fc3ff;
+}
+
+:root.dark-mode .alert-warning {
+  background-color: rgba(255, 193, 7, 0.15);
+  border-color: rgba(255, 193, 7, 0.3);
+  color: #ffd666;
+}
+
+:root.dark-mode .alert-danger {
+  background-color: rgba(220, 53, 69, 0.15);
+  border-color: rgba(220, 53, 69, 0.3);
+  color: #ff6b6b;
+}
+
+:root.dark-mode .alert-success {
+  background-color: rgba(25, 135, 84, 0.15);
+  border-color: rgba(25, 135, 84, 0.3);
+  color: #51cf66;
+}
+
+/* Bootstrap Modal styles for dark mode */
+:root.dark-mode .modal-content {
+  background-color: #2d2d2d;
+  border-color: #505050;
+}
+
+:root.dark-mode .modal-header,
+:root.dark-mode .modal-footer {
+  border-color: #505050;
+}
+
+:root.dark-mode .modal-header {
+  background-color: #3a3a3a;
+}
+
+:root.dark-mode .modal-footer {
+  background-color: #3a3a3a;
+}
+
+:root.dark-mode .btn-close {
+  filter: invert(1) grayscale(100%);
+}
+
+/* Bootstrap Dropdown styles for dark mode */
+:root.dark-mode .dropdown-menu {
+  background-color: #3a3a3a;
+  border-color: #505050;
+}
+
+:root.dark-mode .dropdown-item {
+  color: #e4e6eb;
+}
+
+:root.dark-mode .dropdown-item:hover,
+:root.dark-mode .dropdown-item:focus {
+  background-color: #454545;
+  color: #ffffff;
+}
+
+:root.dark-mode .dropdown-item.active {
+  background-color: #0093cc;
+  color: #ffffff;
+}
+
+/* Bootstrap Spinner styles for dark mode */
+:root.dark-mode .spinner-border {
+  border-color: rgba(0, 147, 204, 0.25);
+  border-right-color: transparent;
+}
+
+/* Bootstrap Badge styles for dark mode */
+:root.dark-mode .badge {
+  background-color: #0093cc;
+  color: #ffffff;
+}
+
+/* Bootstrap Nav styles for dark mode */
+:root.dark-mode .nav-tabs {
+  border-color: #505050;
+}
+
+:root.dark-mode .nav-tabs .nav-link {
+  color: #b0b3b8;
+}
+
+:root.dark-mode .nav-tabs .nav-link:hover {
+  color: #e4e6eb;
+  border-color: transparent transparent #505050;
+}
+
+:root.dark-mode .nav-tabs .nav-link.active {
+  color: #e4e6eb;
+  background-color: #2d2d2d;
+  border-color: #505050 #505050 #2d2d2d;
+}
+
+/* Bootstrap Pagination styles for dark mode */
+:root.dark-mode .pagination .page-link {
+  background-color: #3a3a3a;
+  border-color: #505050;
+  color: #0093cc;
+}
+
+:root.dark-mode .pagination .page-link:hover {
+  background-color: #454545;
+  border-color: #505050;
+  color: #0093cc;
+}
+
+:root.dark-mode .pagination .page-item.active .page-link {
+  background-color: #0093cc;
+  border-color: #0093cc;
+  color: #ffffff;
 }
