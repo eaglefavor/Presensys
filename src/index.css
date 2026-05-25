@@ -543,3 +543,50 @@ input[type="checkbox"], input[type="radio"] {
   border-color: #0093cc;
   color: #ffffff;
 }
+
+/* Bootstrap utility classes for dark mode */
+:root.dark-mode .bg-white,
+:root.dark-mode .bg-light {
+  background-color: var(--soft-white) !important;
+  color: var(--text-dark) !important;
+}
+
+:root.dark-mode .text-dark {
+  color: var(--text-dark) !important;
+}
+
+:root.dark-mode .text-muted {
+  color: var(--text-muted) !important;
+}
+
+:root.dark-mode .bg-light {
+  background-color: var(--bg-gray) !important;
+}
+
+:root.dark-mode .border-light {
+  border-color: var(--border-color) !important;
+}
+
+/* Toast notification dark mode support */
+:root.dark-mode .toast {
+  background-color: var(--soft-white);
+  color: var(--text-dark);
+}
+
+/* Bootstrap Link colors for dark mode */
+:root.dark-mode .btn-link {
+  color: var(--primary-blue);
+}
+
+:root.dark-mode .btn-link:hover {
+  color: #0093cc;
+}
+
+/* Link colors */
+:root.dark-mode a {
+  color: var(--primary-blue);
+}
+
+:root.dark-mode a:hover {
+  color: #0093cc;
+}
