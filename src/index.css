@@ -9,7 +9,7 @@
 
 /* Dark mode variables */
 :root.dark-mode {
-  --primary-blue: #0093cc; /* Lighter blue for dark mode */
+  --primary-blue: #0093cc; /* Brighter cyan for better dark mode visibility */
   --soft-white: #1a1a1a; /* Dark background */
   --bg-gray: #2d2d2d; /* Dark gray background */
   --border-color: #404040; /* Darker borders */
@@ -579,7 +579,7 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 :root.dark-mode .btn-link:hover {
-  color: #0093cc;
+  color: #4bb3ff;
 }
 
 /* Link colors */
@@ -588,5 +588,5 @@ input[type="checkbox"], input[type="radio"] {
 }
 
 :root.dark-mode a:hover {
-  color: #0093cc;
+  color: #4bb3ff;
 }

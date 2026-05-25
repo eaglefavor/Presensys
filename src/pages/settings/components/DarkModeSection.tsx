@@ -8,8 +8,8 @@ export function DarkModeSection() {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
       <div className="d-flex align-items-center gap-2 mb-3 px-1">
-        <Moon size={14} className="text-muted" />
-        <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-0">
+        <Moon size={14} style={{ color: 'var(--text-muted)' }} />
+        <h6 className="xx-small fw-black text-uppercase tracking-widest mb-0" style={{ color: 'var(--text-muted)' }}>
           Display Theme
         </h6>
       </div>
@@ -20,17 +20,13 @@ export function DarkModeSection() {
             <h5 className="fw-black text-uppercase mb-1 letter-spacing-n1" style={{ color: 'var(--text-dark)' }}>
               Dark Mode
             </h5>
-            <p className="xx-small fw-bold text-muted mb-0">
+            <p className="xx-small fw-bold mb-0" style={{ color: 'var(--text-muted)' }}>
               {isDarkMode ? 'Currently using dark mode' : 'Currently using light mode'}
             </p>
           </div>
           <button
             onClick={toggleDarkMode}
             className="btn btn-primary rounded-pill d-flex align-items-center justify-content-center gap-2 px-4 py-2"
-            style={{
-              backgroundColor: isDarkMode ? 'var(--primary-blue)' : 'var(--primary-blue)',
-              borderColor: isDarkMode ? 'var(--primary-blue)' : 'var(--primary-blue)',
-            }}
           >
             {isDarkMode ? (
               <>
