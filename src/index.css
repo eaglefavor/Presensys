@@ -21,9 +21,9 @@
   --info-text: #0c5460;
 
   /* Overlay colors */
-  --overlay-dark: rgba(0, 0, 0, 0.4);
-  --overlay-darker: rgba(0, 0, 0, 0.45);
-  --overlay-darkest: rgba(0, 0, 0, 0.5);
+  --overlay-dark: rgba(0, 0, 0, 0.75);
+  --overlay-darker: rgba(0, 0, 0, 0.85);
+  --overlay-darkest: rgba(0, 0, 0, 0.9);
 
   /* Status colors with semantic meaning */
   --status-success: #198754;
@@ -90,9 +90,9 @@
   --info-text: #5fc3ff;
 
   /* Overlay colors for dark mode */
-  --overlay-dark: rgba(0, 0, 0, 0.6);
-  --overlay-darker: rgba(0, 0, 0, 0.7);
-  --overlay-darkest: rgba(0, 0, 0, 0.8);
+  --overlay-dark: rgba(0, 0, 0, 0.8);
+  --overlay-darker: rgba(0, 0, 0, 0.9);
+  --overlay-darkest: rgba(0, 0, 0, 0.95);
 
   /* Status colors for dark mode */
   --status-success: #51cf66;
