@@ -178,7 +178,7 @@ export function StudentTab({
               <p className="xx-small fw-bold text-muted uppercase tracking-widest">Total Records</p>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-top" style={{ borderColor: '#f1f3f5' }}>
+          <div className="mt-4 pt-3 border-top" style={{ borderColor: 'var(--divider-color)' }}>
             <AttendanceHeatmap records={studentAttendance} />
           </div>
         </div>
@@ -226,7 +226,7 @@ export function StudentTab({
                         </div>
                       </div>
                       <div className="px-3 pb-1">
-                        <div className="rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: '#f1f3f5' }}>
+                        <div className="rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: 'var(--divider-color)' }}>
                           <div className={`h-100 rounded-pill ${pct >= 75 ? 'bg-success' : 'bg-danger'}`} style={{ width: `${pct}%`, transition: 'width 0.5s ease' }} />
                         </div>
                       </div>
@@ -237,7 +237,7 @@ export function StudentTab({
                             initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                             className="overflow-hidden"
                           >
-                            <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: '#f1f3f5' }}>
+                            <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: 'var(--divider-color)' }}>
                               <div className="d-flex flex-column gap-1">
                                 {courseRecs.map((r, i) => (
                                   <div key={i} className="d-flex align-items-center gap-2 py-1">

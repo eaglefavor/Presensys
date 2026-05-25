@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db/db';
+import { ThemeColors } from '../lib/themeColors';
 import {
   ChevronLeft,
   CloudSync,
@@ -107,15 +108,15 @@ const Layout: React.FC = () => {
 
   return (
     <div className="app-container">
-      <header className="app-header bg-white border-bottom sticky-top shadow-sm" style={{ paddingTop: "env(safe-area-inset-top)" }}>
+      <header className="app-header border-bottom sticky-top shadow-sm" style={{ paddingTop: "env(safe-area-inset-top)", backgroundColor: 'var(--soft-white)', borderColor: 'var(--border-color)' }}>
         <div className="container-mobile d-flex align-items-center justify-content-between px-3 h-100">
           <div className="d-flex align-items-center gap-2">
             {!isMainNavPage ? (
-              <button className="btn btn-link text-dark p-0 me-2" onClick={() => navigate(-1)} aria-label="Go back"><ChevronLeft size={24} /></button>
+              <button className="btn btn-link p-0 me-2" style={{ color: 'var(--text-dark)' }} onClick={() => navigate(-1)} aria-label="Go back"><ChevronLeft size={24} /></button>
             ) : (
-              <button className="btn btn-link text-primary p-0 me-2" onClick={() => setIsMenuOpen(true)} aria-label="Open menu"><Menu size={26} /></button>
+              <button className="btn btn-link p-0 me-2" style={{ color: 'var(--primary-blue)' }} onClick={() => setIsMenuOpen(true)} aria-label="Open menu"><Menu size={26} /></button>
             )}
-            <h1 className="h5 mb-0 fw-black text-primary letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h1>
+            <h1 className="h5 mb-0 fw-black letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h1>
           </div>
 
           <div className="d-flex align-items-center gap-3">
@@ -142,7 +143,7 @@ const Layout: React.FC = () => {
             </div>
             {activeSemester && (
               <Link to="/semesters" className="text-decoration-none">
-                <span className="badge rounded-pill bg-light text-primary border px-2 py-2 fw-bold xx-small" style={{ color: 'var(--primary-blue)', borderColor: 'var(--border-color)' }}>
+                <span className="badge rounded-pill text-primary border px-2 py-2 fw-bold xx-small" style={{ color: 'var(--primary-blue)', backgroundColor: 'var(--bg-gray)', borderColor: 'var(--border-color)' }}>
                   {activeSemester.name.split(' ')[0]}
                 </span>
               </Link>
@@ -153,9 +154,9 @@ const Layout: React.FC = () => {
 
       {/* Stale-data banner: shown when offline and last sync is older than STALE_THRESHOLD_MS */}
       {isStale && (
-        <div className="d-flex align-items-center justify-content-center gap-2 px-3 py-2 bg-warning-subtle border-bottom border-warning-subtle">
-          <WifiOff size={13} className="text-warning-emphasis flex-shrink-0" />
-          <span className="xx-small fw-bold text-warning-emphasis">
+        <div className="d-flex align-items-center justify-content-center gap-2 px-3 py-2" style={{ backgroundColor: ThemeColors.warning.background, borderBottom: `1px solid ${ThemeColors.warning.border}` }}>
+          <WifiOff size={13} className="flex-shrink-0" style={{ color: ThemeColors.warning.accent }} />
+          <span className="xx-small fw-bold" style={{ color: ThemeColors.warning.accent }}>
             Viewing cached data — connect to sync
             {lastSyncedAt && <span className="opacity-75"> (last synced {formatTimeAgo(lastSyncedAt)})</span>}
           </span>
@@ -164,23 +165,23 @@ const Layout: React.FC = () => {
 
       {/* Sidebar Drawer */}
       <div className={`menu-overlay ${isMenuOpen ? 'open' : ''}`} onClick={() => setIsMenuOpen(false)}></div>
-      <aside className={`side-menu bg-white shadow-2xl ${isMenuOpen ? 'open' : ''}`} style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }}>
+      <aside className={`side-menu shadow-2xl ${isMenuOpen ? 'open' : ''}`} style={{ paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)", backgroundColor: 'var(--soft-white)', borderColor: 'var(--border-color)' }}>
         <div className="d-flex flex-column h-100">
-          <div className="p-4 bg-white border-bottom d-flex justify-content-between align-items-start">
+          <div className="p-4 border-bottom d-flex justify-content-between align-items-start" style={{ backgroundColor: 'var(--soft-white)', borderColor: 'var(--border-color)' }}>
             <div>
-              <h5 className="fw-black mb-0 text-primary uppercase letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h5>
-              <p className="xx-small fw-bold text-muted opacity-75 mb-0">Portal Management</p>
+              <h5 className="fw-black mb-0 uppercase letter-spacing-n1" style={{ color: 'var(--primary-blue)' }}>PRESENSYS</h5>
+              <p className="xx-small fw-bold opacity-75 mb-0" style={{ color: 'var(--text-muted)' }}>Portal Management</p>
             </div>
-            <button className="btn btn-light rounded-circle p-1" onClick={() => setIsMenuOpen(false)} aria-label="Close menu"><X size={20} /></button>
+            <button className="btn rounded-circle p-1" onClick={() => setIsMenuOpen(false)} aria-label="Close menu" style={{ backgroundColor: 'var(--bg-gray)' }}><X size={20} style={{ color: 'var(--text-dark)' }} /></button>
           </div>
 
-          <div className="px-4 py-3 border-bottom bg-light d-flex align-items-center gap-3">
-            <div className="avatar-small bg-primary text-white fw-bold d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px', borderRadius: '10px' }}>
+          <div className="px-4 py-3 border-bottom d-flex align-items-center gap-3" style={{ backgroundColor: 'var(--bg-gray)', borderColor: 'var(--border-color)' }}>
+            <div className="avatar-small text-white fw-bold d-flex align-items-center justify-content-center" style={{ width: '40px', height: '40px', borderRadius: '10px', backgroundColor: 'var(--primary-blue)' }}>
               {profile?.full_name?.[0] || 'U'}
             </div>
             <div className="overflow-hidden">
-              <div className="fw-bold small text-dark text-truncate">{profile?.full_name || 'User'}</div>
-              <div className="xx-small text-muted text-uppercase fw-bold">{profile?.role} ACCOUNT</div>
+              <div className="fw-bold small text-truncate" style={{ color: 'var(--text-dark)' }}>{profile?.full_name || 'User'}</div>
+              <div className="xx-small text-uppercase fw-bold" style={{ color: 'var(--text-muted)' }}>{profile?.role} ACCOUNT</div>
             </div>
           </div>
 
@@ -197,18 +198,18 @@ const Layout: React.FC = () => {
 
           {/* Last-synced footer */}
           {lastSyncedAt && (
-            <div className="px-4 py-2 border-top">
-              <p className="xx-small text-muted mb-0 fw-bold">
+            <div className="px-4 py-2 border-top" style={{ borderColor: 'var(--border-color)' }}>
+              <p className="xx-small mb-0 fw-bold" style={{ color: 'var(--text-muted)' }}>
                 Last synced: {formatTimeAgo(lastSyncedAt)}
               </p>
             </div>
           )}
 
-          <div className="p-3 mt-auto border-top bg-light">
+          <div className="p-3 mt-auto border-top" style={{ backgroundColor: 'var(--bg-gray)', borderColor: 'var(--border-color)' }}>
             {profile?.role === 'admin' && (
-              <Link to="/admin" className="btn btn-outline-primary w-100 mb-2 py-2 rounded-3 fw-bold small d-flex align-items-center justify-content-center gap-2" onClick={() => setIsMenuOpen(false)}><ShieldCheck size={18} /> Admin Console</Link>
+              <Link to="/admin" className="btn w-100 mb-2 py-2 rounded-3 fw-bold small d-flex align-items-center justify-content-center gap-2" onClick={() => setIsMenuOpen(false)} style={{ color: 'var(--primary-blue)', backgroundColor: 'transparent', border: `2px solid var(--primary-blue)` }}><ShieldCheck size={18} /> Admin Console</Link>
             )}
-            <button className="btn btn-link text-danger w-100 text-decoration-none fw-bold small d-flex align-items-center justify-content-center gap-2" onClick={() => { signOut(); setIsMenuOpen(false); }}><LogOut size={18} /> Sign Out</button>
+            <button className="btn w-100 text-decoration-none fw-bold small d-flex align-items-center justify-content-center gap-2" style={{ color: ThemeColors.status.danger }} onClick={() => { signOut(); setIsMenuOpen(false); }}><LogOut size={18} /> Sign Out</button>
           </div>
         </div>
       </aside>
@@ -244,6 +245,8 @@ const Layout: React.FC = () => {
         .nav-item-premium.active { background: rgba(0, 105, 148, 0.08); color: var(--primary-blue); }
         .nav-item-premium .arrow-icon { opacity: 0; transition: opacity 0.2s; }
         .nav-item-premium.active .arrow-icon { opacity: 1; }
+
+        :root.dark-mode .nav-item-premium.active { background: rgba(0, 147, 204, 0.12); }
 
         .spin { animation: rotation 2s infinite linear; }
         @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }

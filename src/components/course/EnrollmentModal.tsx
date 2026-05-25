@@ -275,7 +275,7 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
             ) : (
               <div className="list-group list-group-flush">
                 {displayedModalStudents.map(student => (
-                  <div key={student.serverId} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: student.isEnrolled ? 'rgba(0,105,148,0.03)' : 'transparent' }}>
+                  <div key={student.serverId} className="list-group-item p-3 d-flex justify-content-between align-items-center border-0 border-bottom" style={{ backgroundColor: student.isEnrolled ? 'var(--selected-bg)' : 'transparent' }}>
                     <div className="d-flex align-items-center gap-3 overflow-hidden">
                       <div className={`p-1 rounded-circle ${student.isEnrolled ? 'text-success' : 'text-muted opacity-25'}`}>
                         {student.isEnrolled ? <CheckCircle2 size={20} /> : <Circle size={20} />}

@@ -25,3 +25,19 @@ export default defineConfig([
     },
   },
 ])
+
+/**
+ * DARK MODE REMINDER:
+ *
+ * When adding new UI components or modifying styles:
+ * 1. NEVER use hardcoded colors (e.g., '#ffffff', '#333333', 'rgba(0,0,0,0.4)')
+ * 2. ALWAYS use CSS variables from src/index.css (e.g., 'var(--text-dark)', 'var(--soft-white)')
+ * 3. Import and use ThemeColors utilities from src/lib/themeColors.ts for semantic colors
+ * 4. Test your changes in both light and dark modes
+ *
+ * See DARK_MODE.md for comprehensive guidelines and examples.
+ *
+ * Dark mode CSS variables automatically respond to :root.dark-mode class changes.
+ * This ensures all UI changes made by AI agents or developers are instantly compatible
+ * with dark mode without requiring separate modifications.
+ */

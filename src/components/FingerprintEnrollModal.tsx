@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { X, FingerprintPattern, CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import { type LocalStudent } from '../db/db';
 import { registerStudentFingerprint, hasRegisteredFingerprint } from '../lib/biometricService';
+import { OVERLAY_COLORS } from '../lib/themeColors';
 import toast from 'react-hot-toast';
 
 type Status = 'ready' | 'capturing' | 'captured' | 'error';
@@ -58,7 +59,7 @@ export default function FingerprintEnrollModal({ student, onClose, userId }: Pro
     <>
       <div
         className="modal-backdrop fade show d-block"
-        style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', zIndex: 2100 }}
+        style={{ backgroundColor: OVERLAY_COLORS.intense, backdropFilter: 'blur(4px)', zIndex: 2100 }}
         onClick={status === 'capturing' ? undefined : onClose}
       />
       <div className="modal fade show d-block" style={{ zIndex: 2101 }}>

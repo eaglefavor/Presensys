@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, Calendar, ArrowRight, BookOpen, LayoutDashboard, Clock, Globe, } from 'lucide-react';
 import { db, type Semester } from '../db/db';
+import { OVERLAY_COLORS } from '../lib/themeColors';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import toast from 'react-hot-toast';
@@ -183,7 +184,7 @@ export default function Semesters() {
       <AnimatePresence>
         {selectedSemester && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-backdrop fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 2000 }} onClick={() => setSelectedSemester(null)} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-backdrop fade show d-block" style={{ backgroundColor: OVERLAY_COLORS.backdrop, backdropFilter: 'blur(4px)', zIndex: 2000 }} onClick={() => setSelectedSemester(null)} />
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="modal fade show d-block" style={{ zIndex: 2001, top: 'auto', bottom: 0 }}>
               <div className="modal-dialog modal-dialog-centered m-0" style={{ maxWidth: 'none' }}>
                 <div className="modal-content border-0 shadow-2xl rounded-top-5 pb-5">
@@ -213,7 +214,7 @@ export default function Semesters() {
       </AnimatePresence>
 
       {showModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1050 }}>
+        <div className="modal fade show d-block" style={{ backgroundColor: OVERLAY_COLORS.backdrop, backdropFilter: 'blur(4px)', zIndex: 1050 }}>
           <motion.div className="modal-dialog modal-dialog-centered px-3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
             <div className="modal-content border-0 shadow-2xl rounded-4 overflow-hidden">
               <div className="modal-header border-bottom-0 p-4 pb-0"><h5 className="fw-black mb-0 text-primary uppercase letter-spacing-n1">NEW CYCLE</h5><button type="button" className="btn-close" aria-label="Close" onClick={() => setShowModal(false)}></button></div>

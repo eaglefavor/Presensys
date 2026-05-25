@@ -2,6 +2,7 @@ import { SplashLogo } from './components/SplashLogo';
 import { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
+import { ThemeColors } from './lib/themeColors';
 import { useAuthStore } from './store/useAuthStore';
 import { useAppStore } from './store/useAppStore';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -118,7 +119,7 @@ function App() {
 
   return (
     <BrowserRouter>
-      <Toaster position="top-right" toastOptions={{ style: { background: '#fff', color: '#333', borderRadius: '12px', fontSize: '14px', fontWeight: 'bold' } }} />
+      <Toaster position="top-right" toastOptions={{ style: { background: ThemeColors.background.primary, color: ThemeColors.text.primary, borderRadius: '12px', fontSize: '14px', fontWeight: 'bold' } }} />
       <ReloadPrompt />
       <Suspense fallback={<PageLoader />}>
         <Routes>

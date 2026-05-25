@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LayoutGrid, Download, FileSpreadsheet, ChevronDown, ChevronUp } from 'lucide-react';
+import { ThemeColors } from '../../../lib/themeColors';
 import { SkeletonCard, DonutChart } from './ArchiveHelpers';
 import type { SemesterCourseRow, CompilationRow, ActiveSemester } from './ArchiveTypes';
 
@@ -58,7 +59,7 @@ export function SemesterTab({
           <div className="xx-small text-muted">
             {semesterRows.reduce((a, b) => a + b.sessionsHeld, 0)} sessions across {semesterRows.length} course{semesterRows.length !== 1 ? 's' : ''}
           </div>
-          <div className="xx-small fw-black mt-1" style={{ color: Math.round(semesterRows.reduce((a, b) => a + b.avgAttendance, 0) / semesterRows.length) >= 75 ? '#198754' : '#dc3545' }}>
+          <div className="xx-small fw-black mt-1" style={{ color: Math.round(semesterRows.reduce((a, b) => a + b.avgAttendance, 0) / semesterRows.length) >= 75 ? ThemeColors.status.success : ThemeColors.status.danger }}>
             Avg {Math.round(semesterRows.reduce((a, b) => a + b.avgAttendance, 0) / semesterRows.length)}% attendance
           </div>
         </div>
@@ -113,7 +114,7 @@ export function SemesterTab({
                     {isExpanded ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                   </div>
                 </div>
-                <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: '#f1f3f5' }}>
+                <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: 'var(--divider-color)' }}>
                   <div className={`h-100 rounded-pill ${row.avgAttendance >= 75 ? 'bg-success' : 'bg-danger'}`} style={{ width: `${row.avgAttendance}%`, transition: 'width 0.5s ease' }} />
                 </div>
               </div>
@@ -124,7 +125,7 @@ export function SemesterTab({
                     initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: '#f1f3f5' }}>
+                    <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: 'var(--divider-color)' }}>
                       {!students ? (
                         <div className="d-flex flex-column gap-2 py-2">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>
                       ) : students.length === 0 ? (

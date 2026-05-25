@@ -28,24 +28,24 @@ export function PasswordSection({
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
       <div className="d-flex align-items-center gap-2 mb-3 px-1">
         <KeyRound size={14} className="text-muted" />
-        <h6 className="xx-small fw-black text-muted text-uppercase tracking-widest mb-0">
+        <h6 className="xx-small fw-black text-uppercase tracking-widest mb-0" style={{ color: 'var(--text-muted)' }}>
           {isGoogleUser ? 'Set a Password' : 'Change Password'}
         </h6>
       </div>
 
       {isGoogleUser && (
-        <div className="bg-light p-3 rounded-4 mb-3 d-flex gap-3 align-items-start border border-light">
-          <ShieldCheck size={18} className="text-primary mt-1 flex-shrink-0" />
-          <p className="xx-small text-muted mb-0 fw-bold">
+        <div className="p-3 rounded-4 mb-3 d-flex gap-3 align-items-start border" style={{ backgroundColor: 'var(--bg-gray)', borderColor: 'var(--border-color)' }}>
+          <ShieldCheck size={18} style={{ color: 'var(--primary-blue)', marginTop: '2px', flexShrink: 0 }} />
+          <p className="xx-small mb-0 fw-bold" style={{ color: 'var(--text-muted)' }}>
             You signed up with <strong>Google</strong>. Set a password below to also enable <strong>email + password</strong> sign-in.
           </p>
         </div>
       )}
 
-      <div className="card border-0 bg-white shadow-sm p-4 rounded-4 mb-4">
+      <div className="card border-0 shadow-sm p-4 rounded-4 mb-4" style={{ backgroundColor: 'var(--soft-white)' }}>
         <form onSubmit={handlePasswordUpdate}>
           <div className="mb-3">
-            <label className="form-label xx-small fw-bold text-uppercase text-muted ps-1 mb-1">New Password</label>
+            <label className="form-label xx-small fw-bold text-uppercase ps-1 mb-1" style={{ color: 'var(--text-muted)' }}>New Password</label>
             <div className="modern-input-unified d-flex align-items-center">
               <span className="input-group-text bg-transparent border-0 ps-3"><Lock size={18} className="text-muted" /></span>
               <input
@@ -64,7 +64,7 @@ export function PasswordSection({
           </div>
 
           <div className="mb-4">
-            <label className="form-label xx-small fw-bold text-uppercase text-muted ps-1 mb-1">Confirm Password</label>
+            <label className="form-label xx-small fw-bold text-uppercase ps-1 mb-1" style={{ color: 'var(--text-muted)' }}>Confirm Password</label>
             <div className="modern-input-unified d-flex align-items-center">
               <span className="input-group-text bg-transparent border-0 ps-3"><Lock size={18} className="text-muted" /></span>
               <input

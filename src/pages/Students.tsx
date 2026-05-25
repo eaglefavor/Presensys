@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, ClipboardPaste, Search, FileText, Upload, X, ScanLine, ArrowLeft, CheckCircle2, ChevronRight, GraduationCap, Calendar, History, Edit2, Save, Download, Trash2, Info, AlertTriangle, FingerprintPattern, KeyRound } from 'lucide-react';
 import { db, type Student } from '../db/db';
+import { ThemeColors, OVERLAY_COLORS } from '../lib/themeColors';
 import FileMapper from '../components/FileMapper';
 import BarcodeScanner from '../components/BarcodeScanner';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -453,7 +454,7 @@ export default function Students() {
       <AnimatePresence>
         {selectedStudent && !isSelectionMode && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-backdrop fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 2000 }} onClick={() => { setSelectedStudent(null); setIsEditing(false); }} />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="modal-backdrop fade show d-block" style={{ backgroundColor: OVERLAY_COLORS.backdrop, backdropFilter: 'blur(4px)', zIndex: 2000 }} onClick={() => { setSelectedStudent(null); setIsEditing(false); }} />
             <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="modal fade show d-block" style={{ zIndex: 2001, top: 'auto', bottom: 0 }}>
               <div className="modal-dialog modal-dialog-centered m-0" style={{ maxWidth: 'none' }}>
                 <div className="modal-content border-0 shadow-2xl rounded-top-5 pb-5">
@@ -461,23 +462,23 @@ export default function Students() {
                   <div className="modal-body px-4 text-center">
                     {!isEditing ? (
                       <>
-                        <div className="avatar-circle-lg mx-auto mb-3 shadow-sm fw-black" style={{ backgroundColor: 'var(--primary-blue)', color: '#cfb53b', border: '3px solid #cfb53b' }}>{getInitials(selectedStudent.name)}</div>
+                        <div className="avatar-circle-lg mx-auto mb-3 shadow-sm fw-black" style={{ backgroundColor: 'var(--primary-blue)', color: ThemeColors.accent.gold, border: `3px solid ${ThemeColors.accent.gold}` }}>{getInitials(selectedStudent.name)}</div>
                         <h4 className="fw-black mb-1" style={{ color: 'var(--primary-blue)' }}>{selectedStudent.name}</h4>
                         <p className="xx-small fw-bold text-muted font-monospace tracking-widest mb-4">{selectedStudent.regNumber}</p>
                         
                         <div className="row g-2 mb-4 text-start">
-                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><GraduationCap size={20} className="mb-1 mx-auto" style={{ color: '#cfb53b' }} /><div className="xx-small fw-bold text-muted">STATUS</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>ACTIVE</div></div></div>
-                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><Calendar size={20} className="mb-1 mx-auto" style={{ color: '#cfb53b' }} /><div className="xx-small fw-bold text-muted">JOINED</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>{selectedStudent.createdAt ? new Date(selectedStudent.createdAt).getFullYear() : '—'}</div></div></div>
-                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><History size={20} className="mb-1 mx-auto" style={{ color: '#cfb53b' }} /><div className="xx-small fw-bold text-muted">ATTEND</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>{selectedStudentStats ? `${selectedStudentStats.percentage}%` : '…'}</div></div></div>
+                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><GraduationCap size={20} className="mb-1 mx-auto" style={{ color: ThemeColors.accent.gold }} /><div className="xx-small fw-bold text-muted">STATUS</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>ACTIVE</div></div></div>
+                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><Calendar size={20} className="mb-1 mx-auto" style={{ color: ThemeColors.accent.gold }} /><div className="xx-small fw-bold text-muted">JOINED</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>{selectedStudent.createdAt ? new Date(selectedStudent.createdAt).getFullYear() : '—'}</div></div></div>
+                          <div className="col-4"><div className="bg-white border p-3 rounded-3 text-center shadow-sm"><History size={20} className="mb-1 mx-auto" style={{ color: ThemeColors.accent.gold }} /><div className="xx-small fw-bold text-muted">ATTEND</div><div className="small fw-black" style={{ color: 'var(--primary-blue)' }}>{selectedStudentStats ? `${selectedStudentStats.percentage}%` : '…'}</div></div></div>
                         </div>
 
                         <div className="d-flex flex-column gap-2">
-                          <button className="btn btn-primary-unified w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={handleEditClick}><Edit2 size={18} className="me-2" style={{ color: '#cfb53b' }} /> Edit Student</button>
+                          <button className="btn btn-primary-unified w-100 py-3 rounded-3 fw-bold shadow-sm" onClick={handleEditClick}><Edit2 size={18} className="me-2" style={{ color: ThemeColors.accent.gold }} /> Edit Student</button>
                           <button
                             className="btn btn-outline-primary w-100 py-3 rounded-3 fw-bold d-flex align-items-center justify-content-center gap-2"
                             onClick={() => setShowFingerprintModal(true)}
                           >
-                            <FingerprintPattern size={18} style={{ color: '#cfb53b' }} />
+                            <FingerprintPattern size={18} style={{ color: ThemeColors.accent.gold }} />
                             { 'Register/Update WebAuthn' }
                           </button>
                           <div className="d-flex gap-2 w-100">
@@ -527,7 +528,7 @@ export default function Students() {
 
       {/* Import Modal */}
       {showImportModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: '#fff', zIndex: 1050 }}>
+        <div className="modal fade show d-block" style={{ backgroundColor: 'var(--soft-white)', zIndex: 1050 }}>
           <div className="container-fluid h-100 p-0 d-flex flex-column">
             <div className="p-4 border-bottom d-flex align-items-center justify-content-between bg-white sticky-top">
               <div className="d-flex align-items-center gap-3">
@@ -653,7 +654,7 @@ export default function Students() {
       />
 
       <style>{`
-        .text-gold { color: #cfb53b; }
+        .text-gold { color: var(--accent-gold); }
         .avatar-circle { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
         .avatar-circle-lg { width: 80px; height: 80px; border-radius: 24px; display: flex; align-items: center; justify-content: center; font-size: 32px; }
         .btn-white-glass { background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); backdrop-filter: blur(4px); }

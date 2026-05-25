@@ -5,6 +5,7 @@ import {
   ChevronUp, X, CheckCircle2, Clock, Printer, Users, LayoutGrid,
 } from 'lucide-react';
 import { db } from '../db/db';
+import { ThemeColors } from '../lib/themeColors';
 import type { LocalStudent, LocalLecturer } from '../db/db';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../store/useAuthStore';
@@ -1428,7 +1429,7 @@ export default function Archives() {
                                   <span className="fw-black small text-dark uppercase">{cs.code}</span>
                                   <span className={`fw-black small ${pct >= 75 ? 'text-success' : 'text-danger'}`}>{pct}%</span>
                                 </div>
-                                <div className="mt-1 rounded-pill overflow-hidden" style={{ height: '3px', backgroundColor: '#f1f3f5' }}>
+                                <div className="mt-1 rounded-pill overflow-hidden" style={{ height: '3px', backgroundColor: 'var(--divider-color)' }}>
                                   <div className={`h-100 rounded-pill ${pct >= 75 ? 'bg-success' : 'bg-danger'}`} style={{ width: `${pct}%` }} />
                                 </div>
                               </div>
@@ -1474,7 +1475,7 @@ export default function Archives() {
                               </div>
                             </div>
                             <div className="px-3 pb-1">
-                              <div className="rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: '#f1f3f5' }}>
+                              <div className="rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: 'var(--divider-color)' }}>
                                 <div className={`h-100 rounded-pill ${pct >= 75 ? 'bg-success' : 'bg-danger'}`} style={{ width: `${pct}%`, transition: 'width 0.5s ease' }} />
                               </div>
                             </div>
@@ -1485,7 +1486,7 @@ export default function Archives() {
                                   initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                                   className="overflow-hidden"
                                 >
-                                  <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: '#f1f3f5' }}>
+                                  <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: 'var(--divider-color)' }}>
                                     <div className="d-flex flex-column gap-1">
                                       {courseRecs.map((r, i) => (
                                         <div key={i} className="d-flex align-items-center gap-2 py-1">
@@ -1747,7 +1748,7 @@ export default function Archives() {
                           {row.excusedCount > 0 && <div className="xx-small fw-black text-warning">{row.excusedCount}E</div>}
                         </div>
                       </div>
-                      <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: '#f1f3f5' }}>
+                      <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: 'var(--divider-color)' }}>
                         <div className={`h-100 rounded-pill ${row.percentage >= 75 ? 'bg-success' : 'bg-danger'}`} style={{ width: `${row.percentage}%`, transition: 'width 0.5s ease' }} />
                       </div>
                     </div>
@@ -1813,7 +1814,7 @@ export default function Archives() {
                               {isExpanded ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                             </div>
                           </div>
-                          <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '3px', backgroundColor: '#f1f3f5' }}>
+                          <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '3px', backgroundColor: 'var(--divider-color)' }}>
                             <div className={`h-100 rounded-pill ${session.attendanceRate >= 75 ? 'bg-success' : 'bg-danger'}`} style={{ width: `${session.attendanceRate}%` }} />
                           </div>
                         </div>
@@ -1824,7 +1825,7 @@ export default function Archives() {
                               initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                               className="overflow-hidden"
                             >
-                              <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: '#f1f3f5' }}>
+                              <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: 'var(--divider-color)' }}>
                                 {isLoadingRoll ? (
                                   <div className="d-flex flex-column gap-2 py-2">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>
                                 ) : rollCallMap[session.id] ? (
@@ -1886,7 +1887,7 @@ export default function Archives() {
                     <div className="xx-small text-muted">
                       {semesterRows.reduce((a, b) => a + b.sessionsHeld, 0)} sessions across {semesterRows.length} course{semesterRows.length !== 1 ? 's' : ''}
                     </div>
-                    <div className="xx-small fw-black mt-1" style={{ color: Math.round(semesterRows.reduce((a, b) => a + b.avgAttendance, 0) / semesterRows.length) >= 75 ? '#198754' : '#dc3545' }}>
+                    <div className="xx-small fw-black mt-1" style={{ color: Math.round(semesterRows.reduce((a, b) => a + b.avgAttendance, 0) / semesterRows.length) >= 75 ? ThemeColors.status.success : ThemeColors.status.danger }}>
                       Avg {Math.round(semesterRows.reduce((a, b) => a + b.avgAttendance, 0) / semesterRows.length)}% attendance
                     </div>
                   </div>
@@ -1919,7 +1920,7 @@ export default function Archives() {
                               {isExpanded ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                             </div>
                           </div>
-                          <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: '#f1f3f5' }}>
+                          <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: 'var(--divider-color)' }}>
                             <div className={`h-100 rounded-pill ${row.avgAttendance >= 75 ? 'bg-success' : 'bg-danger'}`} style={{ width: `${row.avgAttendance}%`, transition: 'width 0.5s ease' }} />
                           </div>
                         </div>
@@ -1930,7 +1931,7 @@ export default function Archives() {
                               initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                               className="overflow-hidden"
                             >
-                              <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: '#f1f3f5' }}>
+                              <div className="px-3 pb-3 pt-2 border-top" style={{ borderColor: 'var(--divider-color)' }}>
                                 {!students ? (
                                   <div className="d-flex flex-column gap-2 py-2">{Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}</div>
                                 ) : students.length === 0 ? (
@@ -2025,7 +2026,7 @@ export default function Archives() {
                           {row.excusedCount > 0 && <div className="xx-small fw-black text-warning">{row.excusedCount}E</div>}
                         </div>
                       </div>
-                      <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: '#f1f3f5' }}>
+                      <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: 'var(--divider-color)' }}>
                         <div className="h-100 rounded-pill bg-danger" style={{ width: `${row.percentage}%`, transition: 'width 0.5s ease' }} />
                       </div>
                       <div className="mt-1 d-flex justify-content-between">
