@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { ArrowLeft, X, Search, CheckCircle2, Filter, Circle, UserMinus, UserPlus, Save, AlertCircle } from 'lucide-react';
 import { db } from '../../db/db';
-import { ThemeColors } from '../../lib/themeColors';
 import type { Enrollment } from '../../db/db';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../../store/useAuthStore';

@@ -2,7 +2,7 @@ import { SplashLogo } from './components/SplashLogo';
 import { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './lib/supabase';
-import { ThemeColors, getComputedThemeColor } from './lib/themeColors';
+import { ThemeColors } from './lib/themeColors';
 import { useAuthStore } from './store/useAuthStore';
 import { useAppStore } from './store/useAppStore';
 import { useLiveQuery } from 'dexie-react-hooks';
