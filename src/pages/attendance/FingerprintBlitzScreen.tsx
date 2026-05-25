@@ -209,7 +209,7 @@ export default function FingerprintBlitzScreen({
               <span className="fw-black h5 mb-0 font-monospace text-primary">{mm}:{ss}</span>
             </div>
 
-            <div className="progress rounded-pill mb-3" style={{ height: 8, backgroundColor: '#e9ecef' }}>
+            <div className="progress rounded-pill mb-3" style={{ height: 8, backgroundColor: 'var(--progress-bg)' }}>
               <div
                 className="progress-bar bg-primary rounded-pill"
                 style={{ width: `${progress}%`, transition: 'width 1s linear' }}

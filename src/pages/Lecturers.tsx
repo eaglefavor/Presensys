@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Plus, UserRound, Pencil, Trash2, Check } from 'lucide-react';
 import { db } from '../db/db';
+import { OVERLAY_COLORS } from '../lib/themeColors';
 import toast from 'react-hot-toast';
 import { useAuthStore } from '../store/useAuthStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -148,7 +149,7 @@ export default function Lecturers() {
 
       {/* Add / Edit Modal */}
       {showAddModal && (
-        <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)', zIndex: 1050 }}>
+        <div className="modal fade show d-block" style={{ backgroundColor: OVERLAY_COLORS.backdrop, backdropFilter: 'blur(4px)', zIndex: 1050 }}>
           <motion.div className="modal-dialog modal-dialog-centered px-3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
             <div className="modal-content border-0 shadow-2xl rounded-4">
               <div className="modal-header border-bottom-0 p-4 pb-0">

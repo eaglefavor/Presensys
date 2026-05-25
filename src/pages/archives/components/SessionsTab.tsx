@@ -79,7 +79,7 @@ export function SessionsTab({
                     initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden bg-light"
                   >
-                    <div className="p-3 border-top" style={{ borderColor: '#e9ecef' }}>
+                    <div className="p-3 border-top" style={{ borderColor: 'var(--progress-bg)' }}>
                       {isLoadingRoll ? (
                         <div className="text-center py-2 xx-small fw-bold text-muted uppercase">Loading roll call...</div>
                       ) : !rollCallMap[session.id] ? (

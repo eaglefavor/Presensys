@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Calendar } from 'lucide-react';
 import { db, type LocalAttendanceRecord } from '../db/db';
+import { OVERLAY_COLORS } from '../lib/themeColors';
 import { useAppStore } from '../store/useAppStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { exportToCSV, exportToXLSX, exportToPDF, exportToText, downloadText, shareData } from '../lib/ExportUtils';
@@ -472,7 +473,7 @@ export default function Attendance() {
           <>
             <div
               className="modal-backdrop fade show d-block"
-              style={{ backgroundColor: 'rgba(0,0,0,0.45)', zIndex: SESSION_PROMPT_BACKDROP_Z_INDEX }}
+              style={{ backgroundColor: OVERLAY_COLORS.modal, zIndex: SESSION_PROMPT_BACKDROP_Z_INDEX }}
               onClick={() => setPendingMethodChoice(null)}
             />
             <div

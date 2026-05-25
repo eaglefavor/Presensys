@@ -85,7 +85,7 @@ export function AtRiskTab({
                 {row.excusedCount > 0 && <div className="xx-small fw-black text-warning">{row.excusedCount}E</div>}
               </div>
             </div>
-            <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: '#f1f3f5' }}>
+            <div className="mt-2 rounded-pill overflow-hidden" style={{ height: '4px', backgroundColor: 'var(--divider-color)' }}>
               <div className="h-100 rounded-pill bg-danger" style={{ width: `${row.percentage}%`, transition: 'width 0.5s ease' }} />
             </div>
             <div className="mt-1 d-flex justify-content-between">

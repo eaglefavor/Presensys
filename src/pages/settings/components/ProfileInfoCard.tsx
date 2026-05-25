@@ -12,7 +12,7 @@ export function ProfileInfoCard({ profile, user, isGoogleUser }: ProfileInfoCard
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
       <div className="card border-0 shadow-sm p-4 rounded-4 mb-4 border-left-blue" style={{ backgroundColor: 'var(--soft-white)', color: 'var(--text-dark)' }}>
         <div className="d-flex align-items-center gap-3 mb-3">
-          <div className="text-primary p-3 rounded-3 d-flex align-items-center justify-content-center" style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: 'rgba(0, 105, 148, 0.1)' }}>
+          <div className="text-primary p-3 rounded-3 d-flex align-items-center justify-content-center" style={{ width: '56px', height: '56px', borderRadius: '16px', backgroundColor: 'var(--primary-highlight-bg)' }}>
             <User size={28} />
           </div>
           <div className="flex-grow-1 overflow-hidden">

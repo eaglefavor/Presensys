@@ -188,7 +188,7 @@ export default function ManualMarking({
                     <div className="d-flex align-items-center gap-2 mt-1">
                       <span className="xx-small fw-black text-muted font-monospace tracking-widest">{student.regNumber}</span>
                       {!status && (
-                        <span className="badge rounded-2 fw-bold" style={{ fontSize: '7px', backgroundColor: 'rgba(108,117,125,0.1)', color: '#6c757d', border: '1px dashed #adb5bd' }}>UNMARKED</span>
+                        <span className="badge rounded-2 fw-bold" style={{ fontSize: '7px', backgroundColor: 'var(--badge-muted-bg)', color: 'var(--badge-muted-text)', border: '1px dashed var(--badge-muted-border)' }}>UNMARKED</span>
                       )}
                     </div>
                   </div>
