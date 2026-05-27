@@ -130,7 +130,14 @@ For production deployment on Vercel:
 
 4. Redeploy your application
 
-The API key will be securely stored and accessible to your build process.
+⚠️ **Critical Security Warning:** `VITE_*` prefixed environment variables are embedded into the client bundle at build time and are visible in the shipped JavaScript. This means the API key will be exposed to users who inspect the client bundle. 
+
+**For production use, consider implementing one of these alternatives:**
+- Use a server-side proxy/API route that handles Gemini API calls on your backend
+- Set up a secure API gateway that validates requests before forwarding to Gemini
+- Use API key restrictions to limit usage by domain and rate limit
+
+Direct client-side API key exposure is acceptable for development and low-risk applications, but not recommended for production systems handling sensitive operations.
 
 ## Best Practices
 

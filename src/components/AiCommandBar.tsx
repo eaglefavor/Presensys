@@ -214,11 +214,9 @@ export default function AiCommandBar() {
         actionTaken = true;
       }
 
-      // Only show success toast if a specific action was taken
-      if (actionTaken || response.toLowerCase().includes('success') || response.toLowerCase().includes('enrolled') || response.toLowerCase().includes('created')) {
-        if (!actionTaken) {
-          toast.success('Command executed successfully');
-        }
+      // Only show success toast if no specific UI action was taken
+      if (!actionTaken) {
+        toast.success('Command executed successfully');
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';

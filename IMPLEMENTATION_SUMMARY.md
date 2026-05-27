@@ -285,7 +285,7 @@ aiService (AI Engine)
 | AI Model | Gemini 1.5 Flash | Latest | ✅ |
 | Database | Supabase | 2.105.4 | ✅ |
 | Validation | Zod | Latest | ✅ |
-| Styling | Tailwind CSS | Via Bootstrap | ✅ |
+| Styling | Bootstrap + Inline Styles | 5.3.8 | ✅ |
 | Voice API | Web Speech API | Browser native | ✅ |
 
 ## 📈 Performance Characteristics
