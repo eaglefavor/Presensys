@@ -15,11 +15,14 @@ import {
   X,
   ChevronRight,
   WifiOff,
+  Zap,
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { useAppStore } from '../store/useAppStore';
+import { useUiStore } from '../store/useUiStore';
 import { realtimeSync, RealtimeSyncEngine, type SyncStatus } from '../lib/RealtimeSyncEngine';
 import { formatTimeAgo } from '../lib/dateUtils';
+import AiCommandBar from './AiCommandBar';
 
 /** Stale threshold: show the freshness banner when the cache is older than this. */
 const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
@@ -27,6 +30,7 @@ const STALE_THRESHOLD_MS = 4 * 60 * 60 * 1000; // 4 hours
 const Layout: React.FC = () => {
   const activeSemester = useAppStore(state => state.activeSemester);
   const { profile, signOut, user } = useAuthStore();
+  const ui = useUiStore();
   const location = useLocation();
   const navigate = useNavigate();
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -120,6 +124,15 @@ const Layout: React.FC = () => {
           </div>
 
           <div className="d-flex align-items-center gap-3">
+            <button
+              className="btn btn-link p-0"
+              onClick={() => ui.setAiCommandBarVisibility(!ui.isAiCommandBarVisible)}
+              title="Toggle AI Command Bar (Ctrl+/)"
+              style={{ color: ui.isAiCommandBarVisible ? 'var(--primary-blue)' : 'var(--text-muted)' }}
+              aria-label="Toggle AI Command"
+            >
+              <Zap size={20} />
+            </button>
             <div
               className="sync-indicator position-relative d-flex align-items-center gap-1"
               onClick={handleManualSync}
@@ -219,6 +232,8 @@ const Layout: React.FC = () => {
           <Outlet />
         </div>
       </main>
+
+      <AiCommandBar />
 
       <style>{`
         .menu-overlay {
