@@ -68,12 +68,13 @@ const Layout: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === '/') {
         e.preventDefault();
-        ui.setAiCommandBarVisibility(!ui.isAiCommandBarVisible);
+        const currentState = useUiStore.getState();
+        currentState.setAiCommandBarVisibility(!currentState.isAiCommandBarVisible);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [ui]);
+  }, []);
 
   useEffect(() => {
     // Subscribe to the engine's status events for accurate real-time feedback

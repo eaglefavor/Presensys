@@ -284,7 +284,7 @@ aiService (AI Engine)
 | AI/ML | Vercel AI SDK | 6.0.191 | ✅ |
 | AI Model | Gemini 1.5 Flash | Latest | ✅ |
 | Database | Supabase | 2.105.4 | ✅ |
-| Validation | Zod | Latest | ✅ |
+| Validation | Zod | 4.4.3 | ✅ |
 | Styling | Bootstrap + Inline Styles | 5.3.8 | ✅ |
 | Voice API | Web Speech API | Browser native | ✅ |
 

@@ -380,7 +380,7 @@ async function getAiModelWithFallback() {
   }
 
   // If all keys and models failed, throw an error
-  const errorMessage = 'Failed to initialize AI model. No valid Gemini API key available. Please set VITE_GEMINI_API_KEY in your environment variables.';
+  const errorMessage = 'Failed to initialize AI model with available API keys. Please configure VITE_GEMINI_API_KEY or VITE_GEMINI_API_KEYS in your environment variables.';
   console.error(errorMessage);
   throw new Error(errorMessage);
 }
