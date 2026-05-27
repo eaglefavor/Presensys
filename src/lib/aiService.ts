@@ -181,22 +181,20 @@ async function manageSchedules(
 
       if (action === 'CREATE') {
         await supabase.from('course_schedules').insert({
-          courseId: course.id,
-          lecturerId,
-          dayOfWeek,
-          startTime: times.startTime,
-          endTime: times.endTime,
+          course_id: course.id,
+          day_of_week: dayOfWeek,
+          start_time: times.startTime,
+          end_time: times.endTime,
         });
       } else {
         await supabase
           .from('course_schedules')
           .update({
-            dayOfWeek,
-            startTime: times.startTime,
-            endTime: times.endTime,
+            day_of_week: dayOfWeek,
+            start_time: times.startTime,
+            end_time: times.endTime,
           })
-          .eq('courseId', course.id)
-          .eq('lecturerId', lecturerId);
+          .eq('course_id', course.id);
       }
 
       return {
@@ -208,8 +206,8 @@ async function manageSchedules(
     } else if (action === 'DELETE') {
       await supabase
         .from('course_schedules')
-        .update({ isDeleted: 1 })
-        .eq('courseId', course.id);
+        .update({ is_deleted: 1 })
+        .eq('course_id', course.id);
 
       return {
         success: true,
