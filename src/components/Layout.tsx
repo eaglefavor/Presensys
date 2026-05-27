@@ -33,6 +33,11 @@ const Layout: React.FC = () => {
   const ui = useUiStore();
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    useUiStore.getState().setNavigation(location.pathname);
+  }, [location.pathname]);
+
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(() => RealtimeSyncEngine.getLastSyncedAt());
