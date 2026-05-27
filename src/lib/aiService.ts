@@ -264,13 +264,41 @@ async function batchEnrollStudents(
       };
     }
 
-    const payloads = students.map((s) => ({
-      courseId: course.id,
-      regNumber: s.regNumber,
+    // Insert students with correct column names (snake_case)
+    const studentPayloads = students.map((s) => ({
+      reg_number: s.regNumber,
       name: s.name,
     }));
 
-    await supabase.from('students').insert(payloads).select();
+    const { data: insertedStudents, error: studentError } = await supabase
+      .from('students')
+      .upsert(studentPayloads, { onConflict: 'reg_number' })
+      .select('id');
+
+    if (studentError || !insertedStudents) {
+      return {
+        success: false,
+        error: `Error enrolling students: ${studentError?.message || 'Unknown error'}`,
+      };
+    }
+
+    // Create enrollment records to link students to course
+    const enrollmentPayloads = insertedStudents.map((student) => ({
+      student_id: student.id,
+      course_id: course.id,
+    }));
+
+    const { error: enrollmentError } = await supabase
+      .from('enrollments')
+      .upsert(enrollmentPayloads, { onConflict: 'student_id,course_id' })
+      .select();
+
+    if (enrollmentError) {
+      return {
+        success: false,
+        error: `Error creating enrollments: ${enrollmentError.message}`,
+      };
+    }
 
     return {
       success: true,
