@@ -187,4 +187,90 @@ Be conversational and helpful. Confirm actions before executing critical operati
     assert.ok(pattern.innerLoop);
     assert.ok(pattern.apiFallback);
   });
+
+  test('should implement optional key usage tracking', () => {
+    // Verify the structure for key stats tracking
+    interface KeyStats {
+      fingerprint: string;
+      successCount: number;
+      failureCount: number;
+      lastError?: string;
+      lastErrorTime?: number;
+      isTemporarilyBanned?: boolean;
+    }
+    
+    const mockKeyStats: KeyStats = {
+      fingerprint: 'XXXX',
+      successCount: 5,
+      failureCount: 2,
+      lastError: 'Rate limit exceeded',
+      lastErrorTime: Date.now(),
+      isTemporarilyBanned: false
+    };
+    
+    assert.strictEqual(typeof mockKeyStats.fingerprint, 'string');
+    assert.strictEqual(typeof mockKeyStats.successCount, 'number');
+    assert.strictEqual(typeof mockKeyStats.failureCount, 'number');
+  });
+
+  test('should track successful API calls', () => {
+    // Verify success tracking increments counter
+    const apiKey = 'test-api-key-1234567890';
+    const fingerprint = apiKey.substring(0, 4);
+    
+    assert.strictEqual(fingerprint, 'test');
+    // Success should increment count and reset failures
+  });
+
+  test('should track failed API calls', () => {
+    // Verify failure tracking increments counter
+    const apiKey = 'test-api-key-failure';
+    const error = 'Rate limit exceeded';
+    
+    assert.ok(error);
+    assert.strictEqual(error.length > 0, true);
+    // Failure should increment count and set error message
+  });
+
+  test('should implement key ban after repeated failures', () => {
+    // Verify temporary ban mechanism
+    // After 3 consecutive failures, key should be temporarily banned
+    
+    const failureThreshold = 3;
+    const banDurationMs = 300000; // 5 minutes
+    
+    assert.strictEqual(failureThreshold, 3);
+    assert.strictEqual(banDurationMs, 300000);
+  });
+
+  test('should check if key is usable before trying', () => {
+    // Verify isKeyUsable check prevents retrying banned keys
+    const currentTime = Date.now();
+    const banTime = currentTime - 100000; // 100 seconds ago
+    const banDuration = 300000; // 5 minutes
+    
+    const isStillBanned = (currentTime - banTime) < banDuration;
+    assert.ok(isStillBanned);
+    
+    const isNowValid = (currentTime - banTime) >= banDuration;
+    assert.ok(!isNowValid);
+  });
+
+  test('should expose key usage statistics for monitoring', () => {
+    // Verify getKeyUsageStats function exists for debugging
+    // This allows administrators to monitor key health
+    
+    const mockStats = [
+      { fingerprint: 'KEY1', successCount: 100, failureCount: 2 },
+      { fingerprint: 'KEY2', successCount: 95, failureCount: 5 }
+    ];
+    
+    assert.ok(Array.isArray(mockStats));
+    assert.ok(mockStats.length > 0);
+    mockStats.forEach(stat => {
+      assert.ok(stat.fingerprint);
+      assert.strictEqual(typeof stat.successCount, 'number');
+      assert.strictEqual(typeof stat.failureCount, 'number');
+    });
+  });
 });

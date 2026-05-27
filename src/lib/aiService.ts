@@ -3,6 +3,91 @@ import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
 import { supabase } from './supabase';
 import { getApiKeys, getFallbackModels } from './apiKeyManager';
 
+// ─── Key Usage Tracking (Session-only) ───────────────────────────────────────
+// Track which keys are experiencing issues (in-memory, session-only)
+export interface KeyStats {
+  fingerprint: string; // First 4 chars of key
+  successCount: number;
+  failureCount: number;
+  lastError?: string;
+  lastErrorTime?: number;
+  isTemporarilyBanned?: boolean; // Skip for ~5 minutes after 3 consecutive failures
+}
+
+const keyStats = new Map<string, KeyStats>();
+
+/**
+ * Get or create stats for a key
+ */
+function getKeyStats(apiKey: string): KeyStats {
+  const fingerprint = apiKey.substring(0, 4);
+  if (!keyStats.has(fingerprint)) {
+    keyStats.set(fingerprint, {
+      fingerprint,
+      successCount: 0,
+      failureCount: 0,
+    });
+  }
+  return keyStats.get(fingerprint)!;
+}
+
+/**
+ * Record a successful API call
+ */
+function recordKeySuccess(apiKey: string): void {
+  const stats = getKeyStats(apiKey);
+  stats.successCount++;
+  stats.failureCount = 0; // Reset failure count on success
+  stats.isTemporarilyBanned = false;
+}
+
+/**
+ * Record a failed API call
+ */
+function recordKeyFailure(apiKey: string, error: string): void {
+  const stats = getKeyStats(apiKey);
+  stats.failureCount++;
+  stats.lastError = error;
+  stats.lastErrorTime = Date.now();
+  
+  // Ban key temporarily after 3 consecutive failures (5 minute cooldown)
+  if (stats.failureCount >= 3) {
+    stats.isTemporarilyBanned = true;
+    console.warn(
+      `API key [${stats.fingerprint}...] temporarily banned due to repeated failures. Will retry in ~5 minutes.`
+    );
+  }
+}
+
+/**
+ * Check if a key is currently usable
+ */
+function isKeyUsable(apiKey: string): boolean {
+  const stats = getKeyStats(apiKey);
+  
+  if (!stats.isTemporarilyBanned) {
+    return true;
+  }
+  
+  // Check if ban period has expired (5 minutes = 300000ms)
+  const timeSinceBan = Date.now() - (stats.lastErrorTime || 0);
+  if (timeSinceBan > 300000) {
+    stats.isTemporarilyBanned = false;
+    stats.failureCount = 0;
+    console.log(`API key [${stats.fingerprint}...] ban expired, retrying...`);
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Get key statistics for monitoring/debugging
+ */
+export function getKeyUsageStats(): Array<KeyStats> {
+  return Array.from(keyStats.values());
+}
+
 // ─── Type Definitions ─────────────────────────────────────────────────────────
 export interface ToolExecutionResult {
   success: boolean;
@@ -290,6 +375,7 @@ function parseAiCommands(text: string): string {
 /**
  * Execute natural language commands through AI with multi-key and multi-model fallback
  * Tries each API key with each model in the fallback queue until one succeeds
+ * Includes optional session-level key usage tracking for improved fallback efficiency
  */
 export async function executeAiCommand(
   userMessage: string,
@@ -310,6 +396,11 @@ Be conversational and helpful. Confirm actions before executing critical operati
 
     // Try each API key
     for (const apiKey of apiKeys) {
+      // Skip keys that are temporarily banned (after repeated failures)
+      if (!isKeyUsable(apiKey)) {
+        continue;
+      }
+
       let keySucceeded = false;
 
       // Try each model in the fallback queue for this key
@@ -323,6 +414,7 @@ Be conversational and helpful. Confirm actions before executing critical operati
 
         if (responseText !== null) {
           // Success! We got a response from this key/model combination
+          recordKeySuccess(apiKey);
           console.log(
             `AI command executed successfully with model ${model} using key [${apiKey.substring(0, 4)}...]`
           );
@@ -335,6 +427,7 @@ Be conversational and helpful. Confirm actions before executing critical operati
       if (keySucceeded) {
         break;
       } else {
+        recordKeyFailure(apiKey, 'All models exhausted for this key');
         console.warn(
           `All models failed for API key [${apiKey.substring(0, 4)}...]. Trying next key...`
         );
