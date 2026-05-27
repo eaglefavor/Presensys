@@ -144,7 +144,7 @@ const Layout: React.FC = () => {
             <button
               className="btn btn-link p-0"
               onClick={() => ui.setAiCommandBarVisibility(!ui.isAiCommandBarVisible)}
-              title="Toggle AI Command Bar (Ctrl+/)"
+              title="Toggle AI Command Bar"
               style={{ color: ui.isAiCommandBarVisible ? 'var(--primary-blue)' : 'var(--text-muted)' }}
               aria-label="Toggle AI Command"
             >
