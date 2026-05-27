@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { CheckCircle, AlertTriangle, Save, RefreshCw, X, ArrowLeft, Pencil } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI } from '@google/genai';
+import { getApiKeys, getFallbackModels } from '../../lib/apiKeyManager';
 
 interface ExtractedRecord {
   regNumber: string;
@@ -47,85 +48,12 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         setLoading(true);
         setError(null);
 
-        // Get API Keys from environment and fallbacks
-        const envKeysString = import.meta.env.VITE_GEMINI_API_KEYS || import.meta.env.VITE_GEMINI_API_KEY || '';
-        let apiKeys = envKeysString.split(',').map((k: string) => k.trim()).filter((k: string) => k.length > 0);
+        // Get API Keys from shared manager (environment or encrypted fallbacks)
+        const apiKeys = getApiKeys();
 
-        // Provide a default fallback if absolutely nothing is configured (safe fallback)
-        if (apiKeys.length === 0) {
-            const _obfuscated = [
-              'wATVGlTRKFVeYdnWlRXe1V2dlNFbvJmMpF3dqlWeBh2Q5NVY6lUQ',
-              '3R3VChXV1RGeKBjNVpldxRFSPFFOZ1kUTlEMPV1bSlHR5NVY6lUQ',
-              'VlkWtEHa2dVdz8meM5kQGdWUVpkayRVb6dXZJ9GRGNkQ5NVY6lUQ',
-              'nBzYq91S19kRD90UuhmMnJFe5EFUaxUUt1kS5MESWJGR5NVY6lUQ',
-              '3FmWSl1QNVFO6RFVLNVY0NXOrJVNwITUGBDRyVjd4RFR5NVY6lUQ',
-              'nRXZV9kc2ZEO1okN4ImQTdzYw4WWkhjTjlnbXpWRwczQ5NVY6lUQ',
-              'NNTRRd0bIlHehpkNPpXWwhlbBdEePd3UwVzbZlVNUF2Q5NVY6lUQ',
-              'NxGahJVMxUGdQVGTZ9kW2lDcxdTYPVFbzlTQEdFTtJ0Q5NVY6lUQ',
-              'zZ1M5YGNkxkeNRlcVFlQlNjRZZnN2UTLutWahBjMRBFR5NVY6lUQ',
-              'ZZFV4MXaZd3SxFXdzZnSadmeKN0S3ZnaUN2YzM2TXxkQ5NVY6lUQ'
-            ];
-            apiKeys = _obfuscated.map(o => atob(o.split('').reverse().join('')));
-        }
-        // Shuffle keys to distribute load
-        apiKeys = apiKeys.sort(() => Math.random() - 0.5);
-
-        // Dynamic model selection based on network quality and image count (task complexity).
-        //
-        // Available models (API identifiers):
-        //   gemini-3.0-pro-exp          – Most powerful; complex multi-page OCR, very messy handwriting  (5–10 RPM / 50–100 RPD)
-        //   gemini-2.5-pro-latest       – Deep analysis, 1M token context; ideal for many pages          (5 RPM   / 100 RPD)
-        //   gemini-3.0-flash-exp        – Fast + high accuracy, low latency; cross-page correlation      (5–10 RPM / 50–100 RPD)
-        //   gemini-2.5-flash     – Standard production-ready multimodal                           (10 RPM  / 250 RPD)
-        //   gemini-2.0-flash            – Cost-effective general-purpose; free-tier friendly             (free tier)
-        //   gemini-2.5-flash-lite– High throughput, low cost                                     (15 RPM  / 1,000 RPD)
-        //   gemini-3.1-flash-lite-exp   – Ultra-efficient; absolute lowest latency at scale             (scale tier)
-        //
-        // Selection matrix:
-        //   Very slow network (slow-2g / 2g):  prioritise minimum latency and data usage
-        //     1 image  → gemini-3.1-flash-lite-exp      (fastest possible)
-        //     2+ images→ gemini-2.5-flash-lite   (efficient cross-page)
-        //   Slow network (3g):                 balance efficiency with accuracy
-        //     1 image  → gemini-2.0-flash               (cost-effective, free-tier)
-        //     2 images → gemini-2.5-flash-lite   (efficient cross-page)
-        //     3+ images→ gemini-2.5-flash        (more capable for volume)
-        //   Fast network (4g / wifi / unknown): maximise accuracy, scale with complexity
-        //     1 image  → gemini-2.5-flash        (standard production)
-        //     2 images → gemini-3.0-flash-exp           (fast + accurate cross-page)
-        //     3–4 images→ gemini-2.5-pro-latest         (deep analysis, large context)
-        //     5+ images→ gemini-3.0-pro-exp             (most powerful for complex tasks)
-
-        const connection = (navigator as unknown as { connection?: { effectiveType: string } }).connection;
-        const effectiveType = connection?.effectiveType ?? '4g';
-        const isVerySlowNetwork = effectiveType === 'slow-2g' || effectiveType === '2g';
-        const isSlowNetwork = effectiveType === '3g';
-
-        let modelName: string;
-
-        if (isVerySlowNetwork) {
-          modelName = images.length >= 2
-            ? "gemini-2.5-flash-lite"  // multi-page: efficient cross-image model
-            : "gemini-3.1-flash-lite-exp";     // single page: absolute lowest latency
-        } else if (isSlowNetwork) {
-          if (images.length >= 3) {
-            modelName = "gemini-2.5-flash";      // 3+ pages: balanced capability
-          } else if (images.length === 2) {
-            modelName = "gemini-2.5-flash-lite"; // 2 pages: efficient cross-page
-          } else {
-            modelName = "gemini-2.0-flash";
-          }
-        } else {
-          // Fast network: maximise accuracy, escalate model with task complexity
-          if (images.length >= 5) {
-            modelName = "gemini-3.0-pro-exp";
-          } else if (images.length >= 3) {
-            modelName = "gemini-2.5-pro";
-          } else if (images.length === 2) {
-            modelName = "gemini-3.0-flash-exp";
-          } else {
-            modelName = "gemini-2.5-flash"; // 1 page: standard production-ready
-          }
-        }
+        // Dynamic model selection based on network quality and image count
+        // Get model queue using shared apiKeyManager
+        const modelQueue = getFallbackModels(images.length);
 
         const imageParts = parseImagesForGemini(images);
 
@@ -161,27 +89,6 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
 
         let response = null;
         let lastError = null;
-
-        // Define a fallback queue of models based on the initially selected model
-        const modelQueue: string[] = [modelName];
-
-        // Add fallbacks to the queue ensuring uniqueness
-        const addFallbacks = (fallbacks: string[]) => {
-            for (const m of fallbacks) {
-                if (!modelQueue.includes(m)) {
-                    modelQueue.push(m);
-                }
-            }
-        };
-
-        if (isVerySlowNetwork) {
-             addFallbacks(["gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-2.5-flash"]);
-        } else if (isSlowNetwork) {
-             addFallbacks(["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"]);
-        } else {
-             // For fast networks, fallback from most powerful to most stable/fast
-             addFallbacks(["gemini-2.5-pro", "gemini-3.0-flash-exp", "gemini-2.5-flash", "gemini-2.0-flash"]);
-        }
 
         // Loop through each API key
         for (const apiKey of apiKeys) {
