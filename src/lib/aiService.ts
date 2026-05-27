@@ -1,6 +1,7 @@
 import { generateText } from 'ai';
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google';
 import { supabase } from './supabase';
+import { getApiKeys, getFallbackModels } from './apiKeyManager';
 
 // ─── Type Definitions ─────────────────────────────────────────────────────────
 export interface ToolExecutionResult {
@@ -203,17 +204,40 @@ async function batchEnrollStudents(
 // ─── AI Service Configuration ─────────────────────────────────────────────────
 
 /**
- * Get the configured AI model instance
+ * Get the configured AI model instance with multi-key fallback support
+ * Tries each API key with a queue of fallback models
  */
-function getAiModel() {
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY || process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  
-  if (!apiKey) {
-    return google('gemini-1.5-flash');
+async function getAiModelWithFallback() {
+  const apiKeys = getApiKeys();
+  const modelQueue = getFallbackModels();
+
+  let lastError: Error | null = null;
+
+  // Try each API key
+  for (const apiKey of apiKeys) {
+    // Try each model in the fallback queue for this key
+    for (const model of modelQueue) {
+      try {
+        const customGoogle = createGoogleGenerativeAI({ apiKey });
+        const modelInstance = customGoogle(model);
+        return modelInstance;
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e));
+        console.warn(
+          `Failed to initialize AI model ${model} with key [${apiKey.substring(0, 4)}...]: ${lastError.message}`
+        );
+        // Continue to next model/key
+      }
+    }
   }
 
-  const customGoogle = createGoogleGenerativeAI({ apiKey });
-  return customGoogle('gemini-1.5-flash');
+  // If all keys and models failed, return a default instance
+  // (the actual request will fail, but this maintains API compatibility)
+  if (lastError) {
+    console.error('All API keys and models exhausted. Using default fallback.');
+  }
+
+  return google('gemini-1.5-flash');
 }
 
 /**
@@ -227,7 +251,7 @@ function parseAiCommands(text: string): string {
 }
 
 /**
- * Execute natural language commands through AI
+ * Execute natural language commands through AI with multi-key fallback
  */
 export async function executeAiCommand(
   userMessage: string,
@@ -235,7 +259,7 @@ export async function executeAiCommand(
   currentRoute: string
 ): Promise<string> {
   try {
-    const model = getAiModel();
+    const model = await getAiModelWithFallback();
 
     const result = await generateText({
       model,
