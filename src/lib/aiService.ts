@@ -204,8 +204,45 @@ async function batchEnrollStudents(
 // ─── AI Service Configuration ─────────────────────────────────────────────────
 
 /**
+ * Execute generateText with a single key/model combination
+ * Returns null if failed, otherwise returns the text result
+ */
+async function tryGenerateWithModel(
+  apiKey: string,
+  model: string,
+  systemPrompt: string,
+  userMessage: string
+): Promise<string | null> {
+  try {
+    const customGoogle = createGoogleGenerativeAI({ apiKey });
+    const modelInstance = customGoogle(model);
+
+    const result = await generateText({
+      model: modelInstance,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ],
+    });
+
+    return result.text;
+  } catch (e) {
+    const errorMsg = e instanceof Error ? e.message : String(e);
+    console.warn(
+      `Failed to generate text with model ${model} using key [${apiKey.substring(0, 4)}...]: ${errorMsg}`
+    );
+    return null;
+  }
+}
+
+/**
  * Get the configured AI model instance with multi-key fallback support
  * Tries each API key with a queue of fallback models
+ * 
+ * @deprecated Use executeAiCommand instead, which has proper fallback at API call level
  */
 async function getAiModelWithFallback() {
   const apiKeys = getApiKeys();
@@ -251,7 +288,8 @@ function parseAiCommands(text: string): string {
 }
 
 /**
- * Execute natural language commands through AI with multi-key fallback
+ * Execute natural language commands through AI with multi-key and multi-model fallback
+ * Tries each API key with each model in the fallback queue until one succeeds
  */
 export async function executeAiCommand(
   userMessage: string,
@@ -259,38 +297,78 @@ export async function executeAiCommand(
   currentRoute: string
 ): Promise<string> {
   try {
-    const model = await getAiModelWithFallback();
+    const apiKeys = getApiKeys();
+    const modelQueue = getFallbackModels();
 
-    const result = await generateText({
-      model,
-      system: `You are the Presensys Autonomous Command Engine for a React PWA managing UNIZIK departmental operations.
+    const systemPrompt = `You are the Presensys Autonomous Command Engine for a React PWA managing UNIZIK departmental operations.
 User ID: ${userId}, Current Route: ${currentRoute}
 You help users manage course schedules, student enrollments, and navigate the application.
-Be conversational and helpful. Confirm actions before executing critical operations.`,
-      messages: [
-        {
-          role: 'user',
-          content: userMessage,
-        },
-      ],
-    });
+Be conversational and helpful. Confirm actions before executing critical operations.`;
 
-    const parsedResponse = parseAiCommands(result.text);
-    return parsedResponse;
+    let lastError: Error | null = null;
+    let responseText: string | null = null;
+
+    // Try each API key
+    for (const apiKey of apiKeys) {
+      let keySucceeded = false;
+
+      // Try each model in the fallback queue for this key
+      for (const model of modelQueue) {
+        responseText = await tryGenerateWithModel(
+          apiKey,
+          model,
+          systemPrompt,
+          userMessage
+        );
+
+        if (responseText !== null) {
+          // Success! We got a response from this key/model combination
+          console.log(
+            `AI command executed successfully with model ${model} using key [${apiKey.substring(0, 4)}...]`
+          );
+          keySucceeded = true;
+          break;
+        }
+      }
+
+      // If this key succeeded on any model, we're done
+      if (keySucceeded) {
+        break;
+      } else {
+        console.warn(
+          `All models failed for API key [${apiKey.substring(0, 4)}...]. Trying next key...`
+        );
+      }
+    }
+
+    // If we got a response, return it
+    if (responseText !== null) {
+      const parsedResponse = parseAiCommands(responseText);
+      return parsedResponse;
+    }
+
+    // If all keys and models failed
+    const errorMessage =
+      'All available API keys and models failed. Please try again or check if your API keys are configured correctly.';
+    console.error(errorMessage);
+    return `I encountered an error: ${errorMessage}`;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    return `I encountered an error: ${errorMsg}. Please try again or check if your API key is configured correctly.`;
+    console.error('Unexpected error in executeAiCommand:', errorMsg);
+    return `I encountered an unexpected error: ${errorMsg}. Please try again.`;
   }
 }
 
 /**
- * Stream AI responses
+ * Stream AI responses with multi-key and multi-model fallback
  */
 export async function* streamAiCommand(
   userMessage: string,
   userId: string,
   currentRoute: string
 ): AsyncGenerator<string> {
+  // For now, we execute the command and yield the result
+  // In the future, this could be enhanced to stream token-by-token
   const response = await executeAiCommand(userMessage, userId, currentRoute);
   yield response;
 }
