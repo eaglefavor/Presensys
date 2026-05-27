@@ -103,13 +103,22 @@ export default function AiCommandBar() {
       recognition.onresult = (event: Event) => {
         const speechEvent = event as SpeechRecognitionEvent;
         let transcript = '';
+        let finalTranscript = '';
+        
         for (let i = speechEvent.resultIndex; i < speechEvent.results.length; i++) {
-          transcript += speechEvent.results[i][0].transcript;
+          const result = speechEvent.results[i];
+          const currentTranscript = result[0].transcript;
+          
+          if (result.isFinal) {
+            finalTranscript += currentTranscript;
+          } else {
+            transcript += currentTranscript;
+          }
         }
-        // Check isFinal on the last result in the results array
-        const isFinal = speechEvent.results[speechEvent.results.length - 1]?.isFinal ?? false;
-        if (isFinal) {
-          setInput(transcript);
+        
+        // Only set input when we have a final result
+        if (finalTranscript) {
+          setInput(finalTranscript);
         }
       };
 
