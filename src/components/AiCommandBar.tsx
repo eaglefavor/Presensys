@@ -40,6 +40,19 @@ interface SpeechRecognitionAlternative {
   confidence: number;
 }
 
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: ((event: Event) => void) | null;
+  onend: ((event: Event) => void) | null;
+  onresult: ((event: Event) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 export default function AiCommandBar() {
   const navigate = useNavigate();
   const { profile, session } = useAuthStore();
@@ -66,48 +79,54 @@ export default function AiCommandBar() {
 
   // Initialize Web Speech API
   useEffect(() => {
-    const SpeechRecognition = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
+    const win = window as unknown as Record<string, unknown>;
+    const SpeechRecognitionConstructor = win.SpeechRecognition || win.webkitSpeechRecognition;
+    
+    if (!SpeechRecognitionConstructor || typeof SpeechRecognitionConstructor !== 'function') {
       return;
     }
 
-    const recognition = new (SpeechRecognition as typeof SpeechRecognition)() as SpeechRecognition;
-    recognitionRef.current = recognition;
-    recognition.lang = 'en-NG'; // Nigerian English
-    recognition.continuous = false;
-    recognition.interimResults = true;
+    try {
+      const recognition = new (SpeechRecognitionConstructor as new () => SpeechRecognition)();
+      recognitionRef.current = recognition;
+      recognition.lang = 'en-NG'; // Nigerian English
+      recognition.continuous = false;
+      recognition.interimResults = true;
 
-    recognition.onstart = () => {
-      setIsVoiceListening(true);
-    };
+      recognition.onstart = () => {
+        setIsVoiceListening(true);
+      };
 
-    recognition.onend = () => {
-      setIsVoiceListening(false);
-    };
+      recognition.onend = () => {
+        setIsVoiceListening(false);
+      };
 
-    recognition.onresult = (event: Event) => {
-      const speechEvent = event as SpeechRecognitionEvent;
-      let transcript = '';
-      for (let i = speechEvent.resultIndex; i < speechEvent.results.length; i++) {
-        transcript += speechEvent.results[i][0].transcript;
-      }
-      if (speechEvent.isFinal) {
-        setInput(transcript);
-      }
-    };
+      recognition.onresult = (event: Event) => {
+        const speechEvent = event as SpeechRecognitionEvent;
+        let transcript = '';
+        for (let i = speechEvent.resultIndex; i < speechEvent.results.length; i++) {
+          transcript += speechEvent.results[i][0].transcript;
+        }
+        if (speechEvent.isFinal) {
+          setInput(transcript);
+        }
+      };
 
-    recognition.onerror = (event: Event) => {
-      const errorEvent = event as SpeechRecognitionErrorEvent;
-      console.error('Speech recognition error:', errorEvent.error);
-      toast.error(`Voice error: ${errorEvent.error}`);
-      setIsVoiceListening(false);
-    };
+      recognition.onerror = (event: Event) => {
+        const errorEvent = event as SpeechRecognitionErrorEvent;
+        console.error('Speech recognition error:', errorEvent.error);
+        toast.error(`Voice error: ${errorEvent.error}`);
+        setIsVoiceListening(false);
+      };
 
-    return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
-    };
+      return () => {
+        if (recognitionRef.current) {
+          recognitionRef.current.abort();
+        }
+      };
+    } catch (error) {
+      console.error('Failed to initialize speech recognition:', error);
+    }
   }, []);
 
   // Handle voice input
