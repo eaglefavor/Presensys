@@ -22,21 +22,7 @@ Then add it to `.env.local`:
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-### 3. Optional: System Environment Variable
-
-Alternatively, set it as a system environment variable:
-
-**On Linux/Mac:**
-```bash
-export GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key_here
-```
-
-**On Windows (PowerShell):**
-```powershell
-$env:GOOGLE_GENERATIVE_AI_API_KEY='your_gemini_api_key_here'
-```
-
-### 4. Restart Development Server
+⚠️ **Important Note:** Since this is a Vite-based React application, the `VITE_*` prefix means the API key is embedded into the client bundle at build time. Never use sensitive keys in production without a server-side proxy.
 
 After adding the environment variable:
 
@@ -49,7 +35,6 @@ npm run dev
 | Variable | Type | Required | Description |
 |----------|------|----------|-------------|
 | `VITE_GEMINI_API_KEY` | string | Yes | Gemini API key for AI command execution |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | string | No | System env var (fallback if VITE_ not set) |
 
 ## Security Notes
 

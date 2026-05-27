@@ -63,6 +63,18 @@ const Layout: React.FC = () => {
     };
   }, []);
 
+  // Handle Ctrl+/ keyboard shortcut for AI Command Bar toggle
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        ui.setAiCommandBarVisibility(!ui.isAiCommandBarVisible);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [ui]);
+
   useEffect(() => {
     // Subscribe to the engine's status events for accurate real-time feedback
     const unsubscribe = realtimeSync.onStatusChange((status) => {

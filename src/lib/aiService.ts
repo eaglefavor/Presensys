@@ -133,7 +133,7 @@ async function manageSchedules(
   try {
     const { data: course, error: courseError } = await supabase
       .from('courses')
-      .select('id, semesterId')
+      .select('id')
       .eq('code', courseCode)
       .single();
 
@@ -379,13 +379,10 @@ async function getAiModelWithFallback() {
     }
   }
 
-  // If all keys and models failed, return a default instance
-  // (the actual request will fail, but this maintains API compatibility)
-  if (lastError) {
-    console.error('All API keys and models exhausted. Using default fallback.');
-  }
-
-  return google('gemini-1.5-flash');
+  // If all keys and models failed, throw an error
+  const errorMessage = 'No Gemini API key configured. Please set VITE_GEMINI_API_KEY in your environment variables.';
+  console.error(errorMessage);
+  throw new Error(errorMessage);
 }
 
 /**

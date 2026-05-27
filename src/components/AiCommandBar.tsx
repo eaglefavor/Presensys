@@ -19,7 +19,6 @@ interface SpeechRecognitionErrorEvent extends Event {
 interface SpeechRecognitionEvent extends Event {
   resultIndex: number;
   results: SpeechRecognitionResultList;
-  isFinal: boolean;
 }
 
 interface SpeechRecognitionResultList {
@@ -107,7 +106,9 @@ export default function AiCommandBar() {
         for (let i = speechEvent.resultIndex; i < speechEvent.results.length; i++) {
           transcript += speechEvent.results[i][0].transcript;
         }
-        if (speechEvent.isFinal) {
+        // Check isFinal on the last result in the results array
+        const isFinal = speechEvent.results[speechEvent.results.length - 1]?.isFinal ?? false;
+        if (isFinal) {
           setInput(transcript);
         }
       };
@@ -186,6 +187,9 @@ export default function AiCommandBar() {
 
       setMessages(prev => [...prev, assistantMessage]);
 
+      // Only show toast if no more specific action was taken
+      let actionTaken = false;
+
       // Handle UI state changes from tool execution
       if (response.includes('NAVIGATE')) {
         // Extract route from response and navigate
@@ -193,25 +197,29 @@ export default function AiCommandBar() {
         if (routeMatch) {
           navigate(routeMatch[1]);
           ui.setNavigation(routeMatch[1]);
+          actionTaken = true;
         }
       }
 
-      if (response.includes('FILTER_LIST') || response.includes('filter')) {
+      if (response.includes('FILTER_LIST')) {
         const courseMatch = response.match(/TFS\s*\d+|course[:\s]+([A-Z]+\s*\d+)/i);
         if (courseMatch) {
           ui.setCourseFilter(courseMatch[0]);
+          actionTaken = true;
         }
       }
 
-      if (response.includes('OPEN_BLITZ_MODAL') || response.includes('blitz')) {
+      if (response.includes('OPEN_BLITZ_MODAL')) {
         ui.triggerBlitzModal(true);
+        actionTaken = true;
       }
 
-      if (response.includes('success') || response.includes('enrolled') || response.includes('created')) {
-        toast.success('Command executed successfully');
+      // Only show success toast if a specific action was taken
+      if (actionTaken || response.toLowerCase().includes('success') || response.toLowerCase().includes('enrolled') || response.toLowerCase().includes('created')) {
+        if (!actionTaken) {
+          toast.success('Command executed successfully');
+        }
       }
-
-      toast.success('Command processed');
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       
@@ -242,15 +250,16 @@ export default function AiCommandBar() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-96 max-h-96 bg-white shadow-2xl rounded-xl border border-slate-200 flex flex-col transition-all duration-300">
+    <div className="position-fixed d-flex flex-column bg-white shadow-lg rounded-4 border" style={{ bottom: '24px', right: '24px', width: '400px', maxHeight: '400px', zIndex: 50, borderColor: 'var(--border-color)' }}>
       {/* Header */}
       <div 
-        className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-blue-100 rounded-t-xl cursor-pointer hover:from-blue-100 hover:to-blue-150"
+        className="d-flex align-items-center justify-content-between p-3 border-bottom rounded-top-4"
         onClick={() => setIsExpanded(!isExpanded)}
+        style={{ cursor: 'pointer', backgroundColor: 'var(--bg-gray)', borderColor: 'var(--border-color)' }}
       >
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-          <span className="font-semibold text-sm text-slate-800">Presensys AI Command</span>
+        <div className="d-flex align-items-center gap-2">
+          <div className="position-relative" style={{ width: '8px', height: '8px', backgroundColor: 'var(--primary-blue)', borderRadius: '50%', animation: 'pulse 2s infinite' }}></div>
+          <span className="fw-semibold small" style={{ color: 'var(--text-dark)' }}>Presensys AI Command</span>
         </div>
         <button
           type="button"
@@ -258,19 +267,22 @@ export default function AiCommandBar() {
             e.stopPropagation();
             ui.setAiCommandBarVisibility(false);
           }}
-          className="text-slate-500 hover:text-slate-700 text-lg"
+          className="btn btn-link p-0"
+          style={{ color: 'var(--text-muted)', fontSize: '18px' }}
+          aria-label="Close AI Command Bar"
+          title="Close"
         >
           ✕
         </button>
       </div>
 
       {/* Messages Display */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+      <div className="flex-grow-1 overflow-y-auto p-3 d-flex flex-column gap-3" style={{ backgroundColor: 'var(--soft-white)' }}>
         {messages.length === 0 ? (
-          <div className="text-center text-slate-500 text-sm py-8">
-            <div className="text-2xl mb-2">🤖</div>
+          <div className="text-center" style={{ color: 'var(--text-muted)', fontSize: '14px', paddingTop: '32px' }}>
+            <div style={{ fontSize: '32px', marginBottom: '8px' }}>🤖</div>
             <p>No commands yet. Try:</p>
-            <p className="text-xs mt-2 text-slate-400">
+            <p className="xx-small" style={{ color: 'var(--text-muted)', marginTop: '8px', fontSize: '12px' }}>
               "Filter view to TFS 214"<br />
               "Show Dr Okadigwe's timeslot"<br />
               "Enroll John Doe to TFS 214"
@@ -280,20 +292,26 @@ export default function AiCommandBar() {
           messages.map((msg, idx) => (
             <div
               key={idx}
-              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`d-flex ${msg.role === 'user' ? 'justify-content-end' : 'justify-content-start'}`}
             >
               <div
-                className={`max-w-xs px-3 py-2 rounded-lg text-sm ${
-                  msg.role === 'user'
-                    ? 'bg-blue-600 text-white rounded-br-none'
-                    : 'bg-slate-200 text-slate-800 rounded-bl-none'
-                }`}
+                className="px-3 py-2 rounded"
+                style={{
+                  maxWidth: '300px',
+                  fontSize: '14px',
+                  backgroundColor: msg.role === 'user' ? 'var(--primary-blue)' : '#e2e8f0',
+                  color: msg.role === 'user' ? 'white' : 'var(--text-dark)',
+                  borderBottomLeftRadius: msg.role === 'user' ? '4px' : '0px',
+                  borderBottomRightRadius: msg.role === 'user' ? '0px' : '4px',
+                }}
               >
-                <p>{msg.content}</p>
+                <p className="mb-1">{msg.content}</p>
                 {showTimestamp && (
-                  <p className={`text-xs mt-1 ${
-                    msg.role === 'user' ? 'text-blue-200' : 'text-slate-500'
-                  }`}>
+                  <p className="xx-small mb-0" style={{
+                    fontSize: '12px',
+                    marginTop: '4px',
+                    color: msg.role === 'user' ? 'rgba(255,255,255,0.8)' : 'var(--text-muted)'
+                  }}>
                     {formatTime(msg.timestamp)}
                   </p>
                 )}
@@ -302,12 +320,12 @@ export default function AiCommandBar() {
           ))
         )}
         {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-slate-200 text-slate-800 px-3 py-2 rounded-lg text-sm rounded-bl-none">
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce"></span>
-                <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></span>
-                <span className="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+          <div className="d-flex justify-content-start">
+            <div className="px-3 py-2 rounded" style={{ backgroundColor: '#e2e8f0', color: 'var(--text-dark)', fontSize: '14px', borderBottomLeftRadius: '0px', borderBottomRightRadius: '4px' }}>
+              <div className="d-flex gap-1">
+                <span className="d-inline-block" style={{ width: '8px', height: '8px', backgroundColor: 'var(--text-muted)', borderRadius: '50%', animation: 'bounce 1.4s infinite' }}></span>
+                <span className="d-inline-block" style={{ width: '8px', height: '8px', backgroundColor: 'var(--text-muted)', borderRadius: '50%', animation: 'bounce 1.4s infinite 0.1s' }}></span>
+                <span className="d-inline-block" style={{ width: '8px', height: '8px', backgroundColor: 'var(--text-muted)', borderRadius: '50%', animation: 'bounce 1.4s infinite 0.2s' }}></span>
               </div>
             </div>
           </div>
@@ -316,24 +334,24 @@ export default function AiCommandBar() {
       </div>
 
       {/* Input Area */}
-      <form onSubmit={handleSubmit} className="border-t p-3 bg-white rounded-b-xl space-y-2">
-        <div className="flex items-center gap-2 bg-slate-50 rounded-lg border border-slate-200 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
+      <form onSubmit={handleSubmit} className="border-top p-3" style={{ backgroundColor: 'white', borderColor: 'var(--border-color)' }}>
+        <div className="mb-2 d-flex align-items-center gap-2 rounded-3" style={{ backgroundColor: 'var(--bg-gray)', border: '1px solid var(--border-color)', padding: '0' }}>
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Tell Presensys what to do..."
-            className="flex-1 px-3 py-2 bg-transparent focus:outline-none text-sm text-slate-800 placeholder-slate-400"
+            className="form-control border-0 bg-transparent focus-ring-0"
+            style={{ fontSize: '14px' }}
             disabled={isLoading || isVoiceListening}
           />
           <button
             type="button"
             onClick={triggerVoiceCapture}
-            className={`px-2 py-2 transition-colors ${
-              isVoiceListening
-                ? 'text-red-600 hover:text-red-700'
-                : 'text-slate-400 hover:text-blue-600'
-            }`}
+            className="btn btn-link p-2"
+            style={{
+              color: isVoiceListening ? 'var(--text-danger)' : 'var(--text-muted)',
+            }}
             title={isVoiceListening ? 'Stop listening' : 'Start voice input'}
             disabled={isLoading}
           >
@@ -342,18 +360,20 @@ export default function AiCommandBar() {
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
-            className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-slate-300 text-sm font-medium transition-colors"
+            className="btn btn-primary px-3 py-2 m-1"
+            style={{ fontSize: '14px' }}
           >
             {isLoading ? '⏳' : '→'}
           </button>
         </div>
 
         {/* Quick actions */}
-        <div className="flex gap-1 flex-wrap text-xs">
+        <div className="d-flex gap-1 flex-wrap" style={{ fontSize: '12px' }}>
           <button
             type="button"
             onClick={() => setShowTimestamp(!showTimestamp)}
-            className="px-2 py-1 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+            className="btn btn-sm"
+            style={{ backgroundColor: 'var(--bg-gray)', color: 'var(--text-dark)', border: 'none' }}
             title="Toggle timestamps"
           >
             🕐
@@ -361,7 +381,8 @@ export default function AiCommandBar() {
           <button
             type="button"
             onClick={() => setMessages([])}
-            className="px-2 py-1 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+            className="btn btn-sm"
+            style={{ backgroundColor: 'var(--bg-gray)', color: 'var(--text-dark)', border: 'none' }}
             title="Clear history"
           >
             🗑️
@@ -371,13 +392,25 @@ export default function AiCommandBar() {
             onClick={() => {
               setInput('Filter view to TFS 214');
             }}
-            className="px-2 py-1 bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors flex-1"
+            className="btn btn-sm flex-grow-1"
+            style={{ backgroundColor: 'var(--bg-gray)', color: 'var(--text-dark)', border: 'none' }}
             title="Example command"
           >
             📋 TFS 214
           </button>
         </div>
       </form>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+        @keyframes bounce {
+          0%, 80%, 100% { transform: translateY(0); }
+          40% { transform: translateY(-8px); }
+        }
+      `}</style>
     </div>
   );
 }

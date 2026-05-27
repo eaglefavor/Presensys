@@ -23,7 +23,7 @@ src/
 {
   "@ai-sdk/google": "^3.0.79",    // Gemini AI integration
   "ai": "^6.0.191",               // Vercel AI SDK
-  "zod": "^3.x.x"                 // Schema validation
+  "zod": "^4.4.3"                 // Schema validation
 }
 ```
 
@@ -104,7 +104,7 @@ src/
   - 🔔 **Toast Notifications** - Real-time feedback
   - ⌨️ **Text Input** - Natural language command entry
 - **Styling:**
-  - Tailwind CSS utility classes
+  - Bootstrap CSS utility classes and inline styles
   - Gradient headers
   - Smooth animations and transitions
   - Dark mode compatible
@@ -146,7 +146,8 @@ Text Commands:
 
 Voice Commands:
 - Click 🎙️ button and speak naturally
-- System will transcribe and execute automatically
+- System transcribes text into the input field
+- Press Send button (or press Enter) to execute the command
 ```
 
 ## 🔒 Security Features
@@ -163,9 +164,9 @@ All database operations respect Supabase RLS policies:
 - Audit trail for compliance
 
 ### API Key Protection
-- Never committed to version control
-- Stored in `.env.local` (in `.gitignore`)
-- Safely passed to Gemini only when needed
+- Never committed to version control (`.gitignore`)
+- Configured via `.env.local` (development) or environment variables (production)
+- ⚠️ **Important:** VITE_* prefixed variables are embedded into the client bundle at build time and are visible in the shipped JavaScript. Treat as a client-side secret only and do not use in production without a server-side proxy. Consider implementing a server-side API proxy for production use.
 
 ## 📚 Documentation Files
 

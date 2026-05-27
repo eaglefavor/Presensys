@@ -27,7 +27,8 @@ Vercel AI SDK (generateText)
             ├─ courses table
             ├─ lecturers table
             ├─ students table
-            └─ course_schedules table
+            ├─ enrollments table (student-course membership)
+            └─ course_schedules table (course timeslots)
 ```
 
 ## Setup & Configuration
@@ -40,11 +41,7 @@ Create a `.env.local` file in the project root with your Gemini API key:
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
-Alternatively, set the system environment variable:
-
-```bash
-export GOOGLE_GENERATIVE_AI_API_KEY=your_gemini_api_key_here
-```
+⚠️ **Note:** This is a client-side application (Vite/React PWA). The `VITE_*` prefix means the API key is embedded into the client bundle at build time. Use this only for development or with a server-side proxy for production.
 
 ### 2. Dependencies
 
@@ -180,8 +177,9 @@ Provides the user interface for AI command input:
 
 1. Click the 🎙️ button in the AI Command Bar
 2. Speak your command clearly
-3. Wait for recognition to complete (green indicator)
-4. The command will be automatically submitted
+3. Wait for recognition to complete (red indicator turns off)
+4. The transcribed text will be placed in the input field
+5. Press the Send button (→) or press Enter to submit the command
 
 ## Integration with Layout
 
