@@ -22,7 +22,7 @@ export interface UiState {
 
 export const useUiStore = create<UiState>((set) => ({
   // Initial state
-  currentView: '/dashboard',
+  currentView: '/',
   isBlitzActive: false,
   isAiCommandBarVisible: false,
   activeCourseFilter: null,
