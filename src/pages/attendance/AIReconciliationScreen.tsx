@@ -55,6 +55,41 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         // Get model queue using shared apiKeyManager
         const modelQueue = getFallbackModels(images.length);
 
+        const imageParts = parseImagesForGemini(images);
+
+        const enrollmentsContext = enrollments.map(e => `${e.regNumber}: ${e.name}`).join('\n');
+
+        const prompt = `
+          You are an advanced data extraction and reconciliation tool. Attached are ${images.length} image(s) of a university attendance sheet (front and potentially back).
+          Your task is to extract all handwritten 10-digit Registration Numbers and their corresponding Names, but with a CRITICAL cross-referencing step against a known database.
+
+          --- DATABASE CONTEXT ---
+          Here is the list of enrolled students (Registration Number: Name):
+          ${enrollmentsContext}
+          ------------------------
+
+          --- REGISTRATION NUMBER SEGMENTATION ---
+          Understand that the 10-digit Registration Numbers are segmented:
+          - First 4 digits: Admission Date / Year (e.g., "2023").
+          - Next 3 digits: Static Course / Department Code (e.g., "104", "105").
+          - Last 3 digits: Unique Dynamic Student Identifier (e.g., "001", "003").
+
+          CRITICAL RULES & WORKFLOW:
+          1. Read the handwritten registration numbers and names from the images.
+          2. CROSS-REFERENCE: For every handwritten entry, cross-reference it against the provided DATABASE CONTEXT.
+             If handwriting is messy or unclear, heavily rely on the unique last 3 digits and the student's name to accurately infer the full 10-digit Registration Number.
+          3. If the first 7 digits are ambiguous, assume they match the common patterns found in the database.
+          4. Merge the data from all images into a single list.
+          5. Ignore duplicate Registration Numbers (e.g., if ink bled through the paper).
+          6. Ignore reversed text or bleed-through.
+          7. Output the best-matched Registration Number from the database if a clear correlation is found.
+          8. Return STRICTLY a valid JSON array of objects with keys "regNumber" (string) and "name" (string).
+          9. Do not include markdown blocks like \`\`\`json or \`\`\`. Output ONLY the raw JSON array.
+        `;
+
+        let response = null;
+        let lastError = null;
+
         // Loop through each API key
         for (const apiKey of apiKeys) {
             let keySuccess = false;
