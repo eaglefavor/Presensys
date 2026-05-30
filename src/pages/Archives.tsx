@@ -682,10 +682,10 @@ export default function Archives() {
     // Performance optimization: Pre-calculate counts O(N+M)
     const studentStatsMap = new Map<string, { present: number; absent: number; excused: number }>();
     for (const r of (records || []) as unknown as SupabaseSessionRecordRow[]) {
-      if (!studentStatsMap.has((r as any).student_id)) {
-        studentStatsMap.set((r as any).student_id, { present: 0, absent: 0, excused: 0 });
+      if (!studentStatsMap.has((r as unknown as SupabaseSessionRecordRow).student_id)) {
+        studentStatsMap.set((r as unknown as SupabaseSessionRecordRow).student_id, { present: 0, absent: 0, excused: 0 });
       }
-      const stats = studentStatsMap.get((r as any).student_id)!;
+      const stats = studentStatsMap.get((r as unknown as SupabaseSessionRecordRow).student_id)!;
       if (r.status === 'present') stats.present++;
       else if (r.status === 'absent') stats.absent++;
       else if (r.status === 'excused') stats.excused++;

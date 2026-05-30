@@ -231,7 +231,7 @@ export class RealtimeSyncEngine {
     try {
       // 1. Pull first so parents exist before children are pushed
       await this.pullChanges();
-      // 2. Fix any locally malformed IDs (self-healing safety net)
+      // 2. Fix unknown locally malformed IDs (self-healing safety net)
       await this.selfHealData();
       // 3. Push local changes to server
       await this.pushChanges();
@@ -291,7 +291,7 @@ export class RealtimeSyncEngine {
 
       const processTable = async <T extends LocalSyncRecord>(
         tableName: TableName,
-        dexieTable: Table<any, number>,
+        dexieTable: Table<unknown, number>,
         mapToLocal: (serverRow: ServerRow) => T
       ) => {
         const tableData = edgeResponse.results[tableName] as ServerRow[] | undefined;
@@ -299,7 +299,7 @@ export class RealtimeSyncEngine {
 
         let maxUpdatedAt = '';
         const serverIds = tableData.map(row => row.id);
-        const localItems = await dexieTable.where('serverId').anyOf(serverIds).toArray();
+        const localItems = await dexieTable.where('serverId').unknownOf(serverIds).toArray();
         const localMap = new Map(localItems.map(item => [item.serverId, item]));
         const updates: Array<{ key: number; changes: Partial<T> & { synced: number } }> = [];
         const inserts: T[] = [];
@@ -329,7 +329,7 @@ export class RealtimeSyncEngine {
         }
 
         await db.transaction('rw', dexieTable, async () => {
-          if (updates.length > 0) await (dexieTable as any).bulkUpdate(updates);
+          if (updates.length > 0) await (dexieTable as unknown).bulkUpdate(updates);
           if (inserts.length > 0) await dexieTable.bulkAdd(inserts);
         });
 
@@ -343,44 +343,44 @@ export class RealtimeSyncEngine {
           serverId: s.id, name: s.name, startDate: s.start_date, endDate: s.end_date,
           isActive: s.is_active, isArchived: s.is_archived,
           userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-        }) as any),
+        }) as unknown),
         processTable('students', db.students, (st) => ({
           serverId: st.id, regNumber: st.reg_number, name: st.name, email: st.email, phone: st.phone,
           userId: st.user_id, isDeleted: st.is_deleted, updatedAt: st.updated_at, createdAt: st.created_at,
-        }) as any),
+        }) as unknown),
         processTable('courses', db.courses, (c) => ({
           serverId: c.id, code: c.code, title: c.title, semesterId: c.semester_id,
           dayOfWeek: c.day_of_week ?? c.day, time: c.time, lecturers: c.lecturers,
           userId: c.user_id, isDeleted: c.is_deleted, updatedAt: c.updated_at, createdAt: c.created_at,
-        }) as any),
+        }) as unknown),
         processTable('enrollments', db.enrollments, (e) => ({
           serverId: e.id, studentId: e.student_id, courseId: e.course_id,
           userId: e.user_id, isDeleted: e.is_deleted, updatedAt: e.updated_at, createdAt: e.created_at,
-        }) as any),
+        }) as unknown),
         processTable('attendance_sessions', db.attendanceSessions, (s) => ({
           serverId: s.id, courseId: s.course_id, date: s.date, title: s.title, lecturerId: s.lecturer_id,
           userId: s.user_id, isDeleted: s.is_deleted, updatedAt: s.updated_at, createdAt: s.created_at,
-        }) as any),
+        }) as unknown),
         processTable('lecturers', db.lecturers, (l) => ({
           serverId: l.id, name: l.name,
           userId: l.user_id, isDeleted: l.is_deleted, updatedAt: l.updated_at, createdAt: l.created_at,
-        }) as any),
+        }) as unknown),
         processTable('attendance_records', db.attendanceRecords, (r) => ({
           serverId: r.id, sessionId: r.session_id, studentId: r.student_id,
           status: r.status,
           timestamp: typeof r.marked_at === 'number' ? r.marked_at : new Date(r.marked_at as string).getTime(),
           userId: r.user_id, isDeleted: r.is_deleted, updatedAt: r.updated_at, createdAt: r.created_at,
-        }) as any),
+        }) as unknown),
         processTable('course_schedules', db.courseSchedules, (cs) => ({
           serverId: cs.id, courseId: cs.course_id, dayOfWeek: cs.day_of_week,
           startTime: cs.start_time, endTime: cs.end_time,
           userId: cs.user_id, isDeleted: cs.is_deleted, updatedAt: cs.updated_at, createdAt: cs.created_at,
-        }) as any),
+        }) as unknown),
         processTable('student_credentials', db.studentCredentials, (sc) => ({
           serverId: sc.id, studentId: sc.student_id, credentialId: sc.credential_id,
           publicKey: sc.public_key, counter: sc.counter,
           userId: sc.user_id, isDeleted: sc.is_deleted, updatedAt: sc.updated_at, createdAt: sc.created_at,
-        }) as any),
+        }) as unknown),
       ]);
     } catch (err) {
       console.error('Failed to pull sync bundle', err);
@@ -705,7 +705,7 @@ export class RealtimeSyncEngine {
                 serverId: serverItem.id,
                 synced: 1,
                 updatedAt: serverItem.updated_at
-              } as any);
+              } as unknown);
               const ob = outboxAttempts.get(originalLocalId);
               if (ob) await db.outbox.update(ob.id, { done: 1 }).catch(() => {});
             }
@@ -737,7 +737,7 @@ export class RealtimeSyncEngine {
         if (ob) doneOutboxIds.push(ob.id);
       }
 
-      if (updates.length > 0) await (table as any).bulkUpdate(updates);
+      if (updates.length > 0) await (table as unknown).bulkUpdate(updates);
       // Mark outbox entries as done
       await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
     }
@@ -906,7 +906,7 @@ export class RealtimeSyncEngine {
 
     if (brokenSessions.length > 0) {
       const uniqueCourseIds = Array.from(new Set(brokenSessions.map(s => Number(s.courseId))));
-      const courses = await db.courses.where('id').anyOf(uniqueCourseIds).toArray();
+      const courses = await db.courses.where('id').unknownOf(uniqueCourseIds).toArray();
       const courseMap = new Map(courses.map(c => [c.id, c]));
 
       const updates = [];
@@ -967,7 +967,7 @@ export class RealtimeSyncEngine {
       const oldServerIds = oldSessions.map(s => s.serverId);
       const existingSessionIds = await db.attendanceRecords
         .where('sessionId')
-        .anyOf(oldServerIds)
+        .unknownOf(oldServerIds)
         .uniqueKeys();
 
       const existingSessionIdSet = new Set(existingSessionIds);
@@ -1010,14 +1010,14 @@ export class RealtimeSyncEngine {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           // Channel connected or reconnected → run a catch-up pull to close
-          // any gap in coverage while the WebSocket was down.
+          // unknown gap in coverage while the WebSocket was down.
           console.log('Sync: Realtime channel connected/reconnected, running catch-up pull.');
           this.pullChanges().catch(e => console.error('Sync: Catch-up pull failed', e));
         }
       });
   }
 
-  private async handleRealtimeEvent<T extends LocalSyncRecord>(tableName: TableName, table: Table<any, number>, payload: RealtimePayload) {
+  public async handleRealtimeEvent<T extends LocalSyncRecord>(tableName: TableName, table: Table<unknown, number>, payload: RealtimePayload) {
     const { eventType } = payload;
     const newRecord = payload.new as ServerRow;
     const oldRecord = payload.old as ServerRow;
@@ -1035,7 +1035,7 @@ export class RealtimeSyncEngine {
       const mapped = this.mapServerToLocal(tableName, newRecord) as Partial<T>;
 
       if (localItem && localItem.id !== undefined) {
-        await table.update(localItem.id, { ...mapped, synced: 1 } as any);
+        await table.update(localItem.id, { ...mapped, synced: 1 } as unknown);
       } else {
         // Heavy tables: only insert via periodic pull to avoid bloating local storage
         const isHeavy = tableName === 'attendance_records' || tableName === 'attendance_sessions';
@@ -1052,7 +1052,7 @@ export class RealtimeSyncEngine {
 
       // Mark as soft-deleted + synced (will be purged by meticulousPurge on next sync)
       if (localItem.id !== undefined) {
-        await table.update(localItem.id, { isDeleted: 1, synced: 1 } as any);
+        await table.update(localItem.id, { isDeleted: 1, synced: 1 } as unknown);
       }
     }
   }

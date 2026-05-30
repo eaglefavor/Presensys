@@ -13,11 +13,13 @@
     "db:deploy": "node scripts/deploy_sql.js"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.79",
     "@google/genai": "^1.50.1",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.0",
     "@supabase/supabase-js": "^2.105.4",
     "@types/uuid": "^10.0.0",
+    "ai": "^6.0.191",
     "bootstrap": "^5.3.8",
     "dexie": "^4.2.1",
     "dexie-react-hooks": "^4.2.0",
@@ -35,6 +37,7 @@
     "uuid": "^13.0.0",
     "workbox-window": "^7.4.0",
     "xlsx": "^0.18.5",
+    "zod": "^4.4.3",
     "zustand": "^5.0.9"
   },
   "devDependencies": {
