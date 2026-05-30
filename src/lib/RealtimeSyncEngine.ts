@@ -1017,7 +1017,7 @@ export class RealtimeSyncEngine {
       });
   }
 
-  private async handleRealtimeEvent<T extends LocalSyncRecord>(tableName: TableName, table: Table<any, number>, payload: RealtimePayload) {
+  public async handleRealtimeEvent<T extends LocalSyncRecord>(tableName: TableName, table: Table<any, number>, payload: RealtimePayload) {
     const { eventType } = payload;
     const newRecord = payload.new as ServerRow;
     const oldRecord = payload.old as ServerRow;
