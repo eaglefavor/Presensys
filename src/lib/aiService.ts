@@ -1,6 +1,7 @@
 import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { supabase } from './supabase';
+import { db } from '../db/db';
 import { getApiKeys, getFallbackModels } from './apiKeyManager';
 
 // ─── Key Usage Tracking (Session-only) ───────────────────────────────────────
@@ -373,10 +374,25 @@ export async function executeAiCommand(
     const apiKeys = getApiKeys();
     const modelQueue = getFallbackModels();
 
+    // Fetch current system state from local Dexie database for accurate context
+    const currentCourses = await db.courses.filter(c => c.isDeleted !== 1).toArray();
+    const courseContext = currentCourses.length > 0
+      ? `Current active courses:\n${currentCourses.map(c => `- ${c.code}: ${c.title}`).join('\n')}`
+      : 'There are currently no active courses in the system.';
+
     const systemPrompt = `You are the Presensys Autonomous Command Engine for a React PWA managing UNIZIK departmental operations.
 User ID: ${userId}, Current Route: ${currentRoute}
+
+System State Context:
+${courseContext}
+
 You help users manage course schedules, student enrollments, and navigate the application.
-Be conversational and helpful. Confirm actions before executing critical operations.`;
+Be conversational and helpful. Confirm actions before executing critical operations. If asked about courses, ONLY reference courses listed in the System State Context above. Do not hallucinate courses.
+
+If a user asks to navigate somewhere, use the pattern route: '/path'
+For example, to navigate to courses, you must reply with the exact text:
+route: '/courses'
+If they ask to create a course, direct them to navigate to the courses page using the route: '/courses' pattern and inform them to use the "Add Course" button on that page.`;
 
 
     let responseText: string | null = null;
