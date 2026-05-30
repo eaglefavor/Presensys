@@ -12,7 +12,7 @@ export type AppMode = 'standalone' | 'fullscreen' | 'browser';
  */
 export function detectAppMode(): AppMode {
   // Check if running in standalone mode (iOS)
-  if ((navigator as unknown).standalone === true) {
+  if ((navigator as any).standalone === true) {
     return 'standalone';
   }
 
