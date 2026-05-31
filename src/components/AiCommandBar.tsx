@@ -102,7 +102,7 @@ export default function AiCommandBar() {
 
       recognition.onresult = (event: Event) => {
         const speechEvent = event as SpeechRecognitionEvent;
-        // let transcript = '';
+        // // let transcript = '';
         let finalTranscript = '';
 
         for (let i = speechEvent.resultIndex; i < speechEvent.results.length; i++) {
@@ -112,7 +112,7 @@ export default function AiCommandBar() {
           if (result.isFinal) {
             finalTranscript += currentTranscript;
           } else {
-            // transcript += currentTranscript;
+            // // transcript += currentTranscript;
           }
         }
 
