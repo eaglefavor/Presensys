@@ -374,22 +374,63 @@ export async function executeAiCommand(
     const apiKeys = getApiKeys();
     const modelQueue = getFallbackModels();
 
-    // Fetch current system state from local Dexie database for accurate context
-    const currentCourses = await db.courses.filter(c => c.isDeleted !== 1).toArray();
-    const courseContext = currentCourses.length > 0
-      ? `Current active courses:\n${currentCourses.map(c => `- ${c.code}: ${c.title}`).join('\n')}`
-      : 'There are currently no active courses in the system.';
+    // Deep System State Extraction
+    const [
+      semesters,
+      students,
+      courses,
+      sessions,
+      records,
+      lecturers,
+
+    ] = await Promise.all([
+      db.semesters.filter(s => s.isDeleted !== 1).toArray(),
+      db.students.filter(s => s.isDeleted !== 1).toArray(),
+      db.courses.filter(c => c.isDeleted !== 1).toArray(),
+      db.attendanceSessions.filter(s => s.isDeleted !== 1).toArray(),
+      db.attendanceRecords.filter(r => r.isDeleted !== 1).toArray(),
+      db.lecturers.filter(l => l.isDeleted !== 1).toArray(),
+    ]);
+
+    const activeSemester = semesters.find(s => s.isActive);
+    const semesterInfo = activeSemester ? `Active Semester: ${activeSemester.name} (${activeSemester.startDate} to ${activeSemester.endDate})` : 'No active semester.';
+
+    const studentsSummary = `Total Students: ${students.length}\n${students.slice(0, 50).map(s => `- ${s.name} (${s.regNumber})`).join('\n')}${students.length > 50 ? '\n...and more' : ''}`;
+
+    const coursesSummary = `Total Courses: ${courses.length}\n${courses.map(c => `- ${c.code}: ${c.title}`).join('\n')}`;
+
+    const lecturersSummary = `Total Lecturers: ${lecturers.length}\n${lecturers.map(l => `- ${l.name}`).join('\n')}`;
+
+    const sessionsSummary = `Total Attendance Sessions: ${sessions.length}\nRecent Sessions:\n${sessions.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 10).map(s => `- ${s.title} on ${s.date}`).join('\n')}`;
+
+    const recordsSummary = `Total Attendance Records: ${records.length}. Present: ${records.filter(r => r.status === 'present').length}, Absent: ${records.filter(r => r.status === 'absent').length}, Excused: ${records.filter(r => r.status === 'excused').length}`;
+
+    const systemStateContext = `
+--- DEEP SYSTEM STATE (LIVE DATA) ---
+${semesterInfo}
+
+${coursesSummary}
+
+${lecturersSummary}
+
+${studentsSummary}
+
+${sessionsSummary}
+
+${recordsSummary}
+-------------------------------------
+`;
 
     const systemPrompt = `You are the Presensys Autonomous Command Engine for a React PWA managing UNIZIK departmental operations.
 User ID: ${userId}, Current Route: ${currentRoute}
 
-System State Context:
-${courseContext}
+${systemStateContext}
 
-You help users manage course schedules, student enrollments, and navigate the application.
-Be conversational and helpful. Confirm actions before executing critical operations. If asked about courses, ONLY reference courses listed in the System State Context above. Do not hallucinate courses.
+You have deep, elaborate connections to the most basic information and functions of the system, including dashboard stats, students, courses, attendance data, lecturer data, profile data, and data archives. You must be accurate and use ONLY the live data provided above.
+If a user queries for information, you must analyze the DEEP SYSTEM STATE. Do not hallucinate or guess.
 
 If a user asks to navigate somewhere, use the pattern route: '/path'
+Available paths: /dashboard, /students, /courses, /lecturers, /attendance, /archives, /settings.
 For example, to navigate to courses, you must reply with the exact text:
 route: '/courses'
 If they ask to create a course, direct them to navigate to the courses page using the route: '/courses' pattern and inform them to use the "Add Course" button on that page.`;
