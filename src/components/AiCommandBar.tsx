@@ -257,7 +257,7 @@ export default function AiCommandBar() {
   }
 
   return (
-    <div className="position-fixed d-flex flex-column bg-white shadow-lg rounded-4 border" style={{ bottom: '24px', right: '24px', width: '400px', maxHeight: '400px', zIndex: 50, borderColor: 'var(--border-color)' }}>
+    <div className="position-fixed d-flex flex-column bg-white shadow-lg rounded-4 border" style={{ bottom: '24px', right: '24px', left: 'auto', width: 'calc(100vw - 48px)', maxWidth: '400px', maxHeight: '400px', zIndex: 50, borderColor: 'var(--border-color)' }}>
       {/* Header */}
       <div
         className="d-flex align-items-center justify-content-between p-3 border-bottom rounded-top-4"
