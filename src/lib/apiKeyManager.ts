@@ -39,7 +39,7 @@ export async function getApiKeys(): Promise<string[]> {
         .filter((k: string) => k.length > 0);
     }
   } catch (error) {
-    console.warn('Failed to get encrypted Gemini key, falling back to fallback keys:', error);
+    console.warn('Failed to decrypt Gemini API key, using hardcoded fallback keys:', error);
   }
 
   // If no encrypted key, fall back to hardcoded encrypted keys

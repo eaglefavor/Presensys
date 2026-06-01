@@ -32,6 +32,17 @@ export async function getGeminiApiKey(): Promise<string> {
     return cachedGeminiKey;
   }
   
+  // Check for placeholder values
+  if (ENCRYPTED_GEMINI_KEY.startsWith('PLACEHOLDER_')) {
+    const error = new Error(
+      'Encrypted Gemini API key is not configured. Please replace PLACEHOLDER_ENCRYPTED_KEY_VALUE ' +
+      'in src/lib/encryptedCredentials.ts with your actual encrypted API key. ' +
+      'Use the generator script to encrypt your credentials.'
+    );
+    console.error(error.message);
+    throw error;
+  }
+  
   try {
     cachedGeminiKey = await decryptCredential(ENCRYPTED_GEMINI_KEY);
     return cachedGeminiKey;
@@ -48,6 +59,17 @@ export async function getGeminiApiKey(): Promise<string> {
 export async function getMcpUrl(): Promise<string> {
   if (cachedMcpUrl) {
     return cachedMcpUrl;
+  }
+  
+  // Check for placeholder values
+  if (ENCRYPTED_MCP_URL.startsWith('PLACEHOLDER_')) {
+    const error = new Error(
+      'Encrypted MCP URL is not configured. Please replace PLACEHOLDER_ENCRYPTED_URL_VALUE ' +
+      'in src/lib/encryptedCredentials.ts with your actual encrypted MCP URL. ' +
+      'Use the generator script to encrypt your credentials.'
+    );
+    console.error(error.message);
+    throw error;
   }
   
   try {
