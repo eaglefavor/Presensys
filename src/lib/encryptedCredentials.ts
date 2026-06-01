@@ -2,12 +2,18 @@
  * Encrypted Credentials Storage
  * Stores encrypted sensitive credentials as hardcoded values
  * These are decrypted on-demand using the credentialEncryption module
+ * 
+ * SECURITY WARNING: These encrypted values and the decryption key are both
+ * committed to the source code. This provides obfuscation only - anyone with
+ * repository access can decrypt all credentials. For production systems,
+ * consider using environment variables or a secrets management service.
  */
 
 import { decryptCredential } from './credentialEncryption';
 
 // Encrypted credentials (replace with your own encrypted values)
 // To generate encrypted credentials, use the generator script or encryptCredential() function
+// NOTE: These values are encrypted but the decryption key is in credentialEncryption.ts
 const ENCRYPTED_GEMINI_KEY = 'JCf3ovOBtJ2+ai0Qh1afgkiZ5U3LUL8BiuYlqKIDngvCXTUCENpnKdsqhxBnX/M7Fvxjaw==';
 const ENCRYPTED_MCP_URL = '8E5L5pe6W+KHxvEJkZNUE0hB2bdrd7eA/BSH/Tm7MKvrSaFBEAHBp/IHZuuqLM+m5lZGbgZhOzvASfggUg/XPQu71IlnEvOcVrJEGAjkcPY/n1C8Z+iPA68=';
 

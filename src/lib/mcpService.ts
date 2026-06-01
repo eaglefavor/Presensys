@@ -146,13 +146,22 @@ export async function executeMcpTool(
 }
 
 /**
+ * Type definition for AI tool in Vercel AI SDK format
+ */
+interface AiTool {
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (args: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
  * Convert MCP tools into Vercel AI SDK tool format
  * This allows the AI model to use MCP tools through the Vercel SDK
  */
-export async function getMcpToolsForAi(): Promise<Record<string, any>> {
+export async function getMcpToolsForAi(): Promise<Record<string, AiTool>> {
   try {
     const tools = await listMcpTools();
-    const aiTools: Record<string, any> = {};
+    const aiTools: Record<string, AiTool> = {};
 
     for (const tool of tools) {
       aiTools[tool.name] = {

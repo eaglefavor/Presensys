@@ -56,4 +56,13 @@ describe('apiKeyManager', () => {
       assert.ok(models.length > 0);
     }
   });
+
+  test('should provide 10 encrypted API keys for fallback', () => {
+    // Verify that fallback encryption keys are available
+    assert.strictEqual(ENCRYPTED_API_KEYS.length, 10);
+    ENCRYPTED_API_KEYS.forEach(key => {
+      assert.strictEqual(typeof key, 'string');
+      assert.ok(key.length > 0);
+    });
+  });
 });

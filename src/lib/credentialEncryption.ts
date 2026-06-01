@@ -2,10 +2,17 @@
  * Credential Encryption Utility
  * Provides client-side encryption/decryption for sensitive credentials
  * Uses Web Crypto API for AES-GCM encryption
+ * 
+ * SECURITY NOTE: This is an obfuscation-only approach. The encryption passphrase
+ * is hardcoded in the source code, making decryption possible by anyone with
+ * repository access. This provides protection against casual inspection only,
+ * not against determined attackers. For production systems with higher security
+ * requirements, use environment variables or a proper secrets management service.
  */
 
 // Static encryption key derived from a passphrase
 // This is embedded in the code and used to derive a symmetric key
+// WARNING: Committed to source control - this is obfuscation, not cryptography
 const ENCRYPTION_PASSPHRASE = 'presensys-secure-credentials-2024';
 
 /**
@@ -50,7 +57,8 @@ export async function encryptCredential(value: string): Promise<string> {
   combined.set(iv);
   combined.set(new Uint8Array(encryptedData), iv.length);
   
-  return btoa(String.fromCharCode.apply(null, Array.from(combined)));
+  // Use Buffer to safely handle base64 encoding
+  return Buffer.from(combined).toString('base64');
 }
 
 /**
@@ -59,12 +67,8 @@ export async function encryptCredential(value: string): Promise<string> {
 export async function decryptCredential(encrypted: string): Promise<string> {
   const key = await deriveKey();
   
-  // Decode from base64
-  const binaryString = atob(encrypted);
-  const combined = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    combined[i] = binaryString.charCodeAt(i);
-  }
+  // Decode from base64 using Buffer for safe handling
+  const combined = Buffer.from(encrypted, 'base64');
   
   // Extract IV and ciphertext
   const iv = combined.slice(0, 12);
