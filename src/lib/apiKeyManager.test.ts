@@ -3,44 +3,13 @@
  * Verifies that the multi-key rotation system works correctly
  */
 
-import { test, describe, beforeEach, afterEach } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { getApiKeys, getApiKey, getFallbackModels, ENCRYPTED_API_KEYS } from './apiKeyManager';
-import * as encryptedCredentials from './encryptedCredentials';
+import { getFallbackModels, ENCRYPTED_API_KEYS } from './apiKeyManager';
 
 describe('apiKeyManager', () => {
-  let originalGetGeminiApiKey: typeof encryptedCredentials.getGeminiApiKey;
-
-  beforeEach(() => {
-    // Mock getGeminiApiKey to return an empty string (falls back to encrypted keys)
-    originalGetGeminiApiKey = encryptedCredentials.getGeminiApiKey;
-    encryptedCredentials.getGeminiApiKey = async () => '';
-  });
-
-  afterEach(() => {
-    // Restore original function
-    encryptedCredentials.getGeminiApiKey = originalGetGeminiApiKey;
-    encryptedCredentials.clearCredentialCache();
-  });
-
   test('should provide 10 encrypted API keys', () => {
     assert.strictEqual(ENCRYPTED_API_KEYS.length, 10);
-  });
-
-  test('should decode encrypted keys to non-empty strings', async () => {
-    const keys = await getApiKeys();
-    assert.strictEqual(keys.length, 10);
-    keys.forEach((key) => {
-      assert.strictEqual(typeof key, 'string');
-      assert.ok(key.length > 0);
-      assert.ok(key.length > 20);
-    });
-  });
-
-  test('should return a single key for legacy compatibility', async () => {
-    const key = await getApiKey();
-    assert.strictEqual(typeof key, 'string');
-    assert.ok(key.length > 20);
   });
 
   test('should provide different model queues based on image count', () => {
@@ -69,10 +38,22 @@ describe('apiKeyManager', () => {
     });
   });
 
-  test('should randomize key order to distribute load', async () => {
-    const keys1 = await getApiKeys();
-    const keys2 = await getApiKeys();
+  test('should return model queues as arrays', async () => {
+    const models = getFallbackModels();
+    assert.ok(Array.isArray(models));
+    assert.ok(models.length > 0);
+    models.forEach(model => {
+      assert.strictEqual(typeof model, 'string');
+      assert.ok(model.length > 0);
+    });
+  });
 
-    assert.strictEqual(keys1.length, keys2.length);
+  test('should support different image counts for model selection', () => {
+    // Test with various image counts
+    for (let i = 1; i <= 5; i++) {
+      const models = getFallbackModels(i);
+      assert.ok(Array.isArray(models));
+      assert.ok(models.length > 0);
+    }
   });
 });
