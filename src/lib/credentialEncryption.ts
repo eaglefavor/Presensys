@@ -10,17 +10,18 @@
  * requirements, use environment variables or a proper secrets management service.
  */
 
-// Static encryption key derived from a passphrase
-// This is embedded in the code and used to derive a symmetric key
-// WARNING: Committed to source control - this is obfuscation, not cryptography
-const ENCRYPTION_PASSPHRASE = 'presensys-secure-credentials-2024';
+// Static obfuscation key derived from a passphrase
+// This is embedded in the code and used to derive a symmetric key for obfuscation
+// WARNING: Committed to source control - this is obfuscation, NOT cryptography
+// Anyone with repository access can decrypt all credentials
+const OBFUSCATION_PASSPHRASE = 'presensys-obfuscation-key-2024';
 
 /**
  * Derive a symmetric key from a passphrase using PBKDF2
  */
 async function deriveKey(): Promise<CryptoKey> {
   const encoder = new TextEncoder();
-  const data = encoder.encode(ENCRYPTION_PASSPHRASE);
+  const data = encoder.encode(OBFUSCATION_PASSPHRASE);
   const hash = await crypto.subtle.digest('SHA-256', data);
   
   const key = await crypto.subtle.importKey(

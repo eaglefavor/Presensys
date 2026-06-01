@@ -321,6 +321,13 @@ async function batchEnrollStudents(
 // ─── AI Service Configuration ─────────────────────────────────────────────────
 
 /**
+ * Check if tools object has any available tools
+ */
+function hasAvailableTools(tools: Record<string, unknown>): boolean {
+  return Object.keys(tools).length > 0;
+}
+
+/**
  * Execute generateText with a single key/model combination
  * Returns null if failed, otherwise returns the text result
  * Includes MCP tools if available and configured
@@ -361,7 +368,7 @@ async function tryGenerateWithModel(
           content: userMessage,
         },
       ],
-      tools: Object.keys(tools).length > 0 ? tools : undefined,
+      tools: hasAvailableTools(tools) ? tools : undefined,
     });
 
     return result.text;
