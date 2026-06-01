@@ -3,6 +3,11 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { supabase } from './supabase';
 import { db } from '../db/db';
 import { getApiKeys, getFallbackModels } from './apiKeyManager';
+import { 
+  isMcpConfigured, 
+  getMcpToolsForAi, 
+  checkMcpHealth
+} from './mcpService';
 
 // ─── Key Usage Tracking (Session-only) ───────────────────────────────────────
 // Track which keys are experiencing issues (in-memory, session-only)
@@ -318,6 +323,7 @@ async function batchEnrollStudents(
 /**
  * Execute generateText with a single key/model combination
  * Returns null if failed, otherwise returns the text result
+ * Includes MCP tools if available and configured
  */
 async function tryGenerateWithModel(
   apiKey: string,
@@ -329,6 +335,23 @@ async function tryGenerateWithModel(
     const customGoogle = createGoogleGenerativeAI({ apiKey });
     const modelInstance = customGoogle(model);
 
+    // Prepare tools - start with empty, add MCP if available
+    let tools: Record<string, any> = {};
+    
+    if (isMcpConfigured()) {
+      try {
+        const mcpHealth = await checkMcpHealth();
+        if (mcpHealth) {
+          tools = await getMcpToolsForAi();
+          console.log(`📊 MCP tools loaded: ${Object.keys(tools).length} tools available`);
+        } else {
+          console.warn('⚠️ MCP configured but health check failed. Proceeding without MCP tools.');
+        }
+      } catch (mcpError) {
+        console.warn('⚠️ Failed to load MCP tools, proceeding with Gemini-only mode:', mcpError);
+      }
+    }
+
     const result = await generateText({
       model: modelInstance,
       system: systemPrompt,
@@ -338,6 +361,7 @@ async function tryGenerateWithModel(
           content: userMessage,
         },
       ],
+      tools: Object.keys(tools).length > 0 ? tools : undefined,
     });
 
     return result.text;
@@ -428,6 +452,8 @@ ${systemStateContext}
 
 You have deep, elaborate connections to the most basic information and functions of the system, including dashboard stats, students, courses, attendance data, lecturer data, profile data, and data archives. You must be accurate and use ONLY the live data provided above.
 If a user queries for information, you must analyze the DEEP SYSTEM STATE. Do not hallucinate or guess.
+
+${isMcpConfigured() ? `🔗 MCP DATABASE ACCESS ENABLED: You have access to direct SQL tools via Supabase MCP. When appropriate, use these tools to perform database operations (list_tables, describe_table, execute_sql).` : `⚠️ MCP database access is not configured.`}
 
 If a user asks to navigate somewhere, use the pattern route: '/path'
 Available paths: /dashboard, /students, /courses, /lecturers, /attendance, /archives, /settings.
