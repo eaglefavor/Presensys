@@ -20,11 +20,15 @@ Then add it to `.env.local`:
 ```env
 # Gemini API Configuration
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
+
+# Supabase MCP Configuration (Optional)
+# This enables direct database access via Model Context Protocol
+VITE_MCP_URL=https://mcp.supabase.com/mcp?project_ref=trhvihhaidboeodffgcj
 ```
 
 ⚠️ **Important Note:** Since this is a Vite-based React application, the `VITE_*` prefix means the API key is embedded into the client bundle at build time. Never use sensitive keys in production without a server-side proxy.
 
-After adding the environment variable:
+After adding the environment variables:
 
 ```bash
 npm run dev
@@ -35,6 +39,24 @@ npm run dev
 | Variable | Type | Required | Description |
 |----------|------|----------|-------------|
 | `VITE_GEMINI_API_KEY` | string | Yes | Gemini API key for AI command execution |
+| `VITE_MCP_URL` | string | No | Supabase MCP server URL for direct database operations |
+
+### MCP Configuration Details
+
+**Supabase MCP Server URL Format:**
+```
+https://mcp.supabase.com/mcp?project_ref=YOUR_PROJECT_REF
+```
+
+**Default Presensys Configuration:**
+```env
+VITE_MCP_URL=https://mcp.supabase.com/mcp?project_ref=trhvihhaidboeodffgcj
+```
+
+When `VITE_MCP_URL` is configured, the AI Command Engine gains access to:
+- **list_tables** - View your database schema
+- **describe_table** - Inspect table structures and columns
+- **execute_sql** - Run SQL queries directly (protected by Supabase RLS)
 
 ## Security Notes
 
@@ -43,6 +65,7 @@ npm run dev
 - The `.env.local` file is listed in `.gitignore`
 - Keep your API keys secure and private
 - Rotate keys regularly if exposed
+- MCP operations are protected by Supabase Row-Level Security (RLS) policies
 
 ## Testing Configuration
 
@@ -58,6 +81,15 @@ If you see an error message about the API key not being configured:
 - Verify the API key is correct
 - Ensure the dev server was restarted after adding the key
 - Check browser console for detailed error messages (F12 or Ctrl+Shift+I)
+
+### Testing MCP Integration
+
+If `VITE_MCP_URL` is configured, try commands like:
+- "List all tables in the database"
+- "Show me the students table schema"
+- "Add a new course to the system"
+
+The AI will use MCP tools to access the database directly when appropriate.
 
 ## API Key Management
 
@@ -117,15 +149,28 @@ Example costs:
 3. Try using a shorter, simpler command
 4. Wait a moment and try again
 
+### MCP Health Check Failed
+
+**Cause:** The MCP URL is invalid, unreachable, or the Supabase project is inaccessible.
+
+**Solution:**
+1. Verify the `VITE_MCP_URL` is correct in `.env.local`
+2. Check that your Supabase project reference is valid
+3. Ensure your network has access to the MCP server
+4. Check browser console for detailed error messages
+
 ## Production Deployment
 
 For production deployment on Vercel:
 
 1. Go to your Vercel project settings
 2. Navigate to "Environment Variables"
-3. Add a new variable:
+3. Add new variables:
    - Name: `VITE_GEMINI_API_KEY`
    - Value: Your Gemini API key
+   - Environments: Production (or all)
+   - Name: `VITE_MCP_URL` (optional)
+   - Value: Your Supabase MCP URL
    - Environments: Production (or all)
 
 4. Redeploy your application
@@ -147,6 +192,7 @@ Direct client-side API key exposure is acceptable for development and low-risk a
 4. **Set up billing alerts** to avoid unexpected charges
 5. **Use environment-specific keys** for dev/staging/production
 6. **Never share your API key** through version control or public channels
+7. **Ensure Supabase RLS policies** are properly configured for MCP operations
 
 ## Additional Resources
 
@@ -154,7 +200,9 @@ Direct client-side API key exposure is acceptable for development and low-risk a
 - **Vercel Environment Variables:** https://vercel.com/docs/projects/environment-variables
 - **Google Cloud Console:** https://console.cloud.google.com/
 - **API Quotas & Usage:** https://aistudio.google.com/app/account
+- **Supabase Documentation:** https://supabase.com/docs
+- **MCP Protocol:** https://modelcontextprotocol.io
 
 ---
 
-**Last Updated:** 2026-05-27
+**Last Updated:** 2026-06-01

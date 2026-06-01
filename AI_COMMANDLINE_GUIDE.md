@@ -20,7 +20,11 @@ Vercel AI SDK (generateText)
     ├─► Tool Execution:
     │   ├─ Schedule Management
     │   ├─ UI Navigation
-    │   └─ Student Enrollment
+    │   ├─ Student Enrollment
+    │   └─ MCP Database Tools (if configured)
+    │       ├─ list_tables
+    │       ├─ describe_table
+    │       └─ execute_sql
     │
     └─► Supabase Operations (RLS Protected)
             │
@@ -39,6 +43,9 @@ Create a `.env.local` file in the project root with your Gemini API key:
 
 ```env
 VITE_GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional: Enable Supabase MCP for direct database operations
+VITE_MCP_URL=https://mcp.supabase.com/mcp?project_ref=trhvihhaidboeodffgcj
 ```
 
 ⚠️ **Note:** This is a client-side application (Vite/React PWA). The `VITE_*` prefix means the API key is embedded into the client bundle at build time. Use this only for development or with a server-side proxy for production.
@@ -48,11 +55,12 @@ VITE_GEMINI_API_KEY=your_gemini_api_key_here
 The following dependencies are already installed:
 - `@ai-sdk/google` - Gemini integration
 - `ai` - Vercel AI SDK
+- `@modelcontextprotocol/sdk` - MCP client library
 - `zod` - Schema validation
 
 If you need to reinstall:
 ```bash
-npm install @ai-sdk/google ai zod
+npm install @ai-sdk/google ai @modelcontextprotocol/sdk zod
 ```
 
 ## Components & Architecture
@@ -82,11 +90,34 @@ ui.setCourseFilter('TFS 214');      // Filter by course
 ui.setAiCommandBarVisibility(true); // Show AI command bar
 ```
 
-### 2. aiService (AI Backend)
+### 2. mcpService (MCP Client Service)
+
+**File:** `src/lib/mcpService.ts`
+
+Handles Model Context Protocol (MCP) client initialization and tool management:
+
+**Main Functions:**
+- `getMcpClient()` - Initialize or retrieve existing MCP client
+- `listMcpTools()` - List available MCP tools from Supabase
+- `executeMcpTool(toolName, args)` - Execute an MCP tool
+- `getMcpToolsForAi()` - Convert MCP tools to Vercel AI SDK format
+- `checkMcpHealth()` - Verify MCP server connectivity
+
+**Available MCP Tools (when configured):**
+1. **list_tables** - View database schema
+   - Lists all tables in the connected Supabase database
+   
+2. **describe_table** - Inspect table structure
+   - Shows column names, types, and constraints
+   
+3. **execute_sql** - Run SQL queries
+   - Perform direct SQL operations (protected by RLS)
+
+### 3. aiService (AI Backend)
 
 **File:** `src/lib/aiService.ts`
 
-Handles AI command execution with Supabase integration:
+Handles AI command execution with Supabase and MCP integration:
 
 **Main Functions:**
 - `executeAiCommand(userMessage, userId, currentRoute)` - Execute natural language commands
@@ -109,6 +140,11 @@ Handles AI command execution with Supabase integration:
    - Verify course accessibility
    - Handle duplicate detection via RLS
 
+4. **MCP Database Operations** (when configured)
+   - Direct SQL execution via Supabase MCP
+   - Schema inspection and discovery
+   - Complex queries and bulk operations
+
 **Example:**
 ```typescript
 import { executeAiCommand } from '@/lib/aiService';
@@ -120,7 +156,7 @@ const response = await executeAiCommand(
 );
 ```
 
-### 3. AiCommandBar (UI Component)
+### 4. AiCommandBar (UI Component)
 
 **File:** `src/components/AiCommandBar.tsx`
 
@@ -143,6 +179,54 @@ Provides the user interface for AI command input:
 - Clear command history
 - Toggle timestamps
 - Pre-filled example commands
+
+## MCP Integration Guide
+
+### Enabling MCP Database Access
+
+When `VITE_MCP_URL` is configured, the AI gains direct database access:
+
+1. **Automatic Tool Discovery**
+   - MCP client fetches available tools from Supabase
+   - Tools are automatically integrated into AI execution
+
+2. **Security Model**
+   - All operations protected by Supabase RLS
+   - User authentication token validated for each operation
+   - Row-level policies enforced at database level
+
+3. **Graceful Degradation**
+   - If MCP is unavailable, commands still execute using standard mode
+   - No impact to existing functionality
+
+### Example MCP Commands
+
+```
+"List all tables in the database"
+"Show me the students table structure"
+"Add 50 new students from the import file"
+"Create a course schedule for Monday-Friday, 9am-5pm"
+"Generate an attendance report for TFS 214"
+```
+
+### MCP Architecture in Presensys
+
+```
+AI Model (Gemini 1.5 Flash)
+        │
+        ▼
+    mcpService
+        │
+    ┌────┴────┐
+    │          │
+    ▼          ▼
+  SSETransport MCP Client
+    │
+    └─► Supabase MCP Server
+        │
+        └─► PostgreSQL Database
+             (with RLS policies)
+```
 
 ## Usage Examples
 
@@ -171,6 +255,13 @@ Provides the user interface for AI command input:
 5. **Open PIN Blitz**
    ```
    "Open the PIN Blitz modal" or "Start PIN Blitz"
+   ```
+
+6. **Database Queries (MCP-enabled)**
+   ```
+   "How many students are enrolled in each course?"
+   "Show me all attendance records for last week"
+   "Add Dr. Nnamdi Okadigwe as the lecturer for TFS 201"
    ```
 
 ### Voice Input
@@ -205,12 +296,19 @@ CREATE POLICY "schedules_update_policy" ON course_schedules
   FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM courses
-      WHERE courses.id = course_schedules.course_id
-      AND courses.department = auth.jwt() ->> 'department'
+     SELECT 1 FROM courses
+     WHERE courses.id = course_schedules.course_id
+     AND courses.department = auth.jwt() ->> 'department'
     )
   );
 ```
+
+### MCP Security Considerations
+
+1. **RLS Enforcement** - Even with direct SQL access, Supabase RLS policies prevent unauthorized access
+2. **User Authentication** - All MCP operations use the authenticated user's session token
+3. **Prompt Injection Protection** - RLS provides hard protection against SQL injection and prompt injection attacks
+4. **Audit Trail** - All database operations are logged at the Supabase level
 
 ### User Context
 
@@ -238,7 +336,12 @@ The system includes comprehensive error handling:
    "Invalid time format. Use format like '11-12' or '12-2pm'."
    ```
 
-4. **Network Errors**
+4. **MCP Connection Errors**
+   ```
+   "Database access unavailable. Please check your MCP configuration."
+   ```
+
+5. **Network Errors**
    - Automatic retry with exponential backoff
    - Toast notification for offline status
 
@@ -282,6 +385,7 @@ recognition.lang = 'en-US'; // Change to different locale
 2. **Database Queries**
    - All queries are indexed for fast lookups
    - Batch operations use efficient insert patterns
+   - MCP allows for optimized SQL execution
 
 3. **UI Updates**
    - State updates use Zustand for minimal re-renders
@@ -320,6 +424,14 @@ recognition.lang = 'en-US'; // Change to different locale
 3. Try using shorter, simpler commands
 4. Consider using `gemini-1.5-flash` for faster responses
 
+### MCP Health Check Failed
+
+**Solution:**
+1. Verify `VITE_MCP_URL` is correctly configured
+2. Check that the Supabase project reference is valid
+3. Ensure your network has access to the MCP server
+4. Check browser console for detailed error logs
+
 ## Future Enhancements
 
 Planned features for future releases:
@@ -332,6 +444,8 @@ Planned features for future releases:
 - [ ] Real-time collaboration commands
 - [ ] Advanced scheduling with conflict detection
 - [ ] Integration with email notifications
+- [ ] MCP tool result caching for performance
+- [ ] Advanced MCP query optimization
 
 ## API Reference
 
@@ -372,12 +486,29 @@ for await (const chunk of streamAiCommand(message, userId, route)) {
 }
 ```
 
+### getMcpClient
+
+```typescript
+async function getMcpClient(): Promise<Client>
+```
+
+Returns the connected MCP client instance.
+
+### checkMcpHealth
+
+```typescript
+async function checkMcpHealth(): Promise<boolean>
+```
+
+Checks if the MCP server is accessible and responsive.
+
 ## Support & Documentation
 
 - **GitHub Issues:** Report bugs or request features
 - **API Docs:** https://ai.google.dev/docs
 - **Supabase Docs:** https://supabase.com/docs
 - **Vercel AI SDK:** https://sdk.vercel.ai
+- **MCP Documentation:** https://modelcontextprotocol.io
 
 ## License
 
@@ -385,5 +516,5 @@ This system is part of the Presensys project and follows the same license terms.
 
 ---
 
-**Last Updated:** 2026-05-27
-**Version:** 1.0.0
+**Last Updated:** 2026-06-01
+**Version:** 2.0.0 (with MCP Integration)
