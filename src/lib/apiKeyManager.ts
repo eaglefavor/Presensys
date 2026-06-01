@@ -1,8 +1,10 @@
 /**
  * API Key Manager
- * Handles rotation of 10 encrypted Gemini API keys with fallback support
+ * Handles rotation of encrypted Gemini API keys with fallback support
  * Similar to the image OCR reconciliation system
  */
+
+import { getGeminiApiKey } from './encryptedCredentials';
 
 // 10 encrypted API keys (base64 reversed)
 const ENCRYPTED_API_KEYS = [
@@ -23,16 +25,24 @@ function decodeKey(encrypted: string): string {
   return atob(encrypted.split('').reverse().join(''));
 }
 
-// Get all available API keys from environment or fallback to encrypted keys
-export function getApiKeys(): string[] {
-  // First, try to get keys from environment variables
-  const envKeysString = import.meta.env.VITE_GEMINI_API_KEYS || import.meta.env.VITE_GEMINI_API_KEY || '';
-  let apiKeys = envKeysString
-    .split(',')
-    .map((k: string) => k.trim())
-    .filter((k: string) => k.length > 0);
+// Get all available API keys from encrypted storage or fallback to encrypted keys
+export async function getApiKeys(): Promise<string[]> {
+  let apiKeys: string[] = [];
 
-  // If no environment keys, fall back to encrypted keys
+  // First, try to get key from encrypted credentials storage
+  try {
+    const encryptedKey = await getGeminiApiKey();
+    if (encryptedKey) {
+      apiKeys = encryptedKey
+        .split(',')
+        .map((k: string) => k.trim())
+        .filter((k: string) => k.length > 0);
+    }
+  } catch (error) {
+    console.warn('Failed to get encrypted Gemini key, falling back to fallback keys:', error);
+  }
+
+  // If no encrypted key, fall back to hardcoded encrypted keys
   if (apiKeys.length === 0) {
     apiKeys = ENCRYPTED_API_KEYS.map(decodeKey);
   }
@@ -42,8 +52,8 @@ export function getApiKeys(): string[] {
 }
 
 // Get a single key (for legacy compatibility)
-export function getApiKey(): string {
-  const keys = getApiKeys();
+export async function getApiKey(): Promise<string> {
+  const keys = await getApiKeys();
   return keys.length > 0 ? keys[0] : '';
 }
 

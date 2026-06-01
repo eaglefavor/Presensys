@@ -48,8 +48,8 @@ export default function AIReconciliationScreen({ images, enrollments, onCancel, 
         setLoading(true);
         setError(null);
 
-        // Get API Keys from shared manager (environment or encrypted fallbacks)
-        const apiKeys = getApiKeys();
+        // Get API Keys from shared manager (encrypted credentials with fallbacks)
+        const apiKeys = await getApiKeys();
 
         // Dynamic model selection based on network quality and image count
         // Get model queue using shared apiKeyManager

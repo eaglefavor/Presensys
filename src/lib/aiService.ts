@@ -338,7 +338,7 @@ async function tryGenerateWithModel(
     // Prepare tools - start with empty, add MCP if available
     let tools: Record<string, any> = {};
     
-    if (isMcpConfigured()) {
+    if (await isMcpConfigured()) {
       try {
         const mcpHealth = await checkMcpHealth();
         if (mcpHealth) {
@@ -395,26 +395,27 @@ export async function executeAiCommand(
   currentRoute: string
 ): Promise<string> {
   try {
-    const apiKeys = getApiKeys();
+   const apiKeys = await getApiKeys();
     const modelQueue = getFallbackModels();
+   const mcpEnabled = await isMcpConfigured();
 
-    // Deep System State Extraction
-    const [
-      semesters,
-      students,
-      courses,
-      sessions,
-      records,
-      lecturers,
+   // Deep System State Extraction
+   const [
+     semesters,
+     students,
+     courses,
+     sessions,
+     records,
+     lecturers,
 
-    ] = await Promise.all([
-      db.semesters.filter(s => s.isDeleted !== 1).toArray(),
-      db.students.filter(s => s.isDeleted !== 1).toArray(),
-      db.courses.filter(c => c.isDeleted !== 1).toArray(),
-      db.attendanceSessions.filter(s => s.isDeleted !== 1).toArray(),
-      db.attendanceRecords.filter(r => r.isDeleted !== 1).toArray(),
-      db.lecturers.filter(l => l.isDeleted !== 1).toArray(),
-    ]);
+   ] = await Promise.all([
+     db.semesters.filter(s => s.isDeleted !== 1).toArray(),
+     db.students.filter(s => s.isDeleted !== 1).toArray(),
+     db.courses.filter(c => c.isDeleted !== 1).toArray(),
+     db.attendanceSessions.filter(s => s.isDeleted !== 1).toArray(),
+     db.attendanceRecords.filter(r => r.isDeleted !== 1).toArray(),
+     db.lecturers.filter(l => l.isDeleted !== 1).toArray(),
+   ]);
 
     const activeSemester = semesters.find(s => s.isActive);
     const semesterInfo = activeSemester ? `Active Semester: ${activeSemester.name} (${activeSemester.startDate} to ${activeSemester.endDate})` : 'No active semester.';
@@ -453,7 +454,7 @@ ${systemStateContext}
 You have deep, elaborate connections to the most basic information and functions of the system, including dashboard stats, students, courses, attendance data, lecturer data, profile data, and data archives. You must be accurate and use ONLY the live data provided above.
 If a user queries for information, you must analyze the DEEP SYSTEM STATE. Do not hallucinate or guess.
 
-${isMcpConfigured() ? `🔗 MCP DATABASE ACCESS ENABLED: You have access to direct SQL tools via Supabase MCP. When appropriate, use these tools to perform database operations (list_tables, describe_table, execute_sql).` : `⚠️ MCP database access is not configured.`}
+${mcpEnabled ? `🔗 MCP DATABASE ACCESS ENABLED: You have access to direct SQL tools via Supabase MCP. When appropriate, use these tools to perform database operations (list_tables, describe_table, execute_sql).` : `⚠️ MCP database access is not configured.`}
 
 If a user asks to navigate somewhere, use the pattern route: '/path'
 Available paths: /dashboard, /students, /courses, /lecturers, /attendance, /archives, /settings.

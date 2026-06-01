@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
+import { getMcpUrl } from './encryptedCredentials';
 
 /**
  * MCP Service - Connects to Supabase MCP server for direct database operations
@@ -27,9 +28,9 @@ async function initializeMcpClient(): Promise<Client> {
   try {
     mcpConnecting = true;
 
-    const mcpUrl = import.meta.env.VITE_MCP_URL;
+    const mcpUrl = await getMcpUrl();
     if (!mcpUrl) {
-      throw new Error('VITE_MCP_URL environment variable not configured');
+      throw new Error('MCP URL not configured');
     }
 
     const transport = new SSEClientTransport(new URL(mcpUrl));
@@ -82,8 +83,13 @@ export async function getMcpClient(): Promise<Client> {
 /**
  * Check if MCP is available and configured
  */
-export function isMcpConfigured(): boolean {
-  return !!import.meta.env.VITE_MCP_URL;
+export async function isMcpConfigured(): Promise<boolean> {
+  try {
+    const mcpUrl = await getMcpUrl();
+    return !!mcpUrl;
+  } catch {
+    return false;
+  }
 }
 
 /**
