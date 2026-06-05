@@ -283,11 +283,20 @@ export class RealtimeSyncEngine {
         return;
       }
 
-      const { data: edgeResponse, error } = await supabase.functions.invoke('sync-pull-bundle', {
-        body: { cursors, userId: this.userId }
-      });
+      let edgeResponse;
+      try {
+        const result = await supabase.functions.invoke('sync-pull-bundle', {
+          body: { cursors, userId: this.userId }
+        });
+        if (result.error) throw result.error;
+        edgeResponse = result.data;
+      } catch (invokeError) {
+        // Fallback: If edge function fetch fails (e.g., due to local dev setup or network hiccup),
+        // we log it and bypass the full pull batch gracefully instead of crashing the sync.
+        console.warn('Sync: Edge function sync-pull-bundle failed, bypassing full pull batch.', invokeError);
+        return;
+      }
 
-      if (error) throw error;
       if (!edgeResponse || !edgeResponse.results) return;
 
       const processTable = async <T extends LocalSyncRecord>(
