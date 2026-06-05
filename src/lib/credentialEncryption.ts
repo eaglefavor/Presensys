@@ -59,7 +59,7 @@ export async function encryptCredential(value: string): Promise<string> {
   combined.set(new Uint8Array(encryptedData), iv.length);
 
   // Use Buffer to safely handle base64 encoding
-  return Buffer.from(combined).toString('base64');
+  return btoa(String.fromCharCode(...combined));
 }
 
 /**
@@ -69,7 +69,7 @@ export async function decryptCredential(encrypted: string): Promise<string> {
   const key = await deriveKey();
 
   // Decode from base64 using Buffer for safe handling
-  const combined = Buffer.from(encrypted, 'base64');
+  const combined = Uint8Array.from(atob(encrypted), c => c.charCodeAt(0));
 
   // Extract IV and ciphertext
   const iv = combined.slice(0, 12);
