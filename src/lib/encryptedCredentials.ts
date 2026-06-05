@@ -16,8 +16,8 @@ import { decryptCredential } from './credentialEncryption';
 // To generate encrypted credentials, use the generator script or encryptCredential() function
 // IMPORTANT: Replace these with your actual encrypted credentials before deployment
 // These sample values decrypt to "placeholder_api_key" and "https://placeholder.url"
-const ENCRYPTED_GEMINI_KEY = 'PLACEHOLDER_ENCRYPTED_KEY_VALUE';
-const ENCRYPTED_MCP_URL = 'PLACEHOLDER_ENCRYPTED_URL_VALUE';
+const ENCRYPTED_GEMINI_KEY = 'OX3WvQLUgcQ7SWLm32hrnijOFHn4+0zAD8iLv7yMF3mrKRArGhxdFdSSDlg6HISc5i2yKTTOrys=';
+const ENCRYPTED_MCP_URL = 'gXVVv8463ZVyKBr6nmVTzUFMrH2T0Zw1eB3HpN2fBAxrcd9PkFdGXq8qfh11cq2wiuhDbejsmSVLrg5ah/7mxEICspd6qovybQQNY0FE+xusDGto8fcMWJA=';
 
 // Cache for decrypted credentials
 let cachedGeminiKey: string | null = null;

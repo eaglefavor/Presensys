@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { supabase } from './supabase';
