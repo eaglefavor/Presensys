@@ -308,7 +308,17 @@ export default function Students() {
           }
         }
 
-        if (toAdd.length > 0) await db.students.bulkAdd(toAdd);
+        if (toAdd.length > 0) {
+          try {
+            await db.students.bulkAdd(toAdd);
+          } catch (err: unknown) {
+            if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+              console.warn('Ignoring error during student bulk import: ', err);
+            } else {
+              throw err;
+            }
+          }
+        }
         if (toRevive.length > 0) await db.students.bulkUpdate(toRevive);
         if (toUpdate.length > 0) await db.students.bulkUpdate(toUpdate);
       });

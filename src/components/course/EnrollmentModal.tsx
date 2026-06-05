@@ -164,16 +164,24 @@ export default function EnrollmentModal({ show, courseId, courseName, onClose }:
 
           // Create brand new
           if (brandNewStudentIds.length > 0) {
-            await db.enrollments.bulkAdd(
-                brandNewStudentIds.map(studentId => ({
-                  serverId: crypto.randomUUID(),
-                  studentId,
-                  courseId,
-                  userId: user.id,
-                  synced: 0,
-                  isDeleted: 0
-                } as Enrollment))
-            );
+            try {
+              await db.enrollments.bulkAdd(
+                  brandNewStudentIds.map(studentId => ({
+                    serverId: crypto.randomUUID(),
+                    studentId,
+                    courseId,
+                    userId: user.id,
+                    synced: 0,
+                    isDeleted: 0
+                  } as Enrollment))
+              );
+            } catch (err: unknown) {
+              if (err instanceof Error && err.name === 'BulkError') {
+                console.warn('Ignoring BulkError during enrollment creation: ', err);
+              } else {
+                throw err;
+              }
+            }
           }
         }
       });
