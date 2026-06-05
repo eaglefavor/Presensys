@@ -346,7 +346,17 @@ export class RealtimeSyncEngine {
         const inserts = Array.from(insertsMap.values());
 
         await db.transaction('rw', dexieTable, async () => {
-          if (updates.length > 0) await (dexieTable as any).bulkUpdate(updates);
+          if (updates.length > 0) {
+            try {
+              await (dexieTable as any).bulkUpdate(updates);
+            } catch (err: unknown) {
+              if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+                console.warn(`Sync: Ignoring error during update in ${tableName} (likely duplicates/conflicts): `, (err as Error).message);
+              } else {
+                throw err;
+              }
+            }
+          }
 
           if (inserts.length > 0) {
             try {
@@ -599,7 +609,15 @@ export class RealtimeSyncEngine {
               key: r.id!,
               changes: { synced: 1, updatedAt: (returnedData as Array<{ updated_at?: string }>)[i]?.updated_at || r.updatedAt }
             }));
-            await bundleItem.table.bulkUpdate(successUpdates);
+            try {
+              await bundleItem.table.bulkUpdate(successUpdates);
+            } catch (err: unknown) {
+              if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+                 console.warn(`Sync: Ignoring error during bundle update (likely conflicts): `, (err as Error).message);
+              } else {
+                 throw err;
+              }
+            }
           }
         }
       }
@@ -902,7 +920,17 @@ export class RealtimeSyncEngine {
           if (ob) doneOutboxIds.push(ob.id);
         }
       }
-      if (updates.length > 0) await db.students.bulkUpdate(updates);
+      if (updates.length > 0) {
+        try {
+          await db.students.bulkUpdate(updates);
+        } catch (err: unknown) {
+          if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+             console.warn(`Sync: Ignoring error during student update (likely conflicts): `, (err as Error).message);
+          } else {
+             throw err;
+          }
+        }
+      }
       await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
     }
   }
@@ -927,10 +955,18 @@ export class RealtimeSyncEngine {
     const brokenCourses = (await db.courses.toArray()).filter(c => !this.isValidUUID(c.semesterId));
     if (brokenCourses.length > 0) {
       console.log(`Sync: Self-healing ${brokenCourses.length} courses → semester ${activeSemester.name}`);
-      await db.courses.bulkUpdate(brokenCourses.map(c => ({
-        key: c.id!,
-        changes: { semesterId: activeSemester!.serverId, synced: 0 },
-      })));
+      try {
+        await db.courses.bulkUpdate(brokenCourses.map(c => ({
+          key: c.id!,
+          changes: { semesterId: activeSemester!.serverId, synced: 0 },
+        })));
+      } catch (err: unknown) {
+         if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+             console.warn(`Sync: Ignoring error during course update (likely conflicts): `, (err as Error).message);
+          } else {
+             throw err;
+          }
+      }
     }
 
     const brokenSessions = await db.attendanceSessions
