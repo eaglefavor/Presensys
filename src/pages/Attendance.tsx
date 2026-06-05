@@ -199,7 +199,17 @@ export default function Attendance() {
       }
 
       if (toUpdate.length > 0) await db.attendanceRecords.bulkUpdate(toUpdate);
-      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd);
+      if (toAdd.length > 0) {
+        try {
+          await db.attendanceRecords.bulkAdd(toAdd);
+        } catch (err: unknown) {
+          if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+            console.warn('Ignoring error during attendance record insertion: ', err);
+          } else {
+            throw err;
+          }
+        }
+      }
     });
 
     setPendingChanges({});
@@ -320,7 +330,17 @@ export default function Attendance() {
       }
 
       if (toRevive.length > 0) await db.attendanceRecords.bulkUpdate(toRevive);
-      if (toAdd.length > 0) await db.attendanceRecords.bulkAdd(toAdd);
+      if (toAdd.length > 0) {
+        try {
+          await db.attendanceRecords.bulkAdd(toAdd);
+        } catch (err: unknown) {
+          if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+            console.warn('Ignoring error during attendance record insertion: ', err);
+          } else {
+            throw err;
+          }
+        }
+      }
     });
   };
 

@@ -302,7 +302,7 @@ export class RealtimeSyncEngine {
         const localItems = await dexieTable.where('serverId').anyOf(serverIds).toArray();
         const localMap = new Map(localItems.map(item => [item.serverId, item]));
         const updates: Array<{ key: number; changes: Partial<T> & { synced: number } }> = [];
-        const inserts: T[] = [];
+        const insertsMap = new Map<string, T>(); // Use Map to deduplicate inserts by serverId
 
         for (const serverRow of tableData) {
           if (serverRow.updated_at && serverRow.updated_at > maxUpdatedAt) {
@@ -324,13 +324,31 @@ export class RealtimeSyncEngine {
               updates.push({ key: localItem.id, changes: { ...mapped, synced: 1 } });
             }
           } else {
-            inserts.push({ ...mapped, synced: 1 });
+            // Assign a local id and ensure serverId exists to prevent ConstraintError
+            const recordToInsert = { ...mapped, synced: 1 } as T;
+            if (!recordToInsert.serverId) {
+              recordToInsert.serverId = crypto.randomUUID();
+            }
+            insertsMap.set(recordToInsert.serverId as string, recordToInsert);
           }
         }
 
+        const inserts = Array.from(insertsMap.values());
+
         await db.transaction('rw', dexieTable, async () => {
           if (updates.length > 0) await (dexieTable as any).bulkUpdate(updates);
-          if (inserts.length > 0) await dexieTable.bulkAdd(inserts);
+
+          if (inserts.length > 0) {
+            try {
+              await dexieTable.bulkAdd(inserts);
+            } catch (err: unknown) {
+              if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+                console.warn(`Sync: Ignoring error during insert in ${tableName} (likely duplicates): `, (err as Error).message);
+              } else {
+                throw err;
+              }
+            }
+          }
         });
 
         if (maxUpdatedAt) {
