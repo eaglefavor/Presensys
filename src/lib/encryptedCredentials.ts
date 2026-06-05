@@ -48,7 +48,7 @@ export async function getGeminiApiKey(): Promise<string> {
     return cachedGeminiKey;
   } catch (error) {
     console.error('Failed to decrypt Gemini API key:', error);
-    throw new Error('Failed to decrypt Gemini API key');
+    return '';
   }
 }
 
@@ -77,7 +77,7 @@ export async function getMcpUrl(): Promise<string> {
     return cachedMcpUrl;
   } catch (error) {
     console.error('Failed to decrypt MCP URL:', error);
-    throw new Error('Failed to decrypt MCP URL');
+    return '';
   }
 }
 

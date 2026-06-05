@@ -29,22 +29,21 @@ function decodeKey(encrypted: string): string {
 export async function getApiKeys(): Promise<string[]> {
   let apiKeys: string[] = [];
 
-  // First, try to get key from encrypted credentials storage
+  // Always include the hardcoded fallback keys
+  apiKeys = [...ENCRYPTED_API_KEYS.map(decodeKey)];
+
+  // Try to prepend the encrypted credential storage key if available
   try {
     const encryptedKey = await getGeminiApiKey();
-    if (encryptedKey) {
-      apiKeys = encryptedKey
+    if (encryptedKey && !encryptedKey.startsWith('PLACEHOLDER_')) {
+      const keys = encryptedKey
         .split(',')
         .map((k: string) => k.trim())
         .filter((k: string) => k.length > 0);
+      apiKeys.unshift(...keys);
     }
-  } catch (error) {
-    console.warn('Failed to decrypt Gemini API key, using hardcoded fallback keys:', error);
-  }
-
-  // If no encrypted key, fall back to hardcoded encrypted keys
-  if (apiKeys.length === 0) {
-    apiKeys = ENCRYPTED_API_KEYS.map(decodeKey);
+  } catch {
+    // Silently ignore, fallback keys are already loaded
   }
 
   // Shuffle to distribute load
