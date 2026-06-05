@@ -865,12 +865,16 @@ export class RealtimeSyncEngine {
               const localItem = liveRecords.find(u => u.serverId === item.id);
               if (localItem) {
                 await db.students.update(localItem.id!, { serverId: serverRecord.id, synced: 1 });
+                const ob = outboxAttempts.get(item.id);
+                if (ob) await db.outbox.update(ob.id, { done: 1 }).catch(() => {});
               }
             }
           } else if (!singleError && singleData?.[0]) {
             const localItem = liveRecords.find(u => u.serverId === singleData[0].id);
             if (localItem) {
               await db.students.update(localItem.id!, { synced: 1, updatedAt: singleData[0].updated_at });
+              const ob = outboxAttempts.get(item.id);
+              if (ob) await db.outbox.update(ob.id, { done: 1 }).catch(() => {});
             }
           }
         }
