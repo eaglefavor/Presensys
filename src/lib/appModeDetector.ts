@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * App Mode Detection
  * Detects whether the PWA is running in standalone/app mode or as a regular website.

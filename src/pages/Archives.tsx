@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Search, Archive, BarChart3, Calendar, Download, Share2,
