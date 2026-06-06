@@ -782,7 +782,17 @@ export class RealtimeSyncEngine {
         if (ob) doneOutboxIds.push(ob.id);
       }
 
-      if (updates.length > 0) await (table as any).bulkUpdate(updates);
+      if (updates.length > 0) {
+        try {
+          await (table as any).bulkUpdate(updates);
+        } catch (err: unknown) {
+          if (err instanceof Error && (err.name === 'BulkError' || err.name === 'ConstraintError')) {
+             console.warn(`Sync: Ignoring error during update in pushTable (likely conflicts): `, (err as Error).message);
+          } else {
+             throw err;
+          }
+        }
+      }
       // Mark outbox entries as done
       await Promise.all(doneOutboxIds.map(id => db.outbox.update(id, { done: 1 }).catch(() => {})));
     }
